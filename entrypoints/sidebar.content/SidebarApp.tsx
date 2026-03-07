@@ -86,13 +86,15 @@ export function SidebarApp() {
 
   return (
     <div className="fixed top-4 right-4 z-[2147483647] flex flex-col gap-2 font-sans">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-      >
-        {open ? 'Close' : 'Open'} ToonHQ Plus
-      </button>
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+        >
+          {open ? '-' : '+'}
+        </button>
+      </div>
       {open && (
         <aside className="w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-800">
           <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
