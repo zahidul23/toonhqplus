@@ -6,13 +6,22 @@ const STORAGE_KEYS = {
 } as const;
 
 function loadLists(): Promise<{ favorites: string[]; blocked: string[] }> {
-  return browser.storage.local.get([STORAGE_KEYS.FAVORITES, STORAGE_KEYS.BLOCKED]).then((result) => ({
-    favorites: Array.isArray(result[STORAGE_KEYS.FAVORITES]) ? result[STORAGE_KEYS.FAVORITES] : [],
-    blocked: Array.isArray(result[STORAGE_KEYS.BLOCKED]) ? result[STORAGE_KEYS.BLOCKED] : [],
-  }));
+  return browser.storage.local
+    .get([STORAGE_KEYS.FAVORITES, STORAGE_KEYS.BLOCKED])
+    .then((result) => ({
+      favorites: Array.isArray(result[STORAGE_KEYS.FAVORITES])
+        ? result[STORAGE_KEYS.FAVORITES]
+        : [],
+      blocked: Array.isArray(result[STORAGE_KEYS.BLOCKED])
+        ? result[STORAGE_KEYS.BLOCKED]
+        : [],
+    }));
 }
 
-function removeFromList(listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS], name: string) {
+function removeFromList(
+  listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS],
+  name: string,
+) {
   return browser.storage.local.get(listKey).then((result) => {
     const list: string[] = Array.isArray(result[listKey]) ? result[listKey] : [];
     const next = list.filter((n) => n !== name);
@@ -40,9 +49,17 @@ export function SidebarApp() {
     ) => {
       if (areaName !== 'local') return;
       if (STORAGE_KEYS.FAVORITES in changes)
-        setFavorites(Array.isArray(changes[STORAGE_KEYS.FAVORITES]?.newValue) ? changes[STORAGE_KEYS.FAVORITES].newValue as string[] : []);
+        setFavorites(
+          Array.isArray(changes[STORAGE_KEYS.FAVORITES]?.newValue)
+            ? (changes[STORAGE_KEYS.FAVORITES].newValue as string[])
+            : [],
+        );
       if (STORAGE_KEYS.BLOCKED in changes)
-        setBlocked(Array.isArray(changes[STORAGE_KEYS.BLOCKED]?.newValue) ? changes[STORAGE_KEYS.BLOCKED].newValue as string[] : []);
+        setBlocked(
+          Array.isArray(changes[STORAGE_KEYS.BLOCKED]?.newValue)
+            ? (changes[STORAGE_KEYS.BLOCKED].newValue as string[])
+            : [],
+        );
     };
     browser.storage.onChanged.addListener(listener);
     return () => browser.storage.onChanged.removeListener(listener);
@@ -63,7 +80,7 @@ export function SidebarApp() {
             ToonHQ Plus
           </h2>
           <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-            Right-click a toon row and use ToonHQ Plus → Thumbs up / Thumbs down.
+            Click the 👍/👎 buttons next to a toon’s avatar to favorite or block.
           </p>
 
           <section className="mb-4">
@@ -79,10 +96,12 @@ export function SidebarApp() {
                     key={name}
                     className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-gray-800 dark:text-gray-200"
                   >
-                    <span className="min-w-0 truncate">{name}</span>
+                    <span className="truncate">{name}</span>
                     <button
                       type="button"
-                      onClick={() => removeFromList(STORAGE_KEYS.FAVORITES, name).then(refresh)}
+                      onClick={() =>
+                        removeFromList(STORAGE_KEYS.FAVORITES, name).then(refresh)
+                      }
                       className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 dark:hover:bg-gray-600 dark:hover:text-red-400"
                       title="Remove from favorites"
                     >
@@ -107,10 +126,12 @@ export function SidebarApp() {
                     key={name}
                     className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-gray-800 dark:text-gray-200"
                   >
-                    <span className="min-w-0 truncate">{name}</span>
+                    <span className="truncate">{name}</span>
                     <button
                       type="button"
-                      onClick={() => removeFromList(STORAGE_KEYS.BLOCKED, name).then(refresh)}
+                      onClick={() =>
+                        removeFromList(STORAGE_KEYS.BLOCKED, name).then(refresh)
+                      }
                       className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 dark:hover:bg-gray-600 dark:hover:text-red-400"
                       title="Remove from blocked"
                     >
