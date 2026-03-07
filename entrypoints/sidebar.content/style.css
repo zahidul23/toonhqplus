@@ -1,0 +1,12 @@
+/* Tailwind v4 - WXT will replace :root with :host when injecting into Shadow DOM */
+@import "tailwindcss";
+
+/* Ensure rem units work inside Shadow DOM (host is isolated from page root) */
+:host {
+  font-size: 16px;
+  font-family: ui-sans-serif, system-ui, sans-serif, "Segoe UI", Roboto, sans-serif;
+  display: block;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
