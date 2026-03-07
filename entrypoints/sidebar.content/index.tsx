@@ -218,9 +218,6 @@ const getSuitLevel = (suitString: string) => {
   // if prestiged levels do add on top of normal levels, use this calculation instead:
   // let totalValue = isPrestiged ? (78 + (levelPart - 8)) : ((4 * cogPart) + levelPart - 4);
 
-  console.log('cogPart', cogPart, 'levelPart', levelPart, 'isPrestiged', isPrestiged, 'totalValue', totalValue);
-
-
   return totalValue;
 };
 
@@ -241,55 +238,65 @@ const getPinkSlips = (value: number): number => {
     }
 }
 
-const CJDifficultyTiers = {
-    1: { minlevel: 1, lawyers: 8, gavels: 4, evidence: 38, hasBonusWeight: false, laffHeal: 1 },
-    2: { minlevel: 10, lawyers: 8, gavels: 5, evidence: 36, hasBonusWeight: false, laffHeal: 1 },
-    3: { minlevel: 19, lawyers: 8, gavels: 5, evidence: 34, hasBonusWeight: false, laffHeal: 1 },
-    4: { minlevel: 27, lawyers: 8, gavels: 6, evidence: 32, hasBonusWeight: false, laffHeal: 2 },
-    5: { minlevel: 36, lawyers: 8, gavels: 6, evidence: 30, hasBonusWeight: false, laffHeal: 2 },
-    6: { minlevel: 44, lawyers: 8, gavels: 7, evidence: 28, hasBonusWeight: false, laffHeal: 3 },
-    7: { minlevel: 53, lawyers: 9, gavels: 7, evidence: 26, hasBonusWeight: true, laffHeal: 3 },
-    8: { minlevel: 61, lawyers: 9, gavels: 8, evidence: 24, hasBonusWeight: true, laffHeal: 4 },
-    9: { minlevel: 70, lawyers: 10, gavels: 8, evidence: 22, hasBonusWeight: true, laffHeal: 4 },
+interface CJDifficultyTier {
+    tier: number;
+    minlevel: number;
+    lawyers: number;
+    gavels: number;
+    evidence: number;
+    hasBonusWeight: boolean;
+    laffHeal: number;
 }
 
-const getLawyers = (value: number): number => {
-    // Determine Lawyers based on the Difficulty Tier table
-    let 
-    let lawyers, gavels, evidence, hasBonusWeight, laffHeal;
-  
-    if (value >= 70) {
-      lawyers = 8; gavels = 4;
-      evidence = 4;
-      hasBonusWeight = true;
-      laffHeal = 10;
-    } else if (value >= 48) {
-      lawyers = 8;
-      gavels = 4;
-      evidence = 4;
-      hasBonusWeight = true;
-      laffHeal = 10;
-    } else if (value >= 33) {
-      lawyers = 8;
-      gavels = 4;
-      evidence = 4;
-      hasBonusWeight = true;
-      laffHeal = 10;
-    } else if (value >= 17) {
-      lawyers = 8;
-      gavels = 4;
-      evidence = 4;
-      hasBonusWeight = true;
-      laffHeal = 10;
-    } else if (value >= 1) {
-      lawyers = 8;
-      gavels = 4;
-      evidence = 4;
-      hasBonusWeight = true;
-      laffHeal = 10;
-    } else {
-        return 0; // Below minimum requirements
+const CJ_DIFFICULTY_TIERS : CJDifficultyTier[] = [
+    { tier: 9, minlevel: 70, lawyers: 10, gavels: 8, evidence: 22, hasBonusWeight: true, laffHeal: 4 },
+    { tier: 8, minlevel: 61, lawyers: 9, gavels: 8, evidence: 24, hasBonusWeight: true, laffHeal: 4 },
+    { tier: 7, minlevel: 53, lawyers: 9, gavels: 7, evidence: 26, hasBonusWeight: true, laffHeal: 3 },
+    { tier: 6, minlevel: 44, lawyers: 8, gavels: 7, evidence: 28, hasBonusWeight: false, laffHeal: 3 },
+    { tier: 5, minlevel: 36, lawyers: 8, gavels: 6, evidence: 30, hasBonusWeight: false, laffHeal: 2 },
+    { tier: 4, minlevel: 27, lawyers: 8, gavels: 6, evidence: 32, hasBonusWeight: false, laffHeal: 2 },
+    { tier: 3, minlevel: 19, lawyers: 8, gavels: 5, evidence: 34, hasBonusWeight: false, laffHeal: 1 },
+    { tier: 2, minlevel: 10, lawyers: 8, gavels: 5, evidence: 36, hasBonusWeight: false, laffHeal: 1 },
+    { tier: 1, minlevel: 1,  lawyers: 8, gavels: 4, evidence: 38, hasBonusWeight: false, laffHeal: 1 },
+];
+
+const getCJDifficultyTier = (value: number): CJDifficultyTier => {
+    // Determine the difficulty tier based on the value
+    return CJ_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CJ_DIFFICULTY_TIERS[9];
+};
+
+const updateBossInfo = () => {
+  const rows = document.querySelectorAll('.group-member-row');
+  const bossTypes = { 'CEO': 'bossbot', 'CJ': 'lawbot', 'CFO': 'bossbot' };
+  const thisBossInfo = document.querySelector("h4.boss-info");
+  const thisBoss = document.querySelector('.group-details-dialog h4')?.textContent?.trim();
+  const thisBossKey = thisBoss ? bossTypes[thisBoss as keyof typeof bossTypes] : null;
+  if (!thisBossKey) return;
+
+  let suitValues: number[] = [];
+  for (const row of rows) {
+    const id = row.getAttribute('toon-id'); 
+    if (id && toons[id]) {
+      const t = toons[id];
+      const cogString = t[thisBossKey] || "";
+      const suitValue = getSuitLevel(cogString);
+      suitValues.push(suitValue);
     }
+  }
+  const averageSuitValue = Math.round(suitValues.reduce((sum, val) => sum + val, 0) / suitValues.length) || 0;
+
+  if (thisBossKey === 'lawbot') {
+    const tier = getCJDifficultyTier(averageSuitValue);
+    if (thisBossInfo && tier) thisBossInfo.textContent = `(${tier.lawyers} lawyers)`;
+    console.log("Tier:", tier, "Average Suit Value:", averageSuitValue);
+  } else //if (thisBossKey === 'bossbot') 
+    {
+    const pinkSlips = getPinkSlips(averageSuitValue);
+    console.log("Pink Slips:", pinkSlips, "Average Suit Value:", averageSuitValue);
+    if (thisBossInfo && pinkSlips) thisBossInfo.textContent = `(${pinkSlips} Pink Slips)`;
+  } 
+
+}
 
 
 export default defineContentScript({
@@ -324,38 +331,14 @@ export default defineContentScript({
             wrapper.appendChild(h4);
           }
 
-          // new h4 for fires
+          // new h4 for boss info (pink slips, lawyer count, etc)
           const newH4 = document.createElement('h4');
-          newH4.textContent = '0 Fires';
+          newH4.classList.add('boss-info');
           wrapper.appendChild(newH4);
-
-          // extra debug: iterate through rows and log name + relevant bot stat
-          const statKey = title === 'CEO' ? 'bossbot' : title === 'CJ' ? 'lawbot' : 'cashbot';
-          // because the logger may not have written toon-id yet, retry a few times
-          const logRows = (tries = 0) => {
-            const rows = Array.from(document.querySelectorAll('.group-member-row'));
-            let pending = false;
-            rows.forEach((row) => {
-              const id = row.getAttribute('toon-id');
-              if (id && !toons[id]) pending = true;
-            });
-            if (pending && tries < 5) {
-              setTimeout(() => logRows(tries + 1), 100);
-              return;
-            }
-            rows.forEach((row) => {
-              const id = row.getAttribute('toon-id');
-              if (id) {
-                const t = toons[id];
-                if (t) {
-                  getSuitLevel(t[statKey] || "");
-                  console.debug('toon stat', t.name, statKey, t[statKey]);
-                }
-              }
-            });
-          };
-          logRows();
         }
+        setTimeout(() => {
+          updateBossInfo();
+        }, 500);
       }
     };
     document.querySelectorAll('.group-details-dialog').forEach(el => {
@@ -379,6 +362,8 @@ export default defineContentScript({
     dialogObserver.observe(document.body, { childList: true, subtree: true });
     ctx.onInvalidated(() => dialogObserver.disconnect());
 
+    
+        updateBossInfo();
     applyRowHighlights();
     browser.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
