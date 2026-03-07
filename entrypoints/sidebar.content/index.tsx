@@ -207,6 +207,90 @@ async function applyRowHighlights() {
   });
 }
 
+const getSuitLevel = (suitString: string) => {
+  const cogPart = parseInt(suitString.substring(0, 1), 16);
+  const isPrestiged = suitString.substring(1, 2) === '2';
+  const levelPart = parseInt(suitString.substring(2), 16);
+
+  // Do presiged levels add onto the normal levels? Assume no for now
+  let totalValue = isPrestiged ? 78 : ((4 * cogPart) + levelPart - 4);
+
+  // if prestiged levels do add on top of normal levels, use this calculation instead:
+  // let totalValue = isPrestiged ? (78 + (levelPart - 8)) : ((4 * cogPart) + levelPart - 4);
+
+  console.log('cogPart', cogPart, 'levelPart', levelPart, 'isPrestiged', isPrestiged, 'totalValue', totalValue);
+
+
+  return totalValue;
+};
+
+const getPinkSlips = (value: number): number => {
+    // Determine Pink Slips based on the Difficulty Tier table
+    if (value >= 63) {
+        return 6; // Tier 5: 63+ value
+    } else if (value >= 48) {
+        return 5; // Tier 4: 48-62 value
+    } else if (value >= 33) {
+        return 4; // Tier 3: 33-47 value
+    } else if (value >= 17) {
+        return 3; // Tier 2: 17-32 value
+    } else if (value >= 1) {
+        return 2; // Tier 1: 1-16 value
+    } else {
+        return 0; // Below minimum requirements
+    }
+}
+
+const CJDifficultyTiers = {
+    1: { minlevel: 1, lawyers: 8, gavels: 4, evidence: 38, hasBonusWeight: false, laffHeal: 1 },
+    2: { minlevel: 10, lawyers: 8, gavels: 5, evidence: 36, hasBonusWeight: false, laffHeal: 1 },
+    3: { minlevel: 19, lawyers: 8, gavels: 5, evidence: 34, hasBonusWeight: false, laffHeal: 1 },
+    4: { minlevel: 27, lawyers: 8, gavels: 6, evidence: 32, hasBonusWeight: false, laffHeal: 2 },
+    5: { minlevel: 36, lawyers: 8, gavels: 6, evidence: 30, hasBonusWeight: false, laffHeal: 2 },
+    6: { minlevel: 44, lawyers: 8, gavels: 7, evidence: 28, hasBonusWeight: false, laffHeal: 3 },
+    7: { minlevel: 53, lawyers: 9, gavels: 7, evidence: 26, hasBonusWeight: true, laffHeal: 3 },
+    8: { minlevel: 61, lawyers: 9, gavels: 8, evidence: 24, hasBonusWeight: true, laffHeal: 4 },
+    9: { minlevel: 70, lawyers: 10, gavels: 8, evidence: 22, hasBonusWeight: true, laffHeal: 4 },
+}
+
+const getLawyers = (value: number): number => {
+    // Determine Lawyers based on the Difficulty Tier table
+    let 
+    let lawyers, gavels, evidence, hasBonusWeight, laffHeal;
+  
+    if (value >= 70) {
+      lawyers = 8; gavels = 4;
+      evidence = 4;
+      hasBonusWeight = true;
+      laffHeal = 10;
+    } else if (value >= 48) {
+      lawyers = 8;
+      gavels = 4;
+      evidence = 4;
+      hasBonusWeight = true;
+      laffHeal = 10;
+    } else if (value >= 33) {
+      lawyers = 8;
+      gavels = 4;
+      evidence = 4;
+      hasBonusWeight = true;
+      laffHeal = 10;
+    } else if (value >= 17) {
+      lawyers = 8;
+      gavels = 4;
+      evidence = 4;
+      hasBonusWeight = true;
+      laffHeal = 10;
+    } else if (value >= 1) {
+      lawyers = 8;
+      gavels = 4;
+      evidence = 4;
+      hasBonusWeight = true;
+      laffHeal = 10;
+    } else {
+        return 0; // Below minimum requirements
+    }
+
 
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
@@ -263,7 +347,10 @@ export default defineContentScript({
               const id = row.getAttribute('toon-id');
               if (id) {
                 const t = toons[id];
-                if (t) console.debug('toon stat', t.name, statKey, t[statKey]);
+                if (t) {
+                  getSuitLevel(t[statKey] || "");
+                  console.debug('toon stat', t.name, statKey, t[statKey]);
+                }
               }
             });
           };
