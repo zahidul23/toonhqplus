@@ -19,5 +19,13 @@
     return inst.toon;
   });
   // payload now contains only simple objects, safe for postMessage
-  window.postMessage({ type: 'VUE_DEBUG', payload: data }, '*');
+  const message = { type: 'VUE_DEBUG', payload: data };
+  window.postMessage(message, '*');
+
+  // mark a global flag so other scripts know the logger has run at least once
+  try {
+    window.__toonhqVueReady = true;
+  } catch {}
+  // also send an explicit ready event (listeners can ignore if they don't care)
+  window.postMessage({ type: 'VUE_READY' }, '*');
 })();

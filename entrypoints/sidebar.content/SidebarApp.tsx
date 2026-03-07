@@ -5,34 +5,53 @@ const STORAGE_KEYS = {
   BLOCKED: 'toonhq-blocked',
 } as const;
 
-function loadLists(): Promise<{ favorites: string[]; blocked: string[] }> {
+interface ToonData {
+  id: number;
+  name: string;
+  photo?: string;
+  [key: string]: any;
+}
+
+function normalize(raw: unknown): ToonData[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    if (typeof item === 'string') {
+      return { id: -1, name: item };
+    }
+    return item as ToonData;
+  });
+}
+
+function loadLists(): Promise<{ favorites: ToonData[]; blocked: ToonData[] }> {
   return browser.storage.local
     .get([STORAGE_KEYS.FAVORITES, STORAGE_KEYS.BLOCKED])
     .then((result) => ({
-      favorites: Array.isArray(result[STORAGE_KEYS.FAVORITES])
-        ? result[STORAGE_KEYS.FAVORITES]
-        : [],
-      blocked: Array.isArray(result[STORAGE_KEYS.BLOCKED])
-        ? result[STORAGE_KEYS.BLOCKED]
-        : [],
+      favorites: normalize(result[STORAGE_KEYS.FAVORITES]),
+      blocked: normalize(result[STORAGE_KEYS.BLOCKED]),
     }));
 }
 
 function removeFromList(
   listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS],
-  name: string,
+  identifier: number | string,
 ) {
   return browser.storage.local.get(listKey).then((result) => {
-    const list: string[] = Array.isArray(result[listKey]) ? result[listKey] : [];
-    const next = list.filter((n) => n !== name);
+    const list: ToonData[] = Array.isArray(result[listKey]) ? result[listKey] : [];
+    const next = list.filter((t) => {
+      if (typeof identifier === 'number') {
+        return t.id !== identifier;
+      }
+      // treat string as name
+      return t.name !== identifier;
+    });
     return browser.storage.local.set({ [listKey]: next });
   });
 }
 
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [blocked, setBlocked] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<ToonData[]>([]);
+  const [blocked, setBlocked] = useState<ToonData[]>([]);
 
   const refresh = useCallback(() => {
     loadLists().then(({ favorites: f, blocked: b }) => {
@@ -51,13 +70,13 @@ export function SidebarApp() {
       if (STORAGE_KEYS.FAVORITES in changes)
         setFavorites(
           Array.isArray(changes[STORAGE_KEYS.FAVORITES]?.newValue)
-            ? (changes[STORAGE_KEYS.FAVORITES].newValue as string[])
+            ? (changes[STORAGE_KEYS.FAVORITES].newValue as ToonData[])
             : [],
         );
       if (STORAGE_KEYS.BLOCKED in changes)
         setBlocked(
           Array.isArray(changes[STORAGE_KEYS.BLOCKED]?.newValue)
-            ? (changes[STORAGE_KEYS.BLOCKED].newValue as string[])
+            ? (changes[STORAGE_KEYS.BLOCKED].newValue as ToonData[])
             : [],
         );
     };
@@ -91,16 +110,29 @@ export function SidebarApp() {
               {favorites.length === 0 ? (
                 <li className="py-1 text-xs text-gray-500 dark:text-gray-400">None yet</li>
               ) : (
-                favorites.map((name) => (
+                // show newest entries at top
+                [...favorites].reverse().map((toon) => (
                   <li
-                    key={name}
+                    key={toon.id}
+                    title={JSON.stringify(toon)}
                     className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-gray-800 dark:text-gray-200"
                   >
-                    <span className="truncate">{name}</span>
+                    <div className="flex items-center gap-2">
+                      {toon.photo && (
+                        <img
+                          src={toon.photo}
+                          alt={toon.name}
+                          className="h-6 w-6 rounded-full"
+                        />
+                      )}
+                      <span className="truncate">
+                        {toon.name}{toon.laff != null ? ` (${toon.laff})` : ''}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() =>
-                        removeFromList(STORAGE_KEYS.FAVORITES, name).then(refresh)
+                        removeFromList(STORAGE_KEYS.FAVORITES, toon.id).then(refresh)
                       }
                       className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 dark:hover:bg-gray-600 dark:hover:text-red-400"
                       title="Remove from favorites"
@@ -121,16 +153,28 @@ export function SidebarApp() {
               {blocked.length === 0 ? (
                 <li className="py-1 text-xs text-gray-500 dark:text-gray-400">None yet</li>
               ) : (
-                blocked.map((name) => (
+                [...blocked].reverse().map((toon) => (
                   <li
-                    key={name}
+                    key={toon.id}
+                    title={JSON.stringify(toon)}
                     className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-gray-800 dark:text-gray-200"
                   >
-                    <span className="truncate">{name}</span>
+                    <div className="flex items-center gap-2">
+                      {toon.photo && (
+                        <img
+                          src={toon.photo}
+                          alt={toon.name}
+                          className="h-6 w-6 rounded-full"
+                        />
+                      )}
+                      <span className="truncate">
+                        {toon.name}{toon.laff != null ? ` (${toon.laff})` : ''}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() =>
-                        removeFromList(STORAGE_KEYS.BLOCKED, name).then(refresh)
+                        removeFromList(STORAGE_KEYS.BLOCKED, toon.id).then(refresh)
                       }
                       className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 dark:hover:bg-gray-600 dark:hover:text-red-400"
                       title="Remove from blocked"
