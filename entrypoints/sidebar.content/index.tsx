@@ -9,6 +9,8 @@ const STORAGE_KEYS = { FAVORITES: 'toonhq-favorites', BLOCKED: 'toonhq-blocked' 
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
 
+const toons: Record<string, unknown> = {};
+
 function injectHighlightStyles() {
   if (document.querySelector('style[data-toonhq-plus-highlights]')) return;
   const style = document.createElement('style');
@@ -81,6 +83,12 @@ function updateRowButtons(row: HTMLElement, toonName: string) {
         void browser.storage.local
           .get(listKey)
           .then((result) => {
+            const toonId = row.getAttribute('toon-id');
+            let toonData = null;
+            if (toonId) {
+              toonData = toons[toonId];
+              console.log(toonData) 
+            }
             const list: string[] = Array.isArray(result[listKey]) ? result[listKey] : [];
             const idx = list.indexOf(toonName);
             if (idx >= 0) list.splice(idx, 1);
@@ -174,10 +182,35 @@ export default defineContentScript({
       highlightTimeout = setTimeout(() => {
         highlightTimeout = null;
         applyRowHighlights();
+        // also re-run the vue logger so new rows get logged
+        injectVueLogger();
       }, 150);
     });
     observer.observe(document.body, { childList: true, subtree: true });
     ctx.onInvalidated(() => observer.disconnect());
+
+    // debug helper: log Vue instances for rows with class "group-member-row".
+    function injectVueLogger() {
+      // listen for messages coming back from page script
+      window.addEventListener('message', (e) => {
+        if (e.source !== window || e.data?.type !== 'VUE_DEBUG') return;
+        /// ACCess to vue data note---
+        let payload = e.data.payload;
+        for (const toondata of payload) {
+          toons[toondata.id] = toondata;
+        }
+      });
+
+      // load an external script from the extension (CSP allows chrome-extension://)
+      const script = document.createElement('script');
+      // runtime.getURL is typed narrowly by wxt; cast to any to bypass
+      script.src = (browser.runtime as any).getURL('vue-logger.js');
+      script.onload = () => script.remove();
+      document.documentElement.appendChild(script);
+    }
+
+    // run the logger once initially (or you could attach it to observer updates)
+    injectVueLogger();
 
     try {
       const ui = await createShadowRootUi(ctx, {

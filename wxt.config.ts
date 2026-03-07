@@ -4,6 +4,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
+    manifestVersion: 3,
     permissions: ['storage', 'contextMenus'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
     content_scripts: [
@@ -12,6 +13,13 @@ export default defineConfig({
         js: ['entrypoints/sidebar.content/index.tsx'],
         css: ['entrypoints/sidebar.content/style.css'],
         run_at: 'document_idle',
+        world: "MAIN"
+      },
+    ],
+    web_accessible_resources: [
+      {
+        resources: ['vue-logger.js'],
+        matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
       },
     ],
     action: { default_popup: 'sidebar/content/index.html' },
