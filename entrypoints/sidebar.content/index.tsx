@@ -38,6 +38,54 @@ function injectHighlightStyles() {
     /* enlarge dialog used by site; original rule sets 900px !important */
     .group-details-dialog { width: 1000px !important; max-width: 1000px !important; }
 
+    /* tooltip for boss info */
+    .boss-info {
+      position: relative;
+      cursor: help;
+    }
+    .boss-info[data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: 50%;
+      left: calc(100% + 12px);
+      transform: translateY(-50%);
+      background: #1f2937;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      white-space: pre-wrap;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+      z-index: 10000;
+      line-height: 1.5;
+      font-weight: 500;
+      text-align: left;
+      min-width: max-content;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    .boss-info[data-tooltip]::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 100%;
+      transform: translateY(-50%);
+      border-width: 6px;
+      border-style: solid;
+      border-color: transparent #1f2937 transparent transparent;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+      z-index: 10000;
+    }
+    .boss-info[data-tooltip]:hover::after,
+    .boss-info[data-tooltip]:hover::before {
+      opacity: 1;
+      visibility: visible;
+    }
+
     /* buttons injected inside toon element */
     .toonhq-plus-buttons {
       display: inline-flex;
@@ -222,47 +270,47 @@ const getSuitLevel = (suitString: string) => {
 };
 
 const getPinkSlips = (value: number): number => {
-    // Determine Pink Slips based on the Difficulty Tier table
-    if (value >= 63) {
-        return 6; // Tier 5: 63+ value
-    } else if (value >= 48) {
-        return 5; // Tier 4: 48-62 value
-    } else if (value >= 33) {
-        return 4; // Tier 3: 33-47 value
-    } else if (value >= 17) {
-        return 3; // Tier 2: 17-32 value
-    } else if (value >= 1) {
-        return 2; // Tier 1: 1-16 value
-    } else {
-        return 0; // Below minimum requirements
-    }
+  // Determine Pink Slips based on the Difficulty Tier table
+  if (value >= 63) {
+    return 6; // Tier 5: 63+ value
+  } else if (value >= 48) {
+    return 5; // Tier 4: 48-62 value
+  } else if (value >= 33) {
+    return 4; // Tier 3: 33-47 value
+  } else if (value >= 17) {
+    return 3; // Tier 2: 17-32 value
+  } else if (value >= 1) {
+    return 2; // Tier 1: 1-16 value
+  } else {
+    return 0; // Below minimum requirements
+  }
 }
 
 interface CJDifficultyTier {
-    tier: number;
-    minlevel: number;
-    lawyers: number;
-    gavels: number;
-    evidence: number;
-    hasBonusWeight: boolean;
-    laffHeal: number;
+  tier: number;
+  minlevel: number;
+  lawyers: number;
+  gavels: number;
+  evidence: number;
+  hasBonusWeight: boolean;
+  laffHeal: number;
 }
 
-const CJ_DIFFICULTY_TIERS : CJDifficultyTier[] = [
-    { tier: 9, minlevel: 70, lawyers: 10, gavels: 8, evidence: 22, hasBonusWeight: true, laffHeal: 4 },
-    { tier: 8, minlevel: 61, lawyers: 9, gavels: 8, evidence: 24, hasBonusWeight: true, laffHeal: 4 },
-    { tier: 7, minlevel: 53, lawyers: 9, gavels: 7, evidence: 26, hasBonusWeight: true, laffHeal: 3 },
-    { tier: 6, minlevel: 44, lawyers: 8, gavels: 7, evidence: 28, hasBonusWeight: false, laffHeal: 3 },
-    { tier: 5, minlevel: 36, lawyers: 8, gavels: 6, evidence: 30, hasBonusWeight: false, laffHeal: 2 },
-    { tier: 4, minlevel: 27, lawyers: 8, gavels: 6, evidence: 32, hasBonusWeight: false, laffHeal: 2 },
-    { tier: 3, minlevel: 19, lawyers: 8, gavels: 5, evidence: 34, hasBonusWeight: false, laffHeal: 1 },
-    { tier: 2, minlevel: 10, lawyers: 8, gavels: 5, evidence: 36, hasBonusWeight: false, laffHeal: 1 },
-    { tier: 1, minlevel: 1,  lawyers: 8, gavels: 4, evidence: 38, hasBonusWeight: false, laffHeal: 1 },
+const CJ_DIFFICULTY_TIERS: CJDifficultyTier[] = [
+  { tier: 9, minlevel: 70, lawyers: 10, gavels: 8, evidence: 22, hasBonusWeight: true, laffHeal: 4 },
+  { tier: 8, minlevel: 61, lawyers: 9, gavels: 8, evidence: 24, hasBonusWeight: true, laffHeal: 4 },
+  { tier: 7, minlevel: 53, lawyers: 9, gavels: 7, evidence: 26, hasBonusWeight: true, laffHeal: 3 },
+  { tier: 6, minlevel: 44, lawyers: 8, gavels: 7, evidence: 28, hasBonusWeight: false, laffHeal: 3 },
+  { tier: 5, minlevel: 36, lawyers: 8, gavels: 6, evidence: 30, hasBonusWeight: false, laffHeal: 2 },
+  { tier: 4, minlevel: 27, lawyers: 8, gavels: 6, evidence: 32, hasBonusWeight: false, laffHeal: 2 },
+  { tier: 3, minlevel: 19, lawyers: 8, gavels: 5, evidence: 34, hasBonusWeight: false, laffHeal: 1 },
+  { tier: 2, minlevel: 10, lawyers: 8, gavels: 5, evidence: 36, hasBonusWeight: false, laffHeal: 1 },
+  { tier: 1, minlevel: 1, lawyers: 8, gavels: 4, evidence: 38, hasBonusWeight: false, laffHeal: 1 },
 ];
 
 const getCJDifficultyTier = (value: number): CJDifficultyTier => {
-    // Determine the difficulty tier based on the value
-    return CJ_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CJ_DIFFICULTY_TIERS[9];
+  // Determine the difficulty tier based on the value
+  return CJ_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CJ_DIFFICULTY_TIERS[8];
 };
 
 const updateBossInfo = () => {
@@ -275,7 +323,7 @@ const updateBossInfo = () => {
 
   let suitValues: number[] = [];
   for (const row of rows) {
-    const id = row.getAttribute('toon-id'); 
+    const id = row.getAttribute('toon-id');
     if (id && toons[id]) {
       const t = toons[id];
       const cogString = t[thisBossKey] || "";
@@ -287,14 +335,45 @@ const updateBossInfo = () => {
 
   if (thisBossKey === 'lawbot') {
     const tier = getCJDifficultyTier(averageSuitValue);
-    if (thisBossInfo && tier) thisBossInfo.textContent = `(${tier.lawyers} lawyers)`;
-    console.log("Tier:", tier, "Average Suit Value:", averageSuitValue);
+    const text = `(${tier.lawyers} lawyers)`;
+    if (thisBossInfo && tier) {
+      const tooltipText = `
+              Average Suit Level: ${averageSuitValue}
+              --------------
+              Tier ${tier.tier}
+              Gavels: ${tier.gavels}
+              Evidence: ${tier.evidence}
+              Bonus Weight: ${tier.hasBonusWeight ? 'Yes' : 'No'}
+              Laff Heal: ${tier.laffHeal}`;
+
+      if (thisBossInfo.textContent !== text || thisBossInfo.getAttribute('data-tooltip') !== tooltipText) {
+        thisBossInfo.textContent = text;
+        thisBossInfo.setAttribute('data-tooltip', tooltipText);
+        console.log("Tier:", tier, "Average Suit Value:", averageSuitValue);
+      }
+    }
   } else //if (thisBossKey === 'bossbot') 
-    {
+  {
     const pinkSlips = getPinkSlips(averageSuitValue);
-    console.log("Pink Slips:", pinkSlips, "Average Suit Value:", averageSuitValue);
-    if (thisBossInfo && pinkSlips) thisBossInfo.textContent = `(${pinkSlips} Pink Slips)`;
-  } 
+    const text = `(${pinkSlips} Pink Slips)`;
+    if (thisBossInfo && pinkSlips !== null) {
+      const tooltipText = `
+              Avg Suit Level: ${averageSuitValue}
+              --------------
+              1-16: 2 Slips
+              17-32: 3 Slips
+              33-47: 4 Slips
+              48-62: 5 Slips
+              63+: 6 Slips
+              `;
+
+      if (thisBossInfo.textContent !== text || thisBossInfo.getAttribute('data-tooltip') !== tooltipText) {
+        thisBossInfo.textContent = text;
+        thisBossInfo.setAttribute('data-tooltip', tooltipText);
+        console.log("Pink Slips:", pinkSlips, "Average Suit Value:", averageSuitValue);
+      }
+    }
+  }
 
 }
 
@@ -314,7 +393,7 @@ export default defineContentScript({
       if (h4) {
         console.debug('toonhq-plus dialog h4:', h4.innerText);
         const title = h4.innerText.trim();
-        if (title === 'CEO' || title === 'CJ' || title === 'CFO') {
+        if (title === 'CEO' || title === 'CJ') {
           // create a wrapper div to hold both headings
           const wrapper = document.createElement('div');
           wrapper.className = 'text-center mt-2 mb-3';
@@ -322,7 +401,7 @@ export default defineContentScript({
           wrapper.style.display = 'flex';
           wrapper.style.justifyContent = 'center';
           wrapper.style.alignItems = 'center';
-          wrapper.style.gap = '2em';
+          wrapper.style.gap = '1em';
 
           // move the original h4 into wrapper
           const parent = h4.parentElement;
@@ -362,8 +441,8 @@ export default defineContentScript({
     dialogObserver.observe(document.body, { childList: true, subtree: true });
     ctx.onInvalidated(() => dialogObserver.disconnect());
 
-    
-        updateBossInfo();
+
+    updateBossInfo();
     applyRowHighlights();
     browser.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
@@ -377,6 +456,7 @@ export default defineContentScript({
       highlightTimeout = setTimeout(() => {
         highlightTimeout = null;
         applyRowHighlights();
+        updateBossInfo();
         // also re-run the vue logger so new rows get logged
         injectVueLogger();
       }, 150);
