@@ -368,7 +368,6 @@ Laff Heal: ${tier.laffHeal}`;
       if (thisBossInfo.textContent !== text || thisBossInfo.getAttribute('data-tooltip') !== tooltipText) {
         thisBossInfo.textContent = text;
         thisBossInfo.setAttribute('data-tooltip', tooltipText);
-        console.log("Tier:", tier, "Average Suit Value:", averageSuitValue);
       }
     }
   } else //if (thisBossKey === 'bossbot') 
@@ -388,7 +387,6 @@ Laff Heal: ${tier.laffHeal}`;
       if (thisBossInfo.textContent !== text || thisBossInfo.getAttribute('data-tooltip') !== tooltipText) {
         thisBossInfo.textContent = text;
         thisBossInfo.setAttribute('data-tooltip', tooltipText);
-        console.log("Pink Slips:", pinkSlips, "Average Suit Value:", averageSuitValue);
       }
     }
   }
@@ -409,7 +407,6 @@ export default defineContentScript({
       // if dialog contains an h4, log its text and maybe append info
       const h4 = d.querySelector('h4');
       if (h4) {
-        console.debug('toonhq-plus dialog h4:', h4.innerText);
         const title = h4.innerText.trim();
         if (title === 'CEO' || title === 'CJ') {
           // create a wrapper div to hold both headings
