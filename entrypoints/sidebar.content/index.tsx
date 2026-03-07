@@ -89,22 +89,22 @@ function injectHighlightStyles() {
     /* buttons injected inside toon element */
     .toonhq-plus-buttons {
       display: inline-flex;
-      gap: 6px;
-      margin-left: 8px;
+      gap: 1em;
       vertical-align: middle;
     }
     .toonhq-plus-buttons button {
       cursor: pointer;
       border: none;
-      background: rgba(0,0,0,0.1);
-      border-radius: 4px;
-      font-size: 18px;
-      line-height: 1;
-      padding: 2px 4px;
-      transition: background 0.2s;
+      background: transparent;
+      border-radius: 50%;
+      padding: 2px;
+      transition: transform 0.2s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .toonhq-plus-buttons button:hover {
-      background: rgba(0,0,0,0.15);
+      transform: scale(1.1);
     }
   `;
   (document.head ?? document.documentElement).appendChild(style);
@@ -118,8 +118,8 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
     container.className = 'toonhq-plus-buttons';
     Object.assign(container.style, {
       display: 'inline-flex',
-      gap: '4px',
-      marginLeft: '6px',
+      gap: '1em',
+      marginTop: '1em',
       verticalAlign: 'middle',
     });
 
@@ -130,14 +130,12 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
     ) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = symbol;
+      btn.innerHTML = symbol;
       btn.title = title;
       Object.assign(btn.style, {
         cursor: 'pointer',
         border: 'none',
         background: 'none',
-        fontSize: '16px',
-        lineHeight: '1',
         padding: '0',
       });
       btn.addEventListener('click', (e) => {
@@ -147,35 +145,56 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
         const currentData: ToonData | null =
           toonIdAttr && toons[toonIdAttr] ? toons[toonIdAttr] : null;
 
+        const otherKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+
         void browser.storage.local
-          .get(listKey)
+          .get([listKey, otherKey])
           .then((result) => {
             const list: ToonData[] = Array.isArray(result[listKey]) ? result[listKey] : [];
+            const otherList: ToonData[] = Array.isArray(result[otherKey]) ? result[otherKey] : [];
+
             let existingIndex = -1;
+            let otherIndex = -1;
+
             if (currentData) {
               existingIndex = list.findIndex(
                 (t) => t.id === currentData.id || t.name === currentData.name,
               );
+              otherIndex = otherList.findIndex(
+                (t) => t.id === currentData.id || t.name === currentData.name,
+              );
             }
+
             if (existingIndex >= 0) {
+              // Toggle off
               list.splice(existingIndex, 1);
             } else if (currentData) {
-              // remove any stray string-only entries with same name
+              // Add to current list
               const strayIdx = list.findIndex((t) => typeof t === 'string' && t === currentData.name);
               if (strayIdx >= 0) list.splice(strayIdx, 1);
-              // push normally; sidebar renders reversed order
               list.push(currentData);
+
+              // Remove from the other list if it exists there
+              if (otherIndex >= 0) {
+                otherList.splice(otherIndex, 1);
+              } else {
+                const otherStrayIdx = otherList.findIndex((t) => typeof t === 'string' && t === currentData.name);
+                if (otherStrayIdx >= 0) otherList.splice(otherStrayIdx, 1);
+              }
             }
-            return browser.storage.local.set({ [listKey]: list });
+            return browser.storage.local.set({ [listKey]: list, [otherKey]: otherList });
           })
           .then(() => applyRowHighlights());
       });
       return btn;
     };
 
+    const thumbsUpSvg = `<div style="background-color: #1f8454; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg></div>`;
+    const blockSvg = `<div style="background-color: #dc2626; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></div>`;
+
     container.append(
-      makeBtn('👍', 'Favorite', STORAGE_KEYS.FAVORITES),
-      makeBtn('👎', 'Block', STORAGE_KEYS.BLOCKED),
+      makeBtn(thumbsUpSvg, 'Add to Toony Toons', STORAGE_KEYS.FAVORITES),
+      makeBtn(blockSvg, 'Add to Stinky Toons', STORAGE_KEYS.BLOCKED),
     );
 
     // place the buttons inside the toon element itself
@@ -337,14 +356,14 @@ const updateBossInfo = () => {
     const tier = getCJDifficultyTier(averageSuitValue);
     const text = `(${tier.lawyers} lawyers)`;
     if (thisBossInfo && tier) {
-      const tooltipText = `
-              Average Suit Level: ${averageSuitValue}
-              --------------
-              Tier ${tier.tier}
-              Gavels: ${tier.gavels}
-              Evidence: ${tier.evidence}
-              Bonus Weight: ${tier.hasBonusWeight ? 'Yes' : 'No'}
-              Laff Heal: ${tier.laffHeal}`;
+      const tooltipText =
+        `Average Suit Value: ${averageSuitValue}
+---------------------------
+Tier ${tier.tier}
+Gavels: ${tier.gavels}
+Evidence: ${tier.evidence}
+Bonus Weight: ${tier.hasBonusWeight ? 'Yes' : 'No'}
+Laff Heal: ${tier.laffHeal}`;
 
       if (thisBossInfo.textContent !== text || thisBossInfo.getAttribute('data-tooltip') !== tooltipText) {
         thisBossInfo.textContent = text;
@@ -357,15 +376,14 @@ const updateBossInfo = () => {
     const pinkSlips = getPinkSlips(averageSuitValue);
     const text = `(${pinkSlips} Pink Slips)`;
     if (thisBossInfo && pinkSlips !== null) {
-      const tooltipText = `
-              Avg Suit Level: ${averageSuitValue}
-              --------------
-              1-16: 2 Slips
-              17-32: 3 Slips
-              33-47: 4 Slips
-              48-62: 5 Slips
-              63+: 6 Slips
-              `;
+      const tooltipText =
+        `Average Suit Value: ${averageSuitValue}
+---------------------------
+1-16: 2 Slips
+17-32: 3 Slips
+33-47: 4 Slips
+48-62: 5 Slips
+63+: 6 Slips`;
 
       if (thisBossInfo.textContent !== text || thisBossInfo.getAttribute('data-tooltip') !== tooltipText) {
         thisBossInfo.textContent = text;
@@ -387,7 +405,7 @@ export default defineContentScript({
     injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 1000px width inline
     const fixDialog = (d: HTMLElement) => {
-      d.style.setProperty('width', '1000px', 'important');
+      d.style.setProperty('width', '980px', 'important');
       // if dialog contains an h4, log its text and maybe append info
       const h4 = d.querySelector('h4');
       if (h4) {

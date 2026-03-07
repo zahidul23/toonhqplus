@@ -85,7 +85,7 @@ export function SidebarApp() {
   }, [refresh]);
 
   return (
-    <div className="fixed top-4 right-4 z-[2147483647] flex flex-col gap-2 font-sans">
+    <div className="fixed top-4 right-4 z-[2147483647] flex max-h-[calc(100vh-2rem)] flex-col gap-2 font-sans">
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
@@ -96,35 +96,32 @@ export function SidebarApp() {
         </button>
       </div>
       {open && (
-        <aside className="w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+        <aside className="w-80 flex-1 flex flex-col min-h-0 rounded-lg border border-[#10462d] bg-[#1f8454] p-4 shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d]">
+          <h2 className="mb-3 text-lg shrink-0 font-semibold text-white">
             ToonHQ Plus
           </h2>
-          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-            Click the 👍/👎 buttons next to a toon’s avatar to favorite or block.
-          </p>
 
-          <section className="mb-4">
-            <h3 className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Favorites
+          <section className="mb-4 flex-1 flex flex-col min-h-0">
+            <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+              Toony Toons
             </h3>
-            <ul className="max-h-32 space-y-1 overflow-y-auto rounded border border-gray-100 bg-gray-50 p-1.5 dark:border-gray-600 dark:bg-gray-700/50">
+            <ul className="flex-1 space-y-1 overflow-y-auto rounded border border-[#10462d] bg-[#10462d]/40 p-1.5 shadow-inner dark:border-black/50 dark:bg-black/20">
               {favorites.length === 0 ? (
-                <li className="py-1 text-xs text-gray-500 dark:text-gray-400">None yet</li>
+                <li className="py-1 text-xs text-green-100/70">None yet</li>
               ) : (
                 // show newest entries at top
                 [...favorites].reverse().map((toon) => (
                   <li
                     key={toon.id}
                     title={JSON.stringify(toon)}
-                    className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-gray-800 dark:text-gray-200"
+                    className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-white"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 overflow-hidden">
                       {toon.photo && (
                         <img
                           src={toon.photo}
                           alt={toon.name}
-                          className="h-6 w-6 rounded-full"
+                          className="h-6 w-6 shrink-0 rounded-full"
                         />
                       )}
                       <span className="truncate">
@@ -136,7 +133,7 @@ export function SidebarApp() {
                       onClick={() =>
                         removeFromList(STORAGE_KEYS.FAVORITES, toon.id).then(refresh)
                       }
-                      className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 dark:hover:bg-gray-600 dark:hover:text-red-400"
+                      className="shrink-0 rounded p-0.5 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
                       title="Remove from favorites"
                     >
                       <span aria-hidden>×</span>
@@ -147,26 +144,26 @@ export function SidebarApp() {
             </ul>
           </section>
 
-          <section>
-            <h3 className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Blocked
+          <section className="flex-1 flex flex-col min-h-0">
+            <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+              Stinky Toons
             </h3>
-            <ul className="max-h-32 space-y-1 overflow-y-auto rounded border border-gray-100 bg-gray-50 p-1.5 dark:border-gray-600 dark:bg-gray-700/50">
+            <ul className="flex-1 space-y-1 overflow-y-auto rounded border border-[#10462d] bg-[#10462d]/40 p-1.5 shadow-inner dark:border-black/50 dark:bg-black/20">
               {blocked.length === 0 ? (
-                <li className="py-1 text-xs text-gray-500 dark:text-gray-400">None yet</li>
+                <li className="py-1 text-xs text-green-100/70">None yet</li>
               ) : (
                 [...blocked].reverse().map((toon) => (
                   <li
                     key={toon.id}
                     title={JSON.stringify(toon)}
-                    className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-gray-800 dark:text-gray-200"
+                    className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm text-white"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 overflow-hidden">
                       {toon.photo && (
                         <img
                           src={toon.photo}
                           alt={toon.name}
-                          className="h-6 w-6 rounded-full"
+                          className="h-6 w-6 shrink-0 rounded-full"
                         />
                       )}
                       <span className="truncate">
@@ -178,7 +175,7 @@ export function SidebarApp() {
                       onClick={() =>
                         removeFromList(STORAGE_KEYS.BLOCKED, toon.id).then(refresh)
                       }
-                      className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 dark:hover:bg-gray-600 dark:hover:text-red-400"
+                      className="shrink-0 rounded p-0.5 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
                       title="Remove from blocked"
                     >
                       <span aria-hidden>×</span>
