@@ -4,6 +4,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
+    version: '1.0.0',
     manifestVersion: 3,
     permissions: ['storage', 'contextMenus'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],

@@ -266,6 +266,19 @@ async function applyRowHighlights() {
         downBtn.style.opacity = '0.5';
       }
     }
+
+    // Attach hover listeners for sidebar highlight sync
+    if (!row.dataset.toonhqHoverAttached) {
+      row.dataset.toonhqHoverAttached = 'true';
+      row.addEventListener('mouseenter', () => {
+        window.dispatchEvent(
+          new CustomEvent('toonhq-plus-toon-hover', { detail: { id, name } })
+        );
+      });
+      row.addEventListener('mouseleave', () => {
+        window.dispatchEvent(new CustomEvent('toonhq-plus-toon-unhover'));
+      });
+    }
   };
 
 
