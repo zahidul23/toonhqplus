@@ -106,6 +106,14 @@ function injectHighlightStyles() {
     .toonhq-plus-buttons button:hover {
       transform: scale(1.1);
     }
+
+    .group-member-row td:nth-child(3) {
+      max-width: 6em;
+      width: 6em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   `;
   (document.head ?? document.documentElement).appendChild(style);
 }
@@ -116,12 +124,6 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
   if (!container) {
     container = document.createElement('div');
     container.className = 'toonhq-plus-buttons';
-    Object.assign(container.style, {
-      display: 'inline-flex',
-      gap: '1em',
-      marginTop: '1em',
-      verticalAlign: 'middle',
-    });
 
     const makeBtn = (
       symbol: string,
