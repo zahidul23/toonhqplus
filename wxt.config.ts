@@ -9,15 +9,7 @@ export default defineConfig({
     version: '1.0.0',
     permissions: ['storage', 'contextMenus'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
-    content_scripts: [
-      {
-        matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
-        js: ['entrypoints/sidebar.content/index.tsx'],
-        css: ['entrypoints/sidebar.content/style.css'],
-        run_at: 'document_idle',
-        world: "MAIN"
-      },
-    ],
+
     web_accessible_resources: [
       {
         resources: ['vue-logger.js'],
