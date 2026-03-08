@@ -33,6 +33,23 @@ function loadLists(): Promise<{ favorites: ToonData[]; blocked: ToonData[] }> {
     }));
 }
 
+function addToList(
+  listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS],
+  toon: ToonData,
+) {
+  return browser.storage.local.get(listKey).then((result) => {
+    const list: ToonData[] = Array.isArray(result[listKey]) ? result[listKey] : [];
+    // Use ID as primary key if available, otherwise name
+    const exists = toon.id && toon.id !== -1
+      ? list.some(t => t.id === toon.id)
+      : list.some(t => t.name === toon.name);
+
+    if (exists) return;
+    const next = [...list, toon];
+    return browser.storage.local.set({ [listKey]: next });
+  });
+}
+
 function removeFromList(
   listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS],
   identifier: number | string,
@@ -40,26 +57,61 @@ function removeFromList(
   return browser.storage.local.get(listKey).then((result) => {
     const list: ToonData[] = Array.isArray(result[listKey]) ? result[listKey] : [];
     const next = list.filter((t) => {
-      if (typeof identifier === 'number') {
+      if (typeof identifier === 'number' && identifier !== -1) {
         return t.id !== identifier;
       }
-      // treat string as name
       return t.name !== identifier;
     });
     return browser.storage.local.set({ [listKey]: next });
   });
 }
 
-function ToonRow({ toon, listKey, refresh, isHovered }: { toon: ToonData; listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]; refresh: () => void; isHovered: boolean }) {
+function ToonRow({
+  toon,
+  favorites,
+  blocked,
+  activeToonIds,
+  refresh,
+  isHovered
+}: {
+  toon: ToonData;
+  favorites: ToonData[];
+  blocked: ToonData[];
+  activeToonIds: number[];
+  refresh: () => void;
+  isHovered: boolean
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState(toon.note || '');
 
+  const favoriteMatch = favorites.find((f) => f.id.toString() === toon.id.toString());
+  const blockedMatch = blocked.find((b) => b.id.toString() === toon.id.toString());
+  const listKey = favoriteMatch ? STORAGE_KEYS.FAVORITES : blockedMatch ? STORAGE_KEYS.BLOCKED : null;
+  const isOwnToon = activeToonIds.includes(Number(toon.id));
+
+  // Determine row background color
+  let bgColorClass = isHovered ? 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400' : 'hover:bg-[#10462d]/60';
+  let textColorClass = 'text-white';
+
+  if (!isHovered) {
+    if (isOwnToon) {
+      bgColorClass = 'bg-[#cae9fc] dark:bg-[#cae9fcbd]';
+      textColorClass = 'text-[#004a77] dark:text-[#cae9fc]';
+    } else if (favoriteMatch) {
+      bgColorClass = 'bg-[#e6ffed] dark:bg-[#e6ffed]/20';
+      textColorClass = 'text-[#1a7f37] dark:text-[#e6ffed]';
+    } else if (blockedMatch) {
+      bgColorClass = 'bg-[#ffebe9] dark:bg-[#ad130dde]';
+      textColorClass = 'text-[#cf222e] dark:text-[#ffebe9]';
+    }
+  }
+
   const saveNote = () => {
+    if (!listKey) return;
     browser.storage.local.get(listKey).then((result) => {
       const list: ToonData[] = Array.isArray(result[listKey]) ? result[listKey] : [];
-      const item = list.find((t) => t.id === toon.id);
+      const item = list.find((t) => t.id.toString() === toon.id.toString());
       if (item) {
-        // If empty, delete the note entirely to save space/logic
         if (!noteDraft.trim()) {
           delete item.note;
         } else {
@@ -82,8 +134,7 @@ function ToonRow({ toon, listKey, refresh, isHovered }: { toon: ToonData; listKe
   return (
     <li
       ref={rowRef}
-      className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm text-white transition-colors ${isHovered ? 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400' : 'hover:bg-[#10462d]/60'
-        }`}
+      className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-colors ${bgColorClass} ${textColorClass}`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 overflow-hidden">
@@ -96,25 +147,48 @@ function ToonRow({ toon, listKey, refresh, isHovered }: { toon: ToonData; listKe
           </span>
         </div>
         <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={() => {
-              setIsEditing(true);
-              setNoteDraft(toon.note || '');
-            }}
-            className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
-            title="Edit note"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => removeFromList(listKey, toon.id).then(refresh)}
-            className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
-            title="Remove from list"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-          </button>
+          {!isOwnToon && (listKey ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(true);
+                  setNoteDraft(toon.note || (favoriteMatch?.note || blockedMatch?.note) || '');
+                }}
+                className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
+                title="Edit note"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => removeFromList(listKey, toon.id).then(refresh)}
+                className="shrink-0 rounded p-1 text-green-100/50 hover:bg-red-500/40 hover:text-white dark:hover:bg-red-900/40"
+                title="Remove from list"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => addToList(STORAGE_KEYS.FAVORITES, toon).then(refresh)}
+                className="shrink-0 rounded p-1 text-emerald-300/60 hover:bg-emerald-500/40 hover:text-emerald-200"
+                title="Favorite Toon"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /></svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => addToList(STORAGE_KEYS.BLOCKED, toon).then(refresh)}
+                className="shrink-0 rounded p-1 text-red-300/60 hover:bg-red-500/40 hover:text-red-200"
+                title="Block Toon"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
+              </button>
+            </>
+          ))}
         </div>
       </div>
       {isEditing ? (
@@ -157,9 +231,9 @@ function ToonRow({ toon, listKey, refresh, isHovered }: { toon: ToonData; listKe
             Cancel
           </button>
         </div>
-      ) : toon.note ? (
-        <div className="ml-8 whitespace-pre-wrap text-xs leading-snug text-green-100/80">
-          {toon.note}
+      ) : (toon.note || (favoriteMatch?.note || blockedMatch?.note)) ? (
+        <div className="ml-8 whitespace-pre-wrap text-xs leading-snug text-green-100/80 italic">
+          {toon.note || (favoriteMatch?.note || blockedMatch?.note)}
         </div>
       ) : null}
     </li>
@@ -169,10 +243,12 @@ function ToonRow({ toon, listKey, refresh, isHovered }: { toon: ToonData; listKe
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'toons' | 'history'>('toons');
-  
+
   const [favorites, setFavorites] = useState<ToonData[]>([]);
   const [blocked, setBlocked] = useState<ToonData[]>([]);
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
+  const [historyToons, setHistoryToons] = useState<Record<number, any>>({});
+  const [activeToonIds, setActiveToonIds] = useState<number[]>([]);
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
 
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
@@ -183,9 +259,11 @@ export function SidebarApp() {
       setFavorites(f);
       setBlocked(b);
     });
-    navigator.locks.request('toonhqplus-lists', {mode: 'exclusive'}, async (lock) => {
-      browser.storage.local.get('toonhqplus-history').then((result) => {
+    navigator.locks.request('toonhqplus-lists', { mode: 'exclusive' }, async (lock) => {
+      browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids']).then((result) => {
         setHistoryGroups((result['toonhqplus-history'] as Record<number, any>) || {});
+        setHistoryToons((result['toonhqplus-toons'] as Record<number, any>) || {});
+        setActiveToonIds((result['toonhqplus-active-toon-ids'] as number[]) || []);
       });
     });
   }, []);
@@ -232,6 +310,12 @@ export function SidebarApp() {
       if ('toonhqplus-history' in changes) {
         setHistoryGroups((changes['toonhqplus-history']?.newValue as Record<number, any>) || {});
       }
+      if ('toonhqplus-toons' in changes) {
+        setHistoryToons((changes['toonhqplus-toons']?.newValue as Record<number, any>) || {});
+      }
+      if ('toonhqplus-active-toon-ids' in changes) {
+        setActiveToonIds((changes['toonhqplus-active-toon-ids']?.newValue as number[]) || []);
+      }
     };
     browser.storage.onChanged.addListener(listener);
     return () => browser.storage.onChanged.removeListener(listener);
@@ -250,7 +334,7 @@ export function SidebarApp() {
       </div>
       {open && (
         <aside className="w-80 flex-1 flex flex-col min-h-0 rounded-lg border border-[#10462d] bg-[#1f8454] shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d] overflow-hidden">
-          
+
           <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
             <button
               className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
@@ -282,7 +366,7 @@ export function SidebarApp() {
                     ) : (
                       [...favorites].reverse().map((toon) => {
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} listKey={STORAGE_KEYS.FAVORITES} refresh={refresh} isHovered={!!isHovered} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} refresh={refresh} isHovered={!!isHovered} />;
                       })
                     )}
                   </ul>
@@ -298,7 +382,7 @@ export function SidebarApp() {
                     ) : (
                       [...blocked].reverse().map((toon) => {
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} listKey={STORAGE_KEYS.BLOCKED} refresh={refresh} isHovered={!!isHovered} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} refresh={refresh} isHovered={!!isHovered} />;
                       })
                     )}
                   </ul>
@@ -358,18 +442,21 @@ export function SidebarApp() {
                     </div>
                     <ul className="flex-1 space-y-1 overflow-y-auto pr-1">
                       {historyGroups[selectedHistoryGroup]?.members?.map((m: any) => {
+                        const cachedToon = m.toon?.id ? historyToons[m.toon.id] : null;
+                        const toonId = m.toon?.id ?? cachedToon?.id;
                         const toonData: ToonData = {
-                          id: m.toon.id.toString(),
-                          name: m.toon.name,
-                          photo: m.toon.photo,
+                          id: toonId?.toString() ?? '0',
+                          name: m.toon?.name || cachedToon?.name || 'Unknown Toon',
+                          photo: m.toon?.photo || cachedToon?.photo || '',
                           note: ''
                         };
-                        const listKey = favorites.find(f => f.id === toonData.id) ? STORAGE_KEYS.FAVORITES : blocked.find(b => b.id === toonData.id) ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
                         return (
                           <ToonRow
-                            key={m.toon.id}
+                            key={toonId || Math.random()}
                             toon={toonData}
-                            listKey={listKey}
+                            favorites={favorites}
+                            blocked={blocked}
+                            activeToonIds={activeToonIds}
                             refresh={refresh}
                             isHovered={false}
                           />

@@ -108,8 +108,8 @@ function injectHighlightStyles() {
     }
 
     .group-member-row td:nth-child(3) {
-      max-width: 6em;
-      width: 6em;
+      max-width: 7em;
+      width: 7em;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -245,7 +245,14 @@ async function applyRowHighlights() {
     if ((id && favIds.has(id)) || favNames.has(name)) row.classList.add(ROW_CLASS_FAVORITE);
     else if ((id && blkIds.has(id)) || blkNames.has(name)) row.classList.add(ROW_CLASS_BLOCKED);
 
-    updateRowButtons(row, name, data);
+    // Hide buttons for owned toons
+    const isOwnToon = id && activeToons[id];
+    if (isOwnToon) {
+      const existingContainer = row.querySelector('.toonhq-plus-buttons');
+      if (existingContainer) existingContainer.remove();
+    } else {
+      updateRowButtons(row, name, data);
+    }
 
     const container = row.querySelector('.toonhq-plus-buttons');
     if (container) {
@@ -318,6 +325,11 @@ const getPinkSlips = (value: number): number => {
   } else {
     return 0; // Below minimum requirements
   }
+}
+
+const getCogNameForLevel = (level: number, suit: string) => {
+  const cogPart = parseInt(suit.substring(0, 1), 16);
+  const cogName = 
 }
 
 interface CJDifficultyTier {
@@ -423,6 +435,7 @@ export default defineContentScript({
           activeToons[toon.id] = toon;
         });
         console.log('[ToonHQ+] Initial active toons loaded:', Object.keys(activeToons).length, 'toons.');
+        browser.storage.local.set({ 'toonhqplus-active-toon-ids': Object.keys(activeToons).map(Number) });
       }
     } catch (e) {
       console.error('[ToonHQ+] Failed to fetch active toons', e);
@@ -430,17 +443,40 @@ export default defineContentScript({
 
     const syncGroupHistory = (group: any) => {
       if (!group || !Array.isArray(group.members)) return;
-      
+
       const hasActiveToon = group.members.some((m: any) => m.toon && activeToons[m.toon.id]);
       if (!hasActiveToon) return;
 
-      browser.storage.local.get('toonhqplus-history').then((result) => {
+      browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons']).then((result) => {
         const history = (result['toonhqplus-history'] as Record<number, any>) || {};
-        
+        const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
+
+        // Update toon cache
+        group.members.forEach((m: any) => {
+          if (m.toon && m.toon.id) {
+            toonsCache[m.toon.id] = {
+              id: m.toon.id,
+              name: m.toon.name,
+              photo: m.toon.photo,
+              species: m.toon.species,
+              lastSeen: new Date().toISOString()
+            };
+          }
+        });
+
         if (history[group.id]) {
           const memberMap = new Map();
-          history[group.id].members.forEach((m: any) => memberMap.set(m.toon.id, m));
-          group.members.forEach((m: any) => memberMap.set(m.toon.id, m));
+          // Safety check for m.toon and m.toon.id
+          history[group.id].members.forEach((m: any) => {
+            if (m.toon && m.toon.id) {
+              memberMap.set(m.toon.id, m);
+            }
+          });
+          group.members.forEach((m: any) => {
+            if (m.toon && m.toon.id) {
+              memberMap.set(m.toon.id, m);
+            }
+          });
           history[group.id].members = Array.from(memberMap.values());
         } else {
           history[group.id] = {
@@ -450,8 +486,11 @@ export default defineContentScript({
             members: [...group.members],
           };
         }
-        
-        browser.storage.local.set({ 'toonhqplus-history': history });
+
+        browser.storage.local.set({
+          'toonhqplus-history': history,
+          'toonhqplus-toons': toonsCache
+        });
       });
     };
 
