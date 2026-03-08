@@ -407,20 +407,75 @@ Laff Heal: ${tier.laffHeal}`;
   }
 
 }
-
+const groupsState: Record<number, any> = {};
+const activeToons: Record<number, any> = {};
 
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    try {
+      const toonsResp = await fetch('https://toonhq.org/api/toons/');
+      const toonsData = await toonsResp.json();
+      if (Array.isArray(toonsData)) {
+        toonsData.forEach((toon: any) => {
+          activeToons[toon.id] = toon;
+        });
+        console.log('[ToonHQ+] Initial active toons loaded:', Object.keys(activeToons).length, 'toons.');
+      }
+    } catch (e) {
+      console.error('[ToonHQ+] Failed to fetch active toons', e);
+    }
+
+    const syncGroupHistory = (group: any) => {
+      if (!group || !Array.isArray(group.members)) return;
+      
+      const hasActiveToon = group.members.some((m: any) => m.toon && activeToons[m.toon.id]);
+      if (!hasActiveToon) return;
+
+      browser.storage.local.get('toonhqplus-history').then((result) => {
+        const history = (result['toonhqplus-history'] as Record<number, any>) || {};
+        
+        if (history[group.id]) {
+          const memberMap = new Map();
+          history[group.id].members.forEach((m: any) => memberMap.set(m.toon.id, m));
+          group.members.forEach((m: any) => memberMap.set(m.toon.id, m));
+          history[group.id].members = Array.from(memberMap.values());
+        } else {
+          history[group.id] = {
+            id: group.id,
+            type: group.type,
+            created: group.created,
+            members: [...group.members],
+          };
+        }
+        
+        browser.storage.local.set({ 'toonhqplus-history': history });
+      });
+    };
+
+    try {
+      const resp = await fetch('https://toonhq.org/api/groups/list/1/');
+      const data = await resp.json();
+      if (data && Array.isArray(data.groups)) {
+        data.groups.forEach((group: any) => {
+          groupsState[group.id] = group;
+          syncGroupHistory(group);
+        });
+        console.log('[ToonHQ+] Initial groups state loaded:', Object.keys(groupsState).length, 'groups.');
+      }
+    } catch (e) {
+      console.error('[ToonHQ+] Failed to fetch initial groups list', e);
+    }
+
     const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');
-    
+
     ws.addEventListener('open', () => {
       console.log('[ToonHQ+] Direct WebSocket connection opened, sending initialization sequence...');
       // 4 = Engine.io message, 0 = connect
       ws.send('40');
-      
+
       // 4 = Engine.io message, 2 = event, 0 = namespace/ID
       ws.send('420["track","groups",1]');
     });
@@ -428,7 +483,7 @@ export default defineContentScript({
     ws.addEventListener('message', (event) => {
       if (typeof event.data === 'string') {
         const str = event.data;
-        
+
         // Handle Socket.io Ping (2)
         if (str === '2') {
           ws.send('3'); // send Pong
@@ -440,11 +495,33 @@ export default defineContentScript({
         if (match) {
           const prefix = match[1];
           const payloadString = match[2];
-          
+
           if (payloadString) {
             try {
               const payload = JSON.parse(payloadString);
-              console.log(`[ToonHQ+] Socket Message (${prefix}):`, payload);
+              if (Array.isArray(payload) && typeof payload[0] === 'string') {
+                const eventName = payload[0];
+                const data = payload[1];
+                if (eventName === 'group_created') {
+                  groupsState[data.id] = data;
+                  syncGroupHistory(data);
+                } else if (eventName === 'group_disbanded') {
+                  delete groupsState[data.id];
+                } else if (eventName === 'member_joined') {
+                  if (groupsState[data.group]) {
+                    groupsState[data.group].members.push(data);
+                    syncGroupHistory(groupsState[data.group]);
+                  }
+                } else if (eventName === 'member_left') {
+                  if (groupsState[data.group]) {
+                    groupsState[data.group].members = groupsState[data.group].members.filter(
+                      (m: any) => m.id !== data.id
+                    );
+                  }
+                }
+              } else {
+                console.log(`[ToonHQ+] Socket Message (${prefix}):`, payload);
+              }
             } catch (e) {
               console.log(`[ToonHQ+] Socket Msg (Raw ${prefix}):`, payloadString);
             }
@@ -569,6 +646,7 @@ export default defineContentScript({
       script.src = (browser.runtime as any).getURL('vue-logger.js');
       script.onload = () => script.remove();
       document.documentElement.appendChild(script);
+
     }
 
     // run the logger once initially (or you could attach it to observer updates)

@@ -1,4 +1,5 @@
 import react, { useState, useEffect, useCallback } from 'react';
+import { groupTypes } from './groupTypes';
 
 const STORAGE_KEYS = {
   FAVORITES: 'toonhq-favorites',
@@ -167,8 +168,13 @@ function ToonRow({ toon, listKey, refresh, isHovered }: { toon: ToonData; listKe
 
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<'toons' | 'history'>('toons');
+  
   const [favorites, setFavorites] = useState<ToonData[]>([]);
   const [blocked, setBlocked] = useState<ToonData[]>([]);
+  const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
+  const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
+
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
   const [hoveredToonName, setHoveredToonName] = useState<string | null>(null);
 
@@ -176,6 +182,11 @@ export function SidebarApp() {
     loadLists().then(({ favorites: f, blocked: b }) => {
       setFavorites(f);
       setBlocked(b);
+    });
+    navigator.locks.request('toonhqplus-lists', {mode: 'exclusive'}, async (lock) => {
+      browser.storage.local.get('toonhqplus-history').then((result) => {
+        setHistoryGroups((result['toonhqplus-history'] as Record<number, any>) || {});
+      });
     });
   }, []);
 
@@ -218,6 +229,9 @@ export function SidebarApp() {
             ? (changes[STORAGE_KEYS.BLOCKED].newValue as ToonData[])
             : [],
         );
+      if ('toonhqplus-history' in changes) {
+        setHistoryGroups((changes['toonhqplus-history']?.newValue as Record<number, any>) || {});
+      }
     };
     browser.storage.onChanged.addListener(listener);
     return () => browser.storage.onChanged.removeListener(listener);
@@ -235,38 +249,138 @@ export function SidebarApp() {
         </button>
       </div>
       {open && (
-        <aside className="w-80 flex-1 flex flex-col min-h-0 rounded-lg border border-[#10462d] bg-[#1f8454] p-4 shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d]">
-          <section className="mb-4 flex-1 flex flex-col min-h-0">
-            <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
-              Toony Toons
-            </h3>
-            <ul className="flex-1 space-y-1 overflow-y-auto rounded border border-[#10462d] bg-[#10462d]/40 p-1.5 shadow-inner dark:border-black/50 dark:bg-black/20">
-              {favorites.length === 0 ? (
-                <li className="py-1 text-xs text-green-100/70">None yet</li>
-              ) : (
-                [...favorites].reverse().map((toon) => {
-                  const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                  return <ToonRow key={toon.id} toon={toon} listKey={STORAGE_KEYS.FAVORITES} refresh={refresh} isHovered={!!isHovered} />;
-                })
-              )}
-            </ul>
-          </section>
+        <aside className="w-80 flex-1 flex flex-col min-h-0 rounded-lg border border-[#10462d] bg-[#1f8454] shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d] overflow-hidden">
+          
+          <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
+            <button
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              onClick={() => setActiveTab('toons')}
+            >
+              Toons
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              onClick={() => {
+                setActiveTab('history');
+                setSelectedHistoryGroup(null);
+              }}
+            >
+              History
+            </button>
+          </div>
 
-          <section className="flex-1 flex flex-col min-h-0">
-            <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
-              Stinky Toons
-            </h3>
-            <ul className="flex-1 space-y-1 overflow-y-auto rounded border border-[#10462d] bg-[#10462d]/40 p-1.5 shadow-inner dark:border-black/50 dark:bg-black/20">
-              {blocked.length === 0 ? (
-                <li className="py-1 text-xs text-green-100/70">None yet</li>
-              ) : (
-                [...blocked].reverse().map((toon) => {
-                  const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                  return <ToonRow key={toon.id} toon={toon} listKey={STORAGE_KEYS.BLOCKED} refresh={refresh} isHovered={!!isHovered} />;
-                })
-              )}
-            </ul>
-          </section>
+          <div className="flex-1 flex flex-col min-h-0 p-4">
+            {activeTab === 'toons' && (
+              <>
+                <section className="mb-4 flex-1 flex flex-col min-h-0">
+                  <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+                    Toony Toons
+                  </h3>
+                  <ul className="flex-1 space-y-1 overflow-y-auto rounded border border-[#10462d] bg-[#10462d]/40 p-1.5 shadow-inner dark:border-black/50 dark:bg-black/20">
+                    {favorites.length === 0 ? (
+                      <li className="py-1 text-xs text-green-100/70">None yet</li>
+                    ) : (
+                      [...favorites].reverse().map((toon) => {
+                        const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
+                        return <ToonRow key={toon.id} toon={toon} listKey={STORAGE_KEYS.FAVORITES} refresh={refresh} isHovered={!!isHovered} />;
+                      })
+                    )}
+                  </ul>
+                </section>
+
+                <section className="flex-1 flex flex-col min-h-0">
+                  <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+                    Stinky Toons
+                  </h3>
+                  <ul className="flex-1 space-y-1 overflow-y-auto rounded border border-[#10462d] bg-[#10462d]/40 p-1.5 shadow-inner dark:border-black/50 dark:bg-black/20">
+                    {blocked.length === 0 ? (
+                      <li className="py-1 text-xs text-green-100/70">None yet</li>
+                    ) : (
+                      [...blocked].reverse().map((toon) => {
+                        const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
+                        return <ToonRow key={toon.id} toon={toon} listKey={STORAGE_KEYS.BLOCKED} refresh={refresh} isHovered={!!isHovered} />;
+                      })
+                    )}
+                  </ul>
+                </section>
+              </>
+            )}
+
+            {activeTab === 'history' && (
+              <section className="flex-1 flex flex-col min-h-0">
+                {selectedHistoryGroup === null ? (
+                  <>
+                    <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+                      Recent Groups
+                    </h3>
+                    <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+                      {Object.values(historyGroups).length === 0 ? (
+                        <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
+                      ) : (
+                        Object.values(historyGroups)
+                          .sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime())
+                          .map((group) => {
+                            const typeData = groupTypes.find((t) => t.id === group.type);
+                            const groupName = typeData ? typeData.name : `Group #${group.id}`;
+                            return (
+                              <button
+                                key={group.id}
+                                onClick={() => setSelectedHistoryGroup(group.id)}
+                                className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center"
+                              >
+                                <div>
+                                  <span className="block text-sm font-bold text-white">{groupName}</span>
+                                  <span className="block text-xs text-green-200 mt-1">
+                                    {new Date(group.created).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="text-sm font-medium text-emerald-300">
+                                  {group.members?.length || 0} left
+                                </div>
+                              </button>
+                            );
+                          })
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center gap-2 mb-3 shrink-0">
+                      <button
+                        onClick={() => setSelectedHistoryGroup(null)}
+                        className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white"
+                      >
+                        ← Back
+                      </button>
+                      <h3 className="text-sm font-bold text-green-50 truncate">
+                        {groupTypes.find((t) => t.id === historyGroups[selectedHistoryGroup]?.type)?.name || `Group #${historyGroups[selectedHistoryGroup]?.id}`}
+                      </h3>
+                    </div>
+                    <ul className="flex-1 space-y-1 overflow-y-auto pr-1">
+                      {historyGroups[selectedHistoryGroup]?.members?.map((m: any) => {
+                        const toonData: ToonData = {
+                          id: m.toon.id.toString(),
+                          name: m.toon.name,
+                          photo: m.toon.photo,
+                          note: ''
+                        };
+                        const listKey = favorites.find(f => f.id === toonData.id) ? STORAGE_KEYS.FAVORITES : blocked.find(b => b.id === toonData.id) ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+                        return (
+                          <ToonRow
+                            key={m.toon.id}
+                            toon={toonData}
+                            listKey={listKey}
+                            refresh={refresh}
+                            isHovered={false}
+                          />
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </aside>
       )}
     </div>
