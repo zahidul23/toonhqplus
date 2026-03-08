@@ -9,6 +9,16 @@ const STORAGE_KEYS = { FAVORITES: 'toonhq-favorites', BLOCKED: 'toonhq-blocked' 
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
 
+function normalizeToIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    if (typeof item === 'object' && item !== null && 'id' in item) {
+      return (item as ToonData).id;
+    }
+    return Number(item);
+  }).filter(id => !isNaN(id));
+}
+
 interface ToonData {
   id: number;
   name: string;
@@ -18,12 +28,6 @@ interface ToonData {
 }
 
 const toons: Record<string, ToonData> = {};
-
-// track whether we've seen any Vue instances from the page yet and queue dialog
-// elements until that happens.  moved from lower in the file to avoid runtime
-// reference errors.
-let vueReady = false;
-const pendingFixes: HTMLElement[] = [];
 
 function injectHighlightStyles() {
   if (document.querySelector('style[data-toonhq-plus-highlights]')) return;
@@ -142,51 +146,35 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
       });
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        // lookup toonData fresh using row attribute in case closure was stale
         const toonIdAttr = row.getAttribute('toon-id');
         const currentData: ToonData | null =
           toonIdAttr && toons[toonIdAttr] ? toons[toonIdAttr] : null;
 
-        const otherKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+        if (!currentData || !toonIdAttr) return;
 
-        void browser.storage.local
-          .get([listKey, otherKey])
-          .then((result) => {
-            const list: ToonData[] = Array.isArray(result[listKey]) ? result[listKey] : [];
-            const otherList: ToonData[] = Array.isArray(result[otherKey]) ? result[otherKey] : [];
+        browser.storage.local.get([STORAGE_KEYS.FAVORITES, STORAGE_KEYS.BLOCKED]).then((result) => {
+          const favs: number[] = normalizeToIds(result[STORAGE_KEYS.FAVORITES]);
+          const blks: number[] = normalizeToIds(result[STORAGE_KEYS.BLOCKED]);
+          const tid = Number(toonIdAttr);
 
-            let existingIndex = -1;
-            let otherIndex = -1;
+          const isFavorited = favs.includes(tid);
+          const isBlocked = blks.includes(tid);
+          const currentListKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
 
-            if (currentData) {
-              existingIndex = list.findIndex(
-                (t) => t.id === currentData.id || t.name === currentData.name,
-              );
-              otherIndex = otherList.findIndex(
-                (t) => t.id === currentData.id || t.name === currentData.name,
-              );
+          let type: 'add' | 'remove' | 'move' = 'add';
+          if (currentListKey === listKey) {
+            type = 'remove';
+          }
+
+          window.dispatchEvent(new CustomEvent('toonhqplus-request-dialog', {
+            detail: {
+              type,
+              listKey,
+              toon: currentData,
+              source: 'main'
             }
-
-            if (existingIndex >= 0) {
-              // Toggle off
-              list.splice(existingIndex, 1);
-            } else if (currentData) {
-              // Add to current list
-              const strayIdx = list.findIndex((t) => typeof t === 'string' && t === currentData.name);
-              if (strayIdx >= 0) list.splice(strayIdx, 1);
-              list.push(currentData);
-
-              // Remove from the other list if it exists there
-              if (otherIndex >= 0) {
-                otherList.splice(otherIndex, 1);
-              } else {
-                const otherStrayIdx = otherList.findIndex((t) => typeof t === 'string' && t === currentData.name);
-                if (otherStrayIdx >= 0) otherList.splice(otherStrayIdx, 1);
-              }
-            }
-            return browser.storage.local.set({ [listKey]: list, [otherKey]: otherList });
-          })
-          .then(() => applyRowHighlights());
+          }));
+        });
       });
       return btn;
     };
@@ -213,19 +201,8 @@ async function applyRowHighlights() {
     STORAGE_KEYS.FAVORITES,
     STORAGE_KEYS.BLOCKED,
   ]);
-  // normalize stored values to ToonData[]; previous versions stored string names
-  const normalize = (raw: unknown): ToonData[] => {
-    if (!Array.isArray(raw)) return [];
-    return raw.map((item) => {
-      if (typeof item === 'string') {
-        return { id: -1, name: item };
-      }
-      return item as ToonData;
-    });
-  };
-
-  const favorites: ToonData[] = normalize(result[STORAGE_KEYS.FAVORITES]);
-  const blocked: ToonData[] = normalize(result[STORAGE_KEYS.BLOCKED]);
+  const favorites: number[] = normalizeToIds(result[STORAGE_KEYS.FAVORITES]);
+  const blocked: number[] = normalizeToIds(result[STORAGE_KEYS.BLOCKED]);
 
 
   const processRow = (row: HTMLElement) => {
@@ -237,13 +214,11 @@ async function applyRowHighlights() {
     const id = row.getAttribute('toon-id');
     const data: ToonData | null = id && toons[id] ? toons[id] : null;
 
-    const favIds = new Set(favorites.map((t) => t.id?.toString()));
-    const blkIds = new Set(blocked.map((t) => t.id?.toString()));
-    const favNames = new Set(favorites.map((t) => t.name));
-    const blkNames = new Set(blocked.map((t) => t.name));
+    const favIds = new Set(favorites);
+    const blkIds = new Set(blocked);
 
-    if ((id && favIds.has(id)) || favNames.has(name)) row.classList.add(ROW_CLASS_FAVORITE);
-    else if ((id && blkIds.has(id)) || blkNames.has(name)) row.classList.add(ROW_CLASS_BLOCKED);
+    if (id && favIds.has(Number(id))) row.classList.add(ROW_CLASS_FAVORITE);
+    else if (id && blkIds.has(Number(id))) row.classList.add(ROW_CLASS_BLOCKED);
 
     // Hide buttons for owned toons
     const isOwnToon = id && activeToons[id];
@@ -259,20 +234,25 @@ async function applyRowHighlights() {
       const [upBtn, downBtn] = Array.from(
         container.querySelectorAll('button'),
       ) as HTMLButtonElement[];
-      // adjust button opacities using the same id/name logic as above
-      const favIds = new Set(favorites.map((t) => t.id?.toString()));
-      const blkIds = new Set(blocked.map((t) => t.id?.toString()));
-      const favNames = new Set(favorites.map((t) => t.name));
-      const blkNames = new Set(blocked.map((t) => t.name));
-      if ((id && favIds.has(id)) || favNames.has(name)) {
+      
+      const isFav = id && favIds.has(Number(id));
+      const isBlk = id && blkIds.has(Number(id));
+
+      if (isFav) {
         upBtn.style.opacity = '1';
+        upBtn.title = `Remove from Toony Toons`;
         downBtn.style.opacity = '0.4';
-      } else if ((id && blkIds.has(id)) || blkNames.has(name)) {
+        downBtn.title = `Add to Stinky Toons`;
+      } else if (isBlk) {
         upBtn.style.opacity = '0.4';
+        upBtn.title = `Add to Toony Toons`;
         downBtn.style.opacity = '1';
+        downBtn.title = `Remove from Stinky Toons`;
       } else {
         upBtn.style.opacity = '0.5';
+        upBtn.title = `Add to Toony Toons`;
         downBtn.style.opacity = '0.5';
+        downBtn.title = `Add to Stinky Toons`;
       }
     }
 
@@ -450,6 +430,7 @@ export default defineContentScript({
       if (Array.isArray(toonsData)) {
         toonsData.forEach((toon: any) => {
           activeToons[toon.id] = toon;
+          toons[toon.id] = toon;
         });
         console.log('[ToonHQ+] Initial active toons loaded:', Object.keys(activeToons).length, 'toons.');
         browser.storage.local.set({ 'toonhqplus-active-toon-ids': Object.keys(activeToons).map(Number) });
@@ -457,6 +438,15 @@ export default defineContentScript({
     } catch (e) {
       console.error('[ToonHQ+] Failed to fetch active toons', e);
     }
+
+    const syncToonData = (members: any[]) => {
+      if (!members || !Array.isArray(members)) return;
+      members.forEach((m) => {
+        if (m.toon && m.toon.id) {
+          toons[m.toon.id] = m.toon;
+        }
+      });
+    };
 
     const syncGroupHistory = (group: any) => {
       if (!group || !Array.isArray(group.members)) return;
@@ -469,13 +459,11 @@ export default defineContentScript({
         const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
 
         // Update toon cache
+        syncToonData(group.members);
         group.members.forEach((m: any) => {
           if (m.toon && m.toon.id) {
             toonsCache[m.toon.id] = {
-              id: m.toon.id,
-              name: m.toon.name,
-              photo: m.toon.photo,
-              species: m.toon.species,
+              ...m.toon,
               lastSeen: new Date().toISOString()
             };
           }
@@ -517,6 +505,7 @@ export default defineContentScript({
       if (data && Array.isArray(data.groups)) {
         data.groups.forEach((group: any) => {
           groupsState[group.id] = group;
+          syncToonData(group.members);
           syncGroupHistory(group);
         });
         console.log('[ToonHQ+] Initial groups state loaded:', Object.keys(groupsState).length, 'groups.');
@@ -560,12 +549,14 @@ export default defineContentScript({
                 const data = payload[1];
                 if (eventName === 'group_created') {
                   groupsState[data.id] = data;
+                  syncToonData(data.members);
                   syncGroupHistory(data);
                 } else if (eventName === 'group_disbanded') {
                   delete groupsState[data.id];
                 } else if (eventName === 'member_joined') {
                   if (groupsState[data.group]) {
                     groupsState[data.group].members.push(data);
+                    syncToonData([data]);
                     syncGroupHistory(groupsState[data.group]);
                   }
                 } else if (eventName === 'member_left') {
@@ -622,20 +613,14 @@ export default defineContentScript({
       }
     };
     document.querySelectorAll('.group-details-dialog').forEach(el => {
-      const h = el as HTMLElement;
-      if (vueReady) fixDialog(h);
-      else pendingFixes.push(h);
+      fixDialog(el as HTMLElement);
     });
     const dialogObserver = new MutationObserver((mutations) => {
       for (const m of mutations) {
         m.addedNodes.forEach((node) => {
           if (!(node instanceof HTMLElement)) return;
-          const handle = (h: HTMLElement) => {
-            if (vueReady) fixDialog(h);
-            else pendingFixes.push(h);
-          };
-          if (node.matches('.group-details-dialog')) handle(node as HTMLElement);
-          node.querySelectorAll('.group-details-dialog').forEach(el => handle(el as HTMLElement));
+          if (node.matches('.group-details-dialog')) fixDialog(node as HTMLElement);
+          node.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
         });
       }
     });
@@ -658,54 +643,20 @@ export default defineContentScript({
         highlightTimeout = null;
         applyRowHighlights();
         updateBossInfo();
-        // also re-run the vue logger so new rows get logged
-        injectVueLogger();
       }, 150);
     });
     observer.observe(document.body, { childList: true, subtree: true });
     ctx.onInvalidated(() => observer.disconnect());
 
-    // state to hold whether the page's main Vue app has been observed.
-    // debug helper: log Vue instances for rows with class "group-member-row".
     function injectVueLogger() {
-      // listen for messages coming back from page script
-      window.addEventListener('message', (e) => {
-        if (e.source !== window) return;
-        const type = e.data?.type;
-        if (type === 'VUE_DEBUG') {
-          const payload: ToonData[] = e.data.payload || [];
-          let sawOne = false;
-          for (const toondata of payload) {
-            if (toondata && toondata.id != null) {
-              toons[toondata.id] = toondata;
-              sawOne = true;
-            }
-          }
-          // if this is our first useful payload, consider Vue "ready"
-          if (!vueReady && sawOne) setReady();
-        } else if (type === 'VUE_READY') {
-          // an explicit hint that Vue has finished bootstrapping
-          if (!vueReady) setReady();
-        }
-      });
-
-      function setReady() {
-        vueReady = true;
-        pendingFixes.forEach(el => fixDialog(el));
-        pendingFixes.length = 0;
-      }
-
-
       // load an external script from the extension (CSP allows chrome-extension://)
       const script = document.createElement('script');
       // runtime.getURL is typed narrowly by wxt; cast to any to bypass
       script.src = (browser.runtime as any).getURL('vue-logger.js');
       script.onload = () => script.remove();
       document.documentElement.appendChild(script);
-
     }
 
-    // run the logger once initially (or you could attach it to observer updates)
     injectVueLogger();
 
     try {

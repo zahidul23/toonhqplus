@@ -1,31 +1,28 @@
+/**
+ * This script runs in the "main" world (the same as the page).
+ * It can access el.__vue__ which is not visible to the content script.
+ * 
+ * We use it solely to bridge the toon-id attribute from Vue state to the DOM,
+ * so our content script can link rows to the toon data we fetch via API/WebSockets.
+ */
 (function() {
-  const rows = document.querySelectorAll('.group-member-row');
-  const data = Array.from(rows).map(r => {
-    const inst = r.__vue__;
-    if (!inst) return null;
+  function sync() {
+    document.querySelectorAll('.group-member-row').forEach(el => {
+      // Access Vue instance data
+      const vue = el.__vue__;
+      if (vue && vue.member && vue.member.toon) {
+        const tid = String(vue.member.toon.id);
+        if (el.getAttribute('toon-id') !== tid) {
+          el.setAttribute('toon-id', tid);
+        }
+      }
+    });
+  }
 
-    r.setAttribute("toon-id", inst.toon.id); // for easier manual inspection in the DOM
-    // try to grab only the serializable bits that are useful for debugging
-    // const safe = {};
-    // try {
-    //   safe.name = inst.$options?.name || inst.$options?._componentTag;
-    //   // copy data/props if they are plain objects
-    //   if (inst.$data && typeof inst.$data === 'object') safe.data = inst.$data;
-    //   if (inst.$props && typeof inst.$props === 'object') safe.props = inst.$props;
-    //   safe.el = inst.$el && inst.$el.tagName;
-    // } catch {
-    //   // fall back to null if anything goes wrong
-    // }
-    return inst.toon;
-  });
-  // payload now contains only simple objects, safe for postMessage
-  const message = { type: 'VUE_DEBUG', payload: data };
-  window.postMessage(message, '*');
-
-  // mark a global flag so other scripts know the logger has run at least once
-  try {
-    window.__toonhqVueReady = true;
-  } catch {}
-  // also send an explicit ready event (listeners can ignore if they don't care)
-  window.postMessage({ type: 'VUE_READY' }, '*');
+  // Watch for DOM changes to catch new dialogs/rows
+  const observer = new MutationObserver(sync);
+  observer.observe(document.body, { childList: true, subtree: true });
+  
+  // Initial run
+  sync();
 })();
