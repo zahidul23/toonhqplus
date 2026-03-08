@@ -328,8 +328,23 @@ const getPinkSlips = (value: number): number => {
 }
 
 const getCogNameForLevel = (level: number, suit: string) => {
-  const cogPart = parseInt(suit.substring(0, 1), 16);
-  const cogName = 
+  if (level <= 5) {
+    return (suit === "lawbot" ? "Bottom Feeder" : "Flunky") + " Lv " + level;
+  } else if (level <= 10) {
+    return (suit === "lawbot" ? "Bloodsucker" : "Pencil Pusher") + " Lv " + (level - 5);
+  } else if (level <= 15) {
+    return (suit === "lawbot" ? "Double Talker" : "Yesman") + " Lv " + (level - 10);
+  } else if (level <= 20) {
+    return (suit === "lawbot" ? "Ambulance Chaser" : "Micromanager") + " Lv " + (level - 15);
+  } else if (level <= 25) {
+    return (suit === "lawbot" ? "Back Stabber" : "Downsizer") + " Lv " + (level - 20);
+  } else if (level <= 30) {
+    return (suit === "lawbot" ? "Spin Doctor" : "Head Hunter") + " Lv " + (level - 25);
+  } else if (level <= 35) {
+    return (suit === "lawbot" ? "Legal Eagle" : "Corporate Raider") + " Lv " + (level - 30);
+  } else {
+    return (suit === "lawbot" ? "Big Wig" : "The Big Cheese") + " Lv " + (level - 35);
+  }
 }
 
 interface CJDifficultyTier {
@@ -381,10 +396,11 @@ const updateBossInfo = () => {
 
   if (thisBossKey === 'lawbot') {
     const tier = getCJDifficultyTier(averageSuitValue);
+    const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
     const text = `(${tier.lawyers} lawyers)`;
     if (thisBossInfo && tier) {
       const tooltipText =
-        `Average Suit Value: ${averageSuitValue}
+        `Average: ${suitString}
 ---------------------------
 Tier ${tier.tier}
 Gavels: ${tier.gavels}
@@ -400,10 +416,11 @@ Laff Heal: ${tier.laffHeal}`;
   } else //if (thisBossKey === 'bossbot') 
   {
     const pinkSlips = getPinkSlips(averageSuitValue);
+    const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
     const text = `(${pinkSlips} Pink Slips)`;
     if (thisBossInfo && pinkSlips !== null) {
       const tooltipText =
-        `Average Suit Value: ${averageSuitValue}
+        `Average: ${suitString}
 ---------------------------
 1-16: 2 Slips
 17-32: 3 Slips
