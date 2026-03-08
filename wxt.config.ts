@@ -12,7 +12,7 @@ export default defineConfig({
 
     web_accessible_resources: [
       {
-        resources: ['vue-logger.js'],
+        resources: ['vue-logger.js', 'ws-logger.js'],
         matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
       },
     ],

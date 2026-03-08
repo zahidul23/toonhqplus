@@ -414,6 +414,44 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');
+    
+    ws.addEventListener('open', () => {
+      console.log('[ToonHQ+] Direct WebSocket connection opened, sending initialization sequence...');
+      // 4 = Engine.io message, 0 = connect
+      ws.send('40');
+      
+      // 4 = Engine.io message, 2 = event, 0 = namespace/ID
+      ws.send('420["track","groups",1]');
+    });
+
+    ws.addEventListener('message', (event) => {
+      if (typeof event.data === 'string') {
+        const str = event.data;
+        
+        // Handle Socket.io Ping (2)
+        if (str === '2') {
+          ws.send('3'); // send Pong
+          return;
+        }
+
+        // Handle Event Payloads
+        const match = str.match(/^(\d+)(.*)$/);
+        if (match) {
+          const prefix = match[1];
+          const payloadString = match[2];
+          
+          if (payloadString) {
+            try {
+              const payload = JSON.parse(payloadString);
+              console.log(`[ToonHQ+] Socket Message (${prefix}):`, payload);
+            } catch (e) {
+              console.log(`[ToonHQ+] Socket Msg (Raw ${prefix}):`, payloadString);
+            }
+          }
+        }
+      }
+    });
 
     injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 1000px width inline
