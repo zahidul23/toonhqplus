@@ -45,7 +45,7 @@
       visibility: hidden;
       transition: opacity 0.2s, visibility 0.2s;
       z-index: 10000;
-      min-width: 250px;
+      min-width: 240px;
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.1);
       border: 1px solid rgba(16, 185, 129, 0.4);
       pointer-events: none;
@@ -90,7 +90,7 @@
       width: 60px;
       text-align: right;
     }
-    .tooltip-value.bossbot-info {
+    .bossbot-info .tooltip-value {
       width: 36px;
     }
     .tooltip-divider {
@@ -127,7 +127,7 @@
       border-radius: 4px;
       font-size: 12px;
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
     }
     .tooltip-tier-row .tooltip-label {
       text-align: right;
@@ -232,7 +232,7 @@
       { label: 'Gavels', value: tierData.gavels },
       { label: 'Bonus Weight', value: tierData.hasBonusWeight ? 'Yes' : 'No' },
       { label: 'Evidence Count', value: tierData.evidence },
-      { label: 'Evidence Heal', value: tierData.laffHeal }
+      { label: 'Evidence Heal', value: tierData.laffHeal + " Laff" }
     ];
 
     const statsHtml = statsList.map(stat => renderTierRow(stat.label, stat.value, false)).join('');
