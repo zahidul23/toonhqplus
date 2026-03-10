@@ -62,11 +62,17 @@ function injectHighlightStyles() {
       visibility: hidden;
       transition: opacity 0.2s, visibility 0.2s;
       z-index: 10000;
-      min-width: 280px;
+      min-width: 240px;
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.1);
       border: 1px solid rgba(16, 185, 129, 0.4);
       pointer-events: none;
       backdrop-filter: blur(8px);
+      line-height: 1.4;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+    .boss-info-tooltip.lawbot-tip {
+      padding: 12px 16px;
     }
     .boss-info:hover .boss-info-tooltip {
       opacity: 1;
@@ -82,11 +88,10 @@ function injectHighlightStyles() {
       border-style: solid;
       border-color: transparent #064e3b transparent transparent;
     }
-    .tooltip-grid {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 6px 16px;
-      align-items: center;
+    .tooltip-boss-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px 12px;
     }
     .tooltip-label {
       font-weight: 700;
@@ -94,11 +99,16 @@ function injectHighlightStyles() {
       text-transform: uppercase;
       font-size: 11px;
       letter-spacing: 0.05em;
+      text-align: right;
     }
     .tooltip-value {
       color: #fff;
       font-weight: 500;
+      width: 60px;
       text-align: right;
+    }
+    .bossbot-info .tooltip-value {
+      width: 36px;
     }
     .tooltip-divider {
       grid-column: 1 / -1;
@@ -114,23 +124,33 @@ function injectHighlightStyles() {
       font-size: 11px;
       letter-spacing: 0.05em;
       margin-bottom: -2px;
+      text-align: center;
     }
+    .tooltip-header.emerald { color: #10b981; font-size: 13px; }
+    .tooltip-header.gray { color: #9ca3af; }
+    
     .tooltip-sub-header {
       grid-column: 1 / -1;
       font-weight: 800;
       color: #10b981;
       margin-bottom: 4px;
       font-size: 14px;
+      text-align: center;
     }
     .tooltip-tier-row {
-      grid-column: 1 / -1;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 16px;
+      gap: 12px;
       padding: 4px 8px;
       margin: 0 -8px;
       border-radius: 4px;
       font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .tooltip-tier-row .tooltip-label {
+      text-align: right;
+    }
+    .tooltip-tier-row .tooltip-value {
+      text-align: left;
     }
     .tooltip-tier-row.active {
       background: rgba(16, 185, 129, 0.25);
@@ -378,7 +398,7 @@ const getCogNameForLevel = (level: number, suit: string) => {
   } else if (level <= 35) {
     return (suit === "lawbot" ? "Legal Eagle" : "Corporate Raider") + " " + (level - 24);
   } else {
-    return (suit === "lawbot" ? "Big Wig" : "Big Cheese") + " " + (level - 28);
+    return (suit === "lawbot" ? "Big Wig" : "The Big Cheese") + " " + (level - 28);
   }
 }
 
@@ -411,14 +431,87 @@ const getCJDifficultyTier = (value: number): CJDifficultyTier => {
   return CJ_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CJ_DIFFICULTY_TIERS[8];
 };
 
+const BOSS_CONFIG: Record<string, string> = {
+  'CEO': 'bossbot',
+  'CJ': 'lawbot',
+};
+
+const LAWYER_THRESHOLDS = [
+  { minSuitValue: 70, lawyerCount: 10 },
+  { minSuitValue: 53, lawyerCount: 9 },
+  { minSuitValue: 1, lawyerCount: 8 }
+];
+
+const PINK_SLIP_THRESHOLDS = [
+  { minSuitValue: 63, slipCount: 6 },
+  { minSuitValue: 48, slipCount: 5 },
+  { minSuitValue: 33, slipCount: 4 },
+  { minSuitValue: 17, slipCount: 3 },
+  { minSuitValue: 1, slipCount: 2 }
+];
+
+const renderTierRow = (label: string, value: string | number, isActive: boolean, extraClass = '') => `
+  <div class="tooltip-tier-row ${isActive ? 'active' : ''} ${extraClass}">
+    <div class="tooltip-label">${label}</div>
+    <div class="tooltip-value">${value}</div>
+  </div>
+`;
+
+const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bossKey: string) => {
+  const lawyerRowsHtml = LAWYER_THRESHOLDS.map(threshold =>
+    renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.lawyerCount} Lawyers`, tierData.lawyers === threshold.lawyerCount)
+  ).join('');
+
+  const statsList = [
+    { label: 'Lawyers', value: tierData.lawyers },
+    { label: 'Gavels', value: tierData.gavels },
+    { label: 'Bonus Weight', value: tierData.hasBonusWeight ? 'Yes' : 'No' },
+    { label: 'Evidence Count', value: tierData.evidence },
+    { label: 'Evidence Heal', value: tierData.laffHeal + " Laff" }
+  ];
+
+  const statsHtml = statsList.map(stat => renderTierRow(stat.label, stat.value, false)).join('');
+
+  return `
+    <div class="tooltip-boss-info">
+      <div class="tooltip-header">Group Average</div>
+      <div class="tooltip-sub-header">${suitString}</div>
+      <div class="tooltip-divider"></div>
+      <div class="tooltip-header emerald">Tier ${tierData.tier}</div>
+      ${statsHtml}
+      <div class="tooltip-divider"></div>
+      <div class="tooltip-header gray">Lawyer Thresholds</div>
+      ${lawyerRowsHtml}
+    </div>
+  `;
+};
+
+const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, bossKey: string) => {
+  const rowsHtml = PINK_SLIP_THRESHOLDS.map(threshold =>
+    renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.slipCount} Slips`, currentPinkSlips === threshold.slipCount, 'bossbot-info')
+  ).join('');
+
+  return `
+    <div class="tooltip-boss-info">
+      <div class="tooltip-header">Group Average</div>
+      <div class="tooltip-sub-header">${suitString}</div>
+      <div class="tooltip-divider"></div>
+      <div class="tooltip-header gray">Pink Slip Thresholds</div>
+      ${rowsHtml}
+    </div>
+  `;
+};
+
 const updateBossInfo = () => {
-  const rows = document.querySelectorAll('.group-member-row');
-  const bossTypes = { 'CEO': 'bossbot', 'CJ': 'lawbot', 'CFO': 'bossbot' };
-  const thisBossInfo = document.querySelector("h4.boss-info");
-  const thisBoss = document.querySelector('.group-details-dialog h4')?.textContent?.trim();
-  const thisBossKey = thisBoss ? bossTypes[thisBoss as keyof typeof bossTypes] : null;
+  const dialog = document.querySelector('.group-details-dialog');
+  const thisBossInfo = dialog?.querySelector(".boss-info");
+  if (!dialog || !thisBossInfo) return;
+
+  const thisBossName = dialog.querySelector('h4')?.textContent?.trim();
+  const thisBossKey = thisBossName ? BOSS_CONFIG[thisBossName] : null;
   if (!thisBossKey) return;
 
+  const rows = dialog.querySelectorAll('.group-member-row');
   let suitValues: number[] = [];
   for (const row of rows) {
     const id = row.getAttribute('toon-id');
@@ -429,122 +522,41 @@ const updateBossInfo = () => {
       suitValues.push(suitValue);
     }
   }
-  const averageSuitValue = Math.round(suitValues.reduce((sum, val) => sum + val, 0) / suitValues.length) || 0;
+
+  if (suitValues.length === 0) return;
+  const averageSuitValue = Math.round(suitValues.reduce((sum, value) => sum + value, 0) / suitValues.length);
+  const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
+
+  let infoText = '';
+  let html = '';
 
   if (thisBossKey === 'lawbot') {
-    const tier = getCJDifficultyTier(averageSuitValue);
-    const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
-    const text = `(${tier.lawyers} lawyers)`;
-    if (thisBossInfo && tier) {
-      if (!thisBossInfo.querySelector('.boss-info-tooltip')) {
-        const tip = document.createElement('div');
-        tip.className = 'boss-info-tooltip';
-        thisBossInfo.appendChild(tip);
-      }
-      const tooltipEl = thisBossInfo.querySelector('.boss-info-tooltip') as HTMLElement;
-
-      const lawyerThresholds = [
-        { v: 70, l: 10 },
-        { v: 53, l: 9 },
-        { v: 1, l: 8 }
-      ];
-
-      const lawyerRowsHtml = lawyerThresholds.map(t => {
-        const activeClass = tier.lawyers === t.l ? 'active' : '';
-        return `
-          <div class="tooltip-tier-row ${activeClass}">
-            <div class="tooltip-label">${getCogNameForLevel(t.v, thisBossKey)}+</div>
-            <div class="tooltip-value">${t.l} Lawyers</div>
-          </div>
-        `;
-      }).join('');
-
-      const html = `
-        <div class="tooltip-grid">
-          <div class="tooltip-header">Group Average</div>
-          <div class="tooltip-sub-header">${suitString}</div>
-          <div class="tooltip-divider"></div>
-          <div class="tooltip-label">Tier</div>
-          <div class="tooltip-value">${tier.tier}</div>
-          <div class="tooltip-label">Lawyers</div>
-          <div class="tooltip-value">${tier.lawyers}</div>
-          <div class="tooltip-label">Gavels</div>
-          <div class="tooltip-value">${tier.gavels}</div>
-          <div class="tooltip-label">Evidence</div>
-          <div class="tooltip-value">${tier.evidence}</div>
-          <div class="tooltip-label">Bonus Weight</div>
-          <div class="tooltip-value">${tier.hasBonusWeight ? 'Yes' : 'No'}</div>
-          <div class="tooltip-label">Laff Heal</div>
-          <div class="tooltip-value">${tier.laffHeal}</div>
-          <div class="tooltip-divider"></div>
-          <div class="tooltip-header" style="color: #9ca3af; margin-bottom: 2px;">Lawyer Thresholds</div>
-          ${lawyerRowsHtml}
-        </div>
-      `;
-
-      if (thisBossInfo.firstChild?.textContent !== text || tooltipEl.innerHTML !== html) {
-        if (thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE) {
-          thisBossInfo.firstChild.textContent = text;
-        } else {
-          thisBossInfo.prepend(document.createTextNode(text));
-        }
-        tooltipEl.innerHTML = html;
-      }
-    }
+    const tierData = getCJDifficultyTier(averageSuitValue);
+    infoText = `(${tierData.lawyers} lawyers)`;
+    html = renderLawbotTooltip(tierData, suitString, thisBossKey);
   } else {
     const currentPinkSlips = getPinkSlips(averageSuitValue);
-    const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
-    const text = `(${currentPinkSlips} Pink Slips)`;
-
-    if (thisBossInfo && currentPinkSlips !== null) {
-      if (!thisBossInfo.querySelector('.boss-info-tooltip')) {
-        const tip = document.createElement('div');
-        tip.className = 'boss-info-tooltip';
-        thisBossInfo.appendChild(tip);
-      }
-      const tooltipEl = thisBossInfo.querySelector('.boss-info-tooltip') as HTMLElement;
-
-      const thresholds = [
-        { v: 63, s: 6 },
-        { v: 48, s: 5 },
-        { v: 33, s: 4 },
-        { v: 17, s: 3 },
-        { v: 1, s: 2 }
-      ];
-
-      const rowsHtml = thresholds.map(t => {
-        const isActive = averageSuitValue >= t.v && (thresholds.find(next => next.v > t.v && averageSuitValue >= next.v) === undefined);
-        // More accurate active check: current average falls into this specific slice
-        const activeClass = getPinkSlips(averageSuitValue) === t.s ? 'active' : '';
-        return `
-          <div class="tooltip-tier-row ${activeClass}">
-            <div class="tooltip-label">${getCogNameForLevel(t.v, thisBossKey)}+</div>
-            <div class="tooltip-value">${t.s} Slips</div>
-          </div>
-        `;
-      }).join('');
-
-      const html = `
-        <div class="tooltip-grid">
-          <div class="tooltip-header">Group Average</div>
-          <div class="tooltip-sub-header">${suitString}</div>
-          <div class="tooltip-divider"></div>
-          <div class="tooltip-header" style="color: #9ca3af; margin-bottom: 2px;">Difficulty Tiers</div>
-          ${rowsHtml}
-        </div>
-      `;
-
-      if (thisBossInfo.firstChild?.textContent !== text || tooltipEl.innerHTML !== html) {
-        if (thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE) {
-          thisBossInfo.firstChild.textContent = text;
-        } else {
-          thisBossInfo.prepend(document.createTextNode(text));
-        }
-        tooltipEl.innerHTML = html;
-      }
-    }
+    infoText = `(${currentPinkSlips} Pink Slips)`;
+    html = renderBossbotTooltip(suitString, currentPinkSlips, thisBossKey);
   }
 
+  // Ensure tooltip exists
+  let tooltipEl = thisBossInfo.querySelector('.boss-info-tooltip') as HTMLElement | null;
+  if (!tooltipEl) {
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = `boss-info-tooltip ${thisBossKey === 'lawbot' ? 'lawbot-tip' : ''}`;
+    thisBossInfo.appendChild(tooltipEl);
+  }
+
+  // Update content only if changed
+  if (thisBossInfo.firstChild?.textContent !== infoText || tooltipEl.innerHTML !== html) {
+    if (thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE) {
+      thisBossInfo.firstChild.textContent = infoText;
+    } else {
+      thisBossInfo.prepend(document.createTextNode(infoText));
+    }
+    tooltipEl.innerHTML = html;
+  }
 }
 const groupsState: Record<number, any> = {};
 const activeToons: Record<number, any> = {};
