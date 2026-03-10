@@ -818,7 +818,7 @@ export function SidebarApp() {
                         Recent Groups
                       </h3>
                     </div>
-                    <div className="flex-1 space-y-2 overflow-y-auto pr-2 pt-1.5 min-h-0">
+                    <div className="flex-1 space-y-2 overflow-y-auto p-1.5 min-h-0">
                       {Object.values(historyGroups).length === 0 ? (
                         <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
                       ) : (
@@ -837,13 +837,13 @@ export function SidebarApp() {
                                   onClick={() => setSelectedHistoryGroup(group.id)}
                                   className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center cursor-pointer"
                                 >
-                                  <div className="flex-1 min-w-0 mr-4">
+                                  <div className="flex-1 min-w-0">
                                     <span className="block text-sm font-bold text-white truncate">{groupName}</span>
                                     <span className="block text-xs text-green-200 mt-1">
                                       <RelativeTime date={group.userJoinedAt || group.created} />
                                     </span>
                                   </div>
-                                  <div className="text-sm font-medium text-emerald-300 shrink-0 mr-4">
+                                  <div className="text-sm font-medium text-emerald-300 shrink-0">
                                     {(() => {
                                       const count = group.memberMetadata ? Object.keys(group.memberMetadata).length : (group.memberIds?.length ?? group.members?.length ?? 0);
                                       return `${count} toon${count === 1 ? '' : 's'}`;
