@@ -19,11 +19,12 @@ interface ToonData {
 
 interface DialogState {
   isOpen: boolean;
-  type: 'add' | 'move' | 'remove';
-  listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
-  toon: ToonData;
+  type: 'add' | 'move' | 'remove' | 'delete_group' | 'clear_history' | 'clear_toons' | 'reset_navigation';
+  listKey?: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
+  toon?: ToonData;
   source: 'main' | 'sidebar';
   otherListName?: string;
+  groupId?: number;
 }
 
 const SPECIES_MAP: Record<number, string> = {
@@ -262,7 +263,7 @@ function ToonRow({
                       setIsEditing(true);
                       setNoteDraft(toon.note || '');
                     }}
-                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white"
+                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white cursor-pointer"
                     title="Edit note"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
@@ -273,7 +274,7 @@ function ToonRow({
                       const targetKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
                       onRequestDialog('move', targetKey, toon, 'sidebar');
                     }}
-                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-black/20 hover:text-white"
+                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-black/20 hover:text-white cursor-pointer"
                     title={listKey === STORAGE_KEYS.FAVORITES ? "Move to Stinky Toons" : "Move to Toony Toons"}
                   >
                     {listKey === STORAGE_KEYS.FAVORITES ? (
@@ -287,7 +288,7 @@ function ToonRow({
                     onClick={() => {
                       if (listKey) onRequestDialog('remove', listKey, toon, 'sidebar');
                     }}
-                    className="shrink-0 rounded p-1 text-[#cf222e] hover:bg-[#ffebe9] dark:text-[#ff7b72] dark:hover:bg-[#ad130dde]"
+                    className="shrink-0 rounded p-1 text-[#cf222e] hover:bg-[#ffebe9] dark:text-[#ff7b72] dark:hover:bg-[#ad130dde] cursor-pointer"
                     title="Remove from list"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
@@ -300,7 +301,7 @@ function ToonRow({
                       e.stopPropagation();
                       onRequestDialog('add', STORAGE_KEYS.FAVORITES, toon, 'sidebar');
                     }}
-                    className="rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white"
+                    className="rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white cursor-pointer"
                     title="Add to Toony Toons"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
@@ -310,7 +311,7 @@ function ToonRow({
                       e.stopPropagation();
                       onRequestDialog('add', STORAGE_KEYS.BLOCKED, toon, 'sidebar');
                     }}
-                    className="rounded p-1 text-green-100/50 hover:bg-red-600 hover:text-white"
+                    className="rounded p-1 text-green-100/50 hover:bg-red-600 hover:text-white cursor-pointer"
                     title="Add to Stinky Toons"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
@@ -352,13 +353,13 @@ function ToonRow({
           <div className="flex gap-2 justify-end">
             <button
               onClick={saveNote}
-              className="shrink-0 rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-500"
+              className="shrink-0 rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-500 cursor-pointer"
             >
               Save
             </button>
             <button
               onClick={() => setIsEditing(false)}
-              className="shrink-0 rounded bg-black/40 px-2 py-1 text-xs text-white hover:bg-black/60"
+              className="shrink-0 rounded bg-black/40 px-2 py-1 text-xs text-white hover:bg-black/60 cursor-pointer"
             >
               Cancel
             </button>
@@ -516,12 +517,12 @@ function NavbarSettings({
   };
 
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto pr-1">
+    <div className="flex flex-col gap-3 overflow-y-auto pr-1">
       <p className="text-xs text-green-100/70 leading-relaxed bg-black/20 p-2 rounded border border-white/5">
         Drag and drop items to customize your navigation bar. <strong>Pinned Pages</strong> show in the main bar, while <strong>Hidden Pages</strong> move to the "More" menu.
       </p>
       <div>
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-green-300/80">Pinned Pages</h4>
+        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]/60">Pinned Pages</h5>
         <div className="flex flex-col">
           {config.pinned.map((id, i) => (
             <React.Fragment key={id}>
@@ -534,7 +535,7 @@ function NavbarSettings({
         </div>
       </div>
       <div>
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-green-300/80">Hidden Pages</h4>
+        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]/60">Hidden Pages</h5>
         <div className="flex flex-col">
           {config.dropdown.map((id, i) => (
             <React.Fragment key={id}>
@@ -571,6 +572,40 @@ export function SidebarApp() {
 
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
   const [hoveredToonName, setHoveredToonName] = useState<string | null>(null);
+
+  const handleClearHistory = useCallback(async () => {
+    setDialog({
+      isOpen: true,
+      type: 'clear_history',
+      source: 'sidebar'
+    });
+  }, []);
+
+  const handleClearToons = useCallback(async () => {
+    setDialog({
+      isOpen: true,
+      type: 'clear_toons',
+      source: 'sidebar'
+    });
+  }, []);
+
+  const handleResetNavbar = useCallback(async () => {
+    setDialog({
+      isOpen: true,
+      type: 'reset_navigation',
+      source: 'sidebar'
+    });
+  }, []);
+
+  const handleDeleteGroup = useCallback(async (e: React.MouseEvent, groupId: number) => {
+    e.stopPropagation();
+    setDialog({
+      isOpen: true,
+      type: 'delete_group',
+      groupId,
+      source: 'sidebar'
+    });
+  }, []);
 
   const refresh = useCallback(() => {
     loadLists().then(({ favorites: f, blocked: b }) => {
@@ -683,11 +718,16 @@ export function SidebarApp() {
       }
     };
     browser.storage.onChanged.addListener(listener);
-    return () => browser.storage.onChanged.removeListener(listener);
+
+    return () => {
+      browser.storage.onChanged.removeListener(listener);
+    };
   }, [refresh]);
 
   return (
-    <div className="fixed top-4 right-4 z-[2147483647] flex max-h-[calc(100vh-2rem)] flex-col gap-2 font-sans">
+    <div
+      className="fixed top-4 right-4 z-[2147483647] flex max-h-[calc(100vh-2rem)] flex-col gap-2 font-sans"
+    >
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
@@ -696,7 +736,7 @@ export function SidebarApp() {
             setOpen(next);
             browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: next });
           }}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 cursor-pointer transition-all active:scale-95"
         >
           {open ? 'Close' : 'HQ+'}
         </button>
@@ -706,7 +746,7 @@ export function SidebarApp() {
 
           <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
             <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
               onClick={() => {
                 setActiveTab('history');
                 setSelectedHistoryGroup(null);
@@ -715,27 +755,27 @@ export function SidebarApp() {
               History
             </button>
             <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
               onClick={() => setActiveTab('toons')}
             >
               Toons
             </button>
             <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
               onClick={() => setActiveTab('settings')}
             >
               Settings
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col min-h-0 p-4">
+          <div className="flex-1 flex flex-col min-h-0 p-3">
             {activeTab === 'toons' && (
               <>
-                <section className="mb-4 flex-1 flex flex-col min-h-0">
-                  <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+                <section className="mb-3 flex-1 flex flex-col min-h-0">
+                  <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">
                     Toony Toons
                   </h3>
-                  <ul className="flex flex-col gap-2 p-3 overflow-y-auto min-h-0">
+                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto min-h-0">
                     {favorites.length === 0 ? (
                       <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
                     ) : (
@@ -750,10 +790,10 @@ export function SidebarApp() {
                 </section>
 
                 <section className="flex-1 flex flex-col min-h-0">
-                  <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
+                  <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">
                     Stinky Toons
                   </h3>
-                  <ul className="flex flex-col gap-2 p-3 overflow-y-auto min-h-0">
+                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto min-h-0">
                     {blocked.length === 0 ? (
                       <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
                     ) : (
@@ -773,10 +813,12 @@ export function SidebarApp() {
               <section className="flex-1 flex flex-col min-h-0">
                 {selectedHistoryGroup === null ? (
                   <>
-                    <h3 className="mb-1.5 shrink-0 text-sm font-medium text-green-50">
-                      Recent Groups
-                    </h3>
-                    <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+                    <div className="mb-2 shrink-0 flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-green-50">
+                        Recent Groups
+                      </h3>
+                    </div>
+                    <div className="flex-1 space-y-2 overflow-y-auto pr-2 pt-1.5 min-h-0">
                       {Object.values(historyGroups).length === 0 ? (
                         <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
                       ) : (
@@ -790,24 +832,32 @@ export function SidebarApp() {
                             const typeData = groupTypes.find((t) => t.id === group.type);
                             const groupName = typeData ? typeData.name : `Group #${group.id}`;
                             return (
-                              <button
-                                key={group.id}
-                                onClick={() => setSelectedHistoryGroup(group.id)}
-                                className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center"
-                              >
-                                <div>
-                                  <span className="block text-sm font-bold text-white">{groupName}</span>
-                                  <span className="block text-xs text-green-200 mt-1">
-                                    <RelativeTime date={group.userJoinedAt || group.created} />
-                                  </span>
-                                </div>
-                                <div className="text-sm font-medium text-emerald-300">
-                                  {(() => {
-                                    const count = group.memberMetadata ? Object.keys(group.memberMetadata).length : (group.memberIds?.length ?? group.members?.length ?? 0);
-                                    return `${count} toon${count === 1 ? '' : 's'}`;
-                                  })()}
-                                </div>
-                              </button>
+                              <div key={group.id} className="group relative">
+                                <button
+                                  onClick={() => setSelectedHistoryGroup(group.id)}
+                                  className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center cursor-pointer"
+                                >
+                                  <div className="flex-1 min-w-0 mr-4">
+                                    <span className="block text-sm font-bold text-white truncate">{groupName}</span>
+                                    <span className="block text-xs text-green-200 mt-1">
+                                      <RelativeTime date={group.userJoinedAt || group.created} />
+                                    </span>
+                                  </div>
+                                  <div className="text-sm font-medium text-emerald-300 shrink-0 mr-4">
+                                    {(() => {
+                                      const count = group.memberMetadata ? Object.keys(group.memberMetadata).length : (group.memberIds?.length ?? group.members?.length ?? 0);
+                                      return `${count} toon${count === 1 ? '' : 's'}`;
+                                    })()}
+                                  </div>
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteGroup(e, group.id)}
+                                  className="absolute -right-1 -top-1 p-1 bg-[#10462d] border border-red-500/30 text-red-400 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 rounded-full hover:bg-red-500 hover:text-white hover:border-red-500 z-10 cursor-pointer"
+                                  title="Delete from history"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                </button>
+                              </div>
                             );
                           })
                       )}
@@ -818,7 +868,7 @@ export function SidebarApp() {
                     <div className="flex items-center gap-2 mb-3 shrink-0">
                       <button
                         onClick={() => setSelectedHistoryGroup(null)}
-                        className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white"
+                        className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white cursor-pointer"
                       >
                         ← Back
                       </button>
@@ -895,17 +945,53 @@ export function SidebarApp() {
 
             {activeTab === 'settings' && (
               <section className="flex-1 flex flex-col min-h-0">
-                <h3 className="mb-3 shrink-0 text-sm font-medium text-green-50">
-                  Customization
-                </h3>
-                <div className="flex-1 flex flex-col min-h-0 p-1">
-                  <NavbarSettings
-                    config={navbarConfig}
-                    onUpdate={(newConfig) => {
-                      setNavbarConfig(newConfig);
-                      browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
-                    }}
-                  />
+                <div className="flex-1 flex flex-col gap-3 p-1 overflow-y-auto min-h-0">
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Customization</h4>
+                    <NavbarSettings
+                      config={navbarConfig}
+                      onUpdate={(newConfig) => {
+                        setNavbarConfig(newConfig);
+                        browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-3 pt-3 border-t border-white/5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Maintenance</h4>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        onClick={handleClearHistory}
+                        className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
+                      >
+                        <div className="h-7 w-7 rounded bg-red-500/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                        </div>
+                        <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Group History</div>
+                      </button>
+
+                      <button
+                        onClick={handleClearToons}
+                        className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
+                      >
+                        <div className="h-7 w-7 rounded bg-red-400/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m22 19-3-3 3-3" /></svg>
+                        </div>
+                        <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Toons List</div>
+                      </button>
+
+                      <button
+                        onClick={handleResetNavbar}
+                        className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-emerald-500/10 group transition-all cursor-pointer border border-white/5"
+                      >
+                        <div className="h-7 w-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                        </div>
+                        <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">Reset Navigation</div>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </section>
             )}
@@ -924,25 +1010,50 @@ export function SidebarApp() {
               } ${dialog.source === 'main' ? '' : 'mr-4'}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex flex-col items-center gap-3 text-center">
-              {(() => {
-                const photo = getToonPhoto(dialog.toon);
-                return photo ? (
-                  <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
-                ) : null;
-              })()}
-              <div>
-                <h4 className="text-lg font-bold text-white leading-tight">
-                  {dialog.toon.name}
-                  {dialog.toon.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon.laff})</span>}
-                </h4>
-                <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
-                  {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                    dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                      `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
-                </p>
+            {dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation' ? (
+              <div className="mb-4 flex flex-col items-center gap-3 text-center">
+                <div className={`h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 ${dialog.type === 'reset_navigation' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                  {dialog.type === 'reset_navigation' ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold text-white leading-tight">
+                    {dialog.type === 'delete_group' ? 'Delete Group' :
+                      dialog.type === 'clear_history' ? 'Clear History' :
+                        dialog.type === 'clear_toons' ? 'Clear Toons List' : 'Reset Navigation'}
+                  </h4>
+                  <p className="mt-1 text-sm text-red-100 opacity-90">
+                    {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
+                      dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
+                        dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toons? This cannot be undone.' :
+                          'Are you sure you want to reset your navigation bar to its default settings?'}
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : dialog.toon && (
+              <div className="mb-4 flex flex-col items-center gap-3 text-center">
+                {(() => {
+                  const photo = getToonPhoto(dialog.toon!);
+                  return photo ? (
+                    <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
+                  ) : null;
+                })()}
+                <div>
+                  <h4 className="text-lg font-bold text-white leading-tight">
+                    {dialog.toon.name}
+                    {dialog.toon.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon.laff})</span>}
+                  </h4>
+                  <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
+                    {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                      dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                        `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {(dialog.type === 'add' || dialog.type === 'move') && (
               <div className="mb-5">
@@ -964,18 +1075,60 @@ export function SidebarApp() {
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => {
-                  updateToonList(dialog.type, dialog.listKey, dialog.toon, dialogNote).then(() => {
-                    refresh();
-                    setDialog(null);
-                  });
+                  if (dialog.type === 'delete_group' && dialog.groupId) {
+                    browser.storage.local.get('toonhqplus-history').then(result => {
+                      const history = (result['toonhqplus-history'] as Record<number, any>) || {};
+                      delete history[dialog.groupId!];
+                      browser.storage.local.set({ 'toonhqplus-history': history }).then(() => {
+                        setHistoryGroups({ ...history });
+                        setDialog(null);
+                      });
+                    });
+                  } else if (dialog.type === 'clear_history') {
+                    browser.storage.local.set({ 'toonhqplus-history': {} }).then(() => {
+                      setHistoryGroups({});
+                      setDialog(null);
+                    });
+                  } else if (dialog.type === 'clear_toons') {
+                    browser.storage.local.set({
+                      [STORAGE_KEYS.FAVORITES]: [],
+                      [STORAGE_KEYS.BLOCKED]: [],
+                      [STORAGE_KEYS.NOTES]: {}
+                    }).then(() => {
+                      setFavorites([]);
+                      setBlocked([]);
+                      setNotes({});
+                      setDialog(null);
+                    });
+                  } else if (dialog.type === 'reset_navigation') {
+                    const defaultConfig = {
+                      pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+                      dropdown: ['field-offices', 'gardening', 'doodles']
+                    };
+                    browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: defaultConfig }).then(() => {
+                      setNavbarConfig(defaultConfig);
+                      setDialog(null);
+                    });
+                  } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
+                    updateToonList(dialog.type, dialog.listKey, dialog.toon, dialogNote).then(() => {
+                      refresh();
+                      setDialog(null);
+                    });
+                  }
                 }}
-                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 ${(dialog.type === 'remove' || dialog.listKey === STORAGE_KEYS.BLOCKED) ? 'bg-red-600 hover:bg-red-700 ring-red-400/50' : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
+                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.listKey === STORAGE_KEYS.BLOCKED)
+                  ? 'bg-red-600 hover:bg-red-700 ring-red-400/50'
+                  : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
                   } focus:outline-none focus:ring-2`}
               >
-                  {dialog.type === 'remove' ? 'Remove Toon' :
-                  dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
+                {dialog.type === 'remove' ? 'Remove Toon' :
+                  dialog.type === 'delete_group' ? 'Delete Group' :
+                    dialog.type === 'clear_history' ? 'Clear History' :
+                      dialog.type === 'clear_toons' ? 'Clear Toons' :
+                        dialog.type === 'reset_navigation' ? 'Reset Navigation' :
+                          dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
               </button>
-              {dialog.type === 'remove' && (
+              {dialog.type === 'remove' && dialog.listKey && (
                 <button
                   onClick={() => {
                     const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
@@ -985,14 +1138,14 @@ export function SidebarApp() {
                       listKey: otherKey
                     });
                   }}
-                  className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95"
+                  className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer"
                 >
                   Move to {dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons'}
                 </button>
               )}
               <button
                 onClick={() => setDialog(null)}
-                className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95"
+                className={`w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer`}
               >
                 Cancel
               </button>
