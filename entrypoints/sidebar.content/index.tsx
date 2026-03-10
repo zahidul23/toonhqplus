@@ -588,6 +588,19 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   const navbarUl = document.querySelector('ul.navbar-nav.ml-auto');
   if (!navbarUl) return;
 
+  // Force synchronize active state in case Vue Router detached elements
+  navbarUl.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href');
+    // Ensure we don't accidentally match empty string or root on everything
+    if (href && href.length > 1 && window.location.pathname.endsWith(href)) {
+      a.classList.add('router-link-exact-active', 'active');
+      a.setAttribute('aria-current', 'page');
+    } else {
+      a.classList.remove('router-link-exact-active', 'active');
+      a.removeAttribute('aria-current');
+    }
+  });
+
   // Avoid infinite loops & redundant updates
   const currentConfigStr = JSON.stringify(config);
   if (navbarUl.getAttribute('data-toonhq-customized') === currentConfigStr) return;
@@ -649,6 +662,13 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
       const a = node.querySelector('a');
       if (a) {
         a.className = ''; // Remove dropdown-item
+        const href = a.getAttribute('href');
+        if (href && window.location.pathname.endsWith(href)) {
+          a.classList.add('router-link-exact-active', 'active');
+          a.setAttribute('aria-current', 'page');
+        } else {
+          a.removeAttribute('aria-current');
+        }
         a.removeAttribute('role');
       }
       fragment.appendChild(node);
@@ -673,6 +693,14 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
       const a = mobileNode.querySelector('a');
       if (a) {
         a.className = '';
+        const href = a.getAttribute('href');
+        if (href && window.location.pathname.endsWith(href)) {
+          a.classList.add('router-link-exact-active', 'active');
+          a.setAttribute('aria-current', 'page');
+        } else {
+          a.classList.remove('router-link-exact-active', 'active');
+          a.removeAttribute('aria-current');
+        }
         a.removeAttribute('role');
       }
       fragment.appendChild(mobileNode);
@@ -688,6 +716,14 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
       const a = desktopNode.querySelector('a');
       if (a) {
         a.className = 'dropdown-item';
+        const href = a.getAttribute('href');
+        if (href && window.location.pathname.endsWith(href)) {
+          a.classList.add('router-link-exact-active', 'active');
+          a.setAttribute('aria-current', 'page');
+        } else {
+          a.classList.remove('router-link-exact-active', 'active');
+          a.removeAttribute('aria-current');
+        }
         a.setAttribute('role', 'menuitem');
       }
       moreDropdownUl.appendChild(desktopNode);
@@ -1017,37 +1053,49 @@ export default defineContentScript({
     const fixDialog = (d: HTMLElement) => {
       d.style.setProperty('width', '980px', 'important');
       if (bossInfoEnabled === false) return;
-      // if dialog contains an h4, log its text and maybe append info
-      const h4 = d.querySelector('h4');
-      if (h4) {
-        if (d.querySelector('.boss-info')) {
+
+      const wrapper = d.querySelector('.boss-title-wrapper') as HTMLElement | null;
+      const allH4s = Array.from(d.querySelectorAll('h4'));
+      const originalH4 = allH4s.find(h => !h.classList.contains('boss-info'));
+
+      if (!originalH4) {
+        // Native h4 is gone, remove our wrapper to clean up state
+        if (wrapper) wrapper.remove();
+        d.querySelectorAll('.boss-info').forEach(el => el.remove());
+        return;
+      }
+
+      if (wrapper) {
+        if (!wrapper.contains(originalH4)) {
+          // The native h4 got regenerated outside our wrapper
+          wrapper.remove();
+        } else {
+          // Everything is intact
           updateBossInfo();
           return;
         }
-        const title = h4.innerText.trim();
-        if (title === 'CEO' || title === 'CJ') {
-          // create a wrapper div to hold both headings
-          const wrapper = document.createElement('div');
-          wrapper.className = '';
-          // flex-center with gap
-          wrapper.style.display = 'flex';
-          wrapper.style.justifyContent = 'center';
-          wrapper.style.alignItems = 'center';
-          wrapper.style.gap = '1em';
+      }
 
-          // move the original h4 into wrapper
-          const parent = h4.parentElement;
-          if (parent) {
-            parent.insertBefore(wrapper, h4);
-            h4.classList.add('text-center', 'mt-2', 'mb-3');
-            wrapper.appendChild(h4);
-          }
+      const title = originalH4.innerText.trim();
+      if (title === 'CEO' || title === 'CJ') {
+        const newWrapper = document.createElement('div');
+        newWrapper.className = 'boss-title-wrapper';
+        newWrapper.style.display = 'flex';
+        newWrapper.style.justifyContent = 'center';
+        newWrapper.style.alignItems = 'center';
+        newWrapper.style.gap = '1em';
 
-          // new h4 for boss info (pink slips, lawyer count, etc)
-          const newH4 = document.createElement('h4');
-          newH4.classList.add('boss-info', 'text-center', 'mt-2', 'mb-3');
-          wrapper.appendChild(newH4);
+        const parent = originalH4.parentElement;
+        if (parent) {
+          parent.insertBefore(newWrapper, originalH4);
+          originalH4.classList.add('text-center', 'mt-2', 'mb-3');
+          newWrapper.appendChild(originalH4);
         }
+
+        const newH4 = document.createElement('h4');
+        newH4.classList.add('boss-info', 'text-center', 'mt-2', 'mb-3');
+        newWrapper.appendChild(newH4);
+
         setTimeout(() => {
           updateBossInfo();
         }, 500);
@@ -1057,12 +1105,41 @@ export default defineContentScript({
       fixDialog(el as HTMLElement);
     });
     const dialogObserver = new MutationObserver((mutations) => {
+      let checkAll = false;
+      const dialogs = new Set<HTMLElement>();
+
       for (const m of mutations) {
+        if (m.target instanceof HTMLElement && (m.target.classList.contains('boss-title-wrapper') || m.target.classList.contains('boss-info'))) {
+          continue;
+        }
+
         m.addedNodes.forEach((node) => {
           if (!(node instanceof HTMLElement)) return;
-          if (node.matches('.group-details-dialog')) fixDialog(node as HTMLElement);
-          node.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
+          if (node.classList?.contains('boss-title-wrapper') || node.classList?.contains('boss-info')) return;
+
+          if (node.matches?.('.group-details-dialog')) dialogs.add(node);
+          const closest = node.closest?.('.group-details-dialog') as HTMLElement | null;
+          if (closest) dialogs.add(closest);
+
+          if (node.tagName === 'H4' || node.querySelector?.('h4')) checkAll = true;
         });
+
+        m.removedNodes.forEach((node) => {
+          if (!(node instanceof HTMLElement)) return;
+          if (node.classList?.contains('boss-title-wrapper') || node.classList?.contains('boss-info')) return;
+
+          if (m.target instanceof HTMLElement) {
+            const closest = m.target.closest?.('.group-details-dialog') as HTMLElement | null;
+            if (closest) dialogs.add(closest);
+          }
+          if (node.tagName === 'H4' || node.querySelector?.('h4')) checkAll = true;
+        });
+      }
+
+      if (checkAll) {
+        document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
+      } else {
+        dialogs.forEach(d => fixDialog(d));
       }
     });
     dialogObserver.observe(document.body, { childList: true, subtree: true });

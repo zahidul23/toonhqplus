@@ -522,8 +522,17 @@ function NavbarSettings({
               {renderItemRow(id, 'pinned')}
             </React.Fragment>
           ))}
-          {renderDropZone('pinned', config.pinned.length)}
-          {config.pinned.length === 0 && <div className="text-center text-xs italic text-green-200/30 p-4 border-2 border-dashed border-white/5 rounded">Drop items here to pin.</div>}
+          {config.pinned.length > 0 && renderDropZone('pinned', config.pinned.length)}
+          {config.pinned.length === 0 && (
+            <div
+              onDragOver={(e) => onDragOver(e, 'pinned', 0)}
+              onDragLeave={() => setDragOverInfo(null)}
+              onDrop={(e) => onDrop(e, 'pinned', 0)}
+              className={`transition-all duration-200 text-center text-xs italic p-4 border-2 border-dashed rounded ${dragOverInfo?.list === 'pinned' && dragOverInfo?.index === 0 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200' : 'text-green-200/30 border-white/5'}`}
+            >
+              Drop items here to pin.
+            </div>
+          )}
         </div>
       </div>
       <div>
@@ -535,8 +544,17 @@ function NavbarSettings({
               {renderItemRow(id, 'dropdown')}
             </React.Fragment>
           ))}
-          {renderDropZone('dropdown', config.dropdown.length)}
-          {config.dropdown.length === 0 && <div className="text-center text-xs italic text-green-200/30 p-4 border-2 border-dashed border-white/5 rounded">Drop items here to hide.</div>}
+          {config.dropdown.length > 0 && renderDropZone('dropdown', config.dropdown.length)}
+          {config.dropdown.length === 0 && (
+            <div
+              onDragOver={(e) => onDragOver(e, 'dropdown', 0)}
+              onDragLeave={() => setDragOverInfo(null)}
+              onDrop={(e) => onDrop(e, 'dropdown', 0)}
+              className={`transition-all duration-200 text-center text-xs italic p-4 border-2 border-dashed rounded ${dragOverInfo?.list === 'dropdown' && dragOverInfo?.index === 0 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200' : 'text-green-200/30 border-white/5'}`}
+            >
+              Drop items here to hide.
+            </div>
+          )}
         </div>
       </div>
     </div>
