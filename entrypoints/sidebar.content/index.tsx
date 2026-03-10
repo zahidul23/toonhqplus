@@ -410,8 +410,6 @@ const getCogNameForLevel = (level: number, suit: string) => {
   }
 }
 
-console.log(getCogNameForLevel(15, "lawbot"))
-
 interface CJDifficultyTier {
   tier: number;
   minlevel: number;

@@ -519,7 +519,7 @@ function NavbarSettings({
   };
 
   return (
-    <div className="flex flex-col gap-3 overflow-y-auto pr-1">
+    <div className="flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1">
       <p className="text-xs text-green-100/70 leading-relaxed bg-black/20 p-2 rounded border border-white/5">
         Drag and drop items to customize your navigation bar. <strong>Pinned Pages</strong> show in the main bar, while <strong>Hidden Pages</strong> move to the "More" menu.
       </p>
@@ -797,7 +797,7 @@ export function SidebarApp() {
                   <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">
                     Toony Toons
                   </h3>
-                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto min-h-0">
+                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
                     {favorites.length === 0 ? (
                       <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
                     ) : (
@@ -815,7 +815,7 @@ export function SidebarApp() {
                   <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">
                     Stinky Toons
                   </h3>
-                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto min-h-0">
+                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
                     {blocked.length === 0 ? (
                       <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
                     ) : (
@@ -840,7 +840,7 @@ export function SidebarApp() {
                         Recent Groups
                       </h3>
                     </div>
-                    <div className="flex-1 space-y-2 overflow-y-auto p-1.5 min-h-0">
+                    <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar p-1.5 min-h-0">
                       {Object.values(historyGroups).length === 0 ? (
                         <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
                       ) : (
@@ -898,7 +898,7 @@ export function SidebarApp() {
                         {groupTypes.find((t) => t.id === historyGroups[selectedHistoryGroup]?.type)?.name || `Group #${historyGroups[selectedHistoryGroup]?.id}`}
                       </h3>
                     </div>
-                    <ul className="flex-1 space-y-1 overflow-y-auto pr-1">
+                    <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
                       {(() => {
                         const group = historyGroups[selectedHistoryGroup];
                         const ids = group?.memberMetadata
@@ -967,7 +967,7 @@ export function SidebarApp() {
 
             {activeTab === 'settings' && (
               <section className="flex-1 flex flex-col min-h-0">
-                <div className="flex-1 flex flex-col gap-3 p-1 overflow-y-auto min-h-0">
+                <div className="flex-1 flex flex-col gap-3 p-1 overflow-y-auto custom-scrollbar min-h-0">
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Customization</h4>
                     <NavbarSettings
@@ -1038,162 +1038,165 @@ export function SidebarApp() {
             )}
           </div>
         </aside>
-      )}
+      )
+      }
 
-      {dialog && dialog.isOpen && (
-        <div
-          className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'
-            }`}
-          onClick={() => setDialog(null)}
-        >
+      {
+        dialog && dialog.isOpen && (
           <div
-            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'
-              } ${dialog.source === 'main' ? '' : 'mr-4'}`}
-            onClick={(e) => e.stopPropagation()}
+            className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'
+              }`}
+            onClick={() => setDialog(null)}
           >
-            {dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation' ? (
-              <div className="mb-4 flex flex-col items-center gap-3 text-center">
-                <div className={`h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 ${dialog.type === 'reset_navigation' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                  {dialog.type === 'reset_navigation' ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                  )}
+            <div
+              className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'
+                } ${dialog.source === 'main' ? '' : 'mr-4'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation' ? (
+                <div className="mb-4 flex flex-col items-center gap-3 text-center">
+                  <div className={`h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 ${dialog.type === 'reset_navigation' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                    {dialog.type === 'reset_navigation' ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-white leading-tight">
+                      {dialog.type === 'delete_group' ? 'Delete Group' :
+                        dialog.type === 'clear_history' ? 'Clear History' :
+                          dialog.type === 'clear_toons' ? 'Clear Toons List' : 'Reset Navigation'}
+                    </h4>
+                    <p className="mt-1 text-sm text-red-100 opacity-90">
+                      {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
+                        dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
+                          dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toons? This cannot be undone.' :
+                            'Are you sure you want to reset your navigation bar to its default settings?'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-lg font-bold text-white leading-tight">
-                    {dialog.type === 'delete_group' ? 'Delete Group' :
-                      dialog.type === 'clear_history' ? 'Clear History' :
-                        dialog.type === 'clear_toons' ? 'Clear Toons List' : 'Reset Navigation'}
-                  </h4>
-                  <p className="mt-1 text-sm text-red-100 opacity-90">
-                    {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
-                      dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
-                        dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toons? This cannot be undone.' :
-                          'Are you sure you want to reset your navigation bar to its default settings?'}
-                  </p>
+              ) : dialog.toon && (
+                <div className="mb-4 flex flex-col items-center gap-3 text-center">
+                  {(() => {
+                    const photo = getToonPhoto(dialog.toon!);
+                    return photo ? (
+                      <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
+                    ) : null;
+                  })()}
+                  <div>
+                    <h4 className="text-lg font-bold text-white leading-tight">
+                      {dialog.toon.name}
+                      {dialog.toon.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon.laff})</span>}
+                    </h4>
+                    <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
+                      {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                        dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                          `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ) : dialog.toon && (
-              <div className="mb-4 flex flex-col items-center gap-3 text-center">
-                {(() => {
-                  const photo = getToonPhoto(dialog.toon!);
-                  return photo ? (
-                    <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
-                  ) : null;
-                })()}
-                <div>
-                  <h4 className="text-lg font-bold text-white leading-tight">
-                    {dialog.toon.name}
-                    {dialog.toon.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon.laff})</span>}
-                  </h4>
-                  <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
-                    {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                      dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                        `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
-                  </p>
-                </div>
-              </div>
-            )}
+              )}
 
-            {(dialog.type === 'add' || dialog.type === 'move') && (
-              <div className="mb-5">
-                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-green-300 opacity-80">
-                  Private Note
-                </label>
-                <textarea
-                  autoFocus
-                  className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
-                    }`}
-                  placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, slow, training, bad choices" : "Nice, helpful, communicative, strategic etc"}
-                  rows={3}
-                  value={dialogNote}
-                  onChange={(e) => setDialogNote(e.target.value)}
-                />
-              </div>
-            )}
+              {(dialog.type === 'add' || dialog.type === 'move') && (
+                <div className="mb-5">
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-green-300 opacity-80">
+                    Private Note
+                  </label>
+                  <textarea
+                    autoFocus
+                    className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
+                      }`}
+                    placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, slow, training, bad choices" : "Nice, helpful, communicative, strategic etc"}
+                    rows={3}
+                    value={dialogNote}
+                    onChange={(e) => setDialogNote(e.target.value)}
+                  />
+                </div>
+              )}
 
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  if (dialog.type === 'delete_group' && dialog.groupId) {
-                    browser.storage.local.get('toonhqplus-history').then(result => {
-                      const history = (result['toonhqplus-history'] as Record<number, any>) || {};
-                      delete history[dialog.groupId!];
-                      browser.storage.local.set({ 'toonhqplus-history': history }).then(() => {
-                        setHistoryGroups({ ...history });
-                        setDialog(null);
-                      });
-                    });
-                  } else if (dialog.type === 'clear_history') {
-                    browser.storage.local.set({ 'toonhqplus-history': {} }).then(() => {
-                      setHistoryGroups({});
-                      setDialog(null);
-                    });
-                  } else if (dialog.type === 'clear_toons') {
-                    browser.storage.local.set({
-                      [STORAGE_KEYS.FAVORITES]: [],
-                      [STORAGE_KEYS.BLOCKED]: [],
-                      [STORAGE_KEYS.NOTES]: {}
-                    }).then(() => {
-                      setFavorites([]);
-                      setBlocked([]);
-                      setNotes({});
-                      setDialog(null);
-                    });
-                  } else if (dialog.type === 'reset_navigation') {
-                    const defaultConfig = {
-                      pinned: ['invasions', 'groups', 'fishing', 'ccg'],
-                      dropdown: ['field-offices', 'gardening', 'doodles']
-                    };
-                    browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: defaultConfig }).then(() => {
-                      setNavbarConfig(defaultConfig);
-                      setDialog(null);
-                    });
-                  } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
-                    updateToonList(dialog.type, dialog.listKey, dialog.toon, dialogNote).then(() => {
-                      refresh();
-                      setDialog(null);
-                    });
-                  }
-                }}
-                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.listKey === STORAGE_KEYS.BLOCKED)
-                  ? 'bg-red-600 hover:bg-red-700 ring-red-400/50'
-                  : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
-                  } focus:outline-none focus:ring-2`}
-              >
-                {dialog.type === 'remove' ? 'Remove Toon' :
-                  dialog.type === 'delete_group' ? 'Delete Group' :
-                    dialog.type === 'clear_history' ? 'Clear History' :
-                      dialog.type === 'clear_toons' ? 'Clear Toons' :
-                        dialog.type === 'reset_navigation' ? 'Reset Navigation' :
-                          dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
-              </button>
-              {dialog.type === 'remove' && dialog.listKey && (
+              <div className="flex flex-col gap-2">
                 <button
                   onClick={() => {
-                    const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
-                    setDialog({
-                      ...dialog,
-                      type: 'move',
-                      listKey: otherKey
-                    });
+                    if (dialog.type === 'delete_group' && dialog.groupId) {
+                      browser.storage.local.get('toonhqplus-history').then(result => {
+                        const history = (result['toonhqplus-history'] as Record<number, any>) || {};
+                        delete history[dialog.groupId!];
+                        browser.storage.local.set({ 'toonhqplus-history': history }).then(() => {
+                          setHistoryGroups({ ...history });
+                          setDialog(null);
+                        });
+                      });
+                    } else if (dialog.type === 'clear_history') {
+                      browser.storage.local.set({ 'toonhqplus-history': {} }).then(() => {
+                        setHistoryGroups({});
+                        setDialog(null);
+                      });
+                    } else if (dialog.type === 'clear_toons') {
+                      browser.storage.local.set({
+                        [STORAGE_KEYS.FAVORITES]: [],
+                        [STORAGE_KEYS.BLOCKED]: [],
+                        [STORAGE_KEYS.NOTES]: {}
+                      }).then(() => {
+                        setFavorites([]);
+                        setBlocked([]);
+                        setNotes({});
+                        setDialog(null);
+                      });
+                    } else if (dialog.type === 'reset_navigation') {
+                      const defaultConfig = {
+                        pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+                        dropdown: ['field-offices', 'gardening', 'doodles']
+                      };
+                      browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: defaultConfig }).then(() => {
+                        setNavbarConfig(defaultConfig);
+                        setDialog(null);
+                      });
+                    } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
+                      updateToonList(dialog.type, dialog.listKey, dialog.toon, dialogNote).then(() => {
+                        refresh();
+                        setDialog(null);
+                      });
+                    }
                   }}
-                  className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer"
+                  className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.listKey === STORAGE_KEYS.BLOCKED)
+                    ? 'bg-red-600 hover:bg-red-700 ring-red-400/50'
+                    : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
+                    } focus:outline-none focus:ring-2`}
                 >
-                  Move to {dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons'}
+                  {dialog.type === 'remove' ? 'Remove Toon' :
+                    dialog.type === 'delete_group' ? 'Delete Group' :
+                      dialog.type === 'clear_history' ? 'Clear History' :
+                        dialog.type === 'clear_toons' ? 'Clear Toons' :
+                          dialog.type === 'reset_navigation' ? 'Reset Navigation' :
+                            dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
                 </button>
-              )}
-              <button
-                onClick={() => setDialog(null)}
-                className={`w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer`}
-              >
-                Cancel
-              </button>
+                {dialog.type === 'remove' && dialog.listKey && (
+                  <button
+                    onClick={() => {
+                      const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+                      setDialog({
+                        ...dialog,
+                        type: 'move',
+                        listKey: otherKey
+                      });
+                    }}
+                    className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer"
+                  >
+                    Move to {dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setDialog(null)}
+                  className={`w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer`}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

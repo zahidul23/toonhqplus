@@ -10,3 +10,36 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  /* Prevents the contents from shifting when the scrollbar appears */
+  scrollbar-gutter: stable;
+}
+
+/* Fallback for Webkit browsers */
+@supports (overflow-y: overlay) {
+  .custom-scrollbar {
+    overflow-y: overlay;
+    scrollbar-gutter: auto;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+}
