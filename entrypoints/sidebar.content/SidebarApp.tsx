@@ -329,27 +329,17 @@ function ToonRow({
         <div className="mt-2 flex flex-col gap-2 rounded border border-[#1f8454] bg-black/40 p-2 shadow-inner dark:border-[#1f8454]/40 dark:bg-black/60">
           <textarea
             autoFocus
-            rows={1}
-            className="w-full flex-1 resize-none overflow-hidden rounded border border-[#1f8454] bg-black/20 px-2 py-1 text-xs text-white placeholder-green-100/30 focus:border-green-400 focus:outline-none"
-            placeholder={isBlocked ? "Rude, griefing, slow, training, bad choices" : "Add a note..."}
+            className="w-full flex-1 resize-y custom-scrollbar max-h-32 rounded border border-[#1f8454] bg-black/20 px-2 py-1 text-xs text-white placeholder-green-100/30 focus:border-green-400 focus:outline-none"
+            placeholder={isBlocked ? "Rude, griefing, bad gags" : "Add a note..."}
+            style={{ fieldSizing: 'content' } as React.CSSProperties}
             value={noteDraft}
-            onChange={(e) => {
-              setNoteDraft(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = `${e.target.scrollHeight}px`;
-            }}
+            onChange={(e) => setNoteDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 saveNote();
               }
               if (e.key === 'Escape') setIsEditing(false);
-            }}
-            ref={(el) => {
-              if (el) {
-                el.style.height = 'auto';
-                el.style.height = `${el.scrollHeight}px`;
-              }
             }}
           />
           <div className="flex gap-2 justify-end">
@@ -1105,10 +1095,10 @@ export function SidebarApp() {
                   </label>
                   <textarea
                     autoFocus
-                    className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
+                    className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner custom-scrollbar resize-y min-h-[5rem] max-h-32 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
                       }`}
-                    placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, slow, training, bad choices" : "Nice, helpful, communicative, strategic etc"}
-                    rows={3}
+                    placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, bad gags" : "Nice, helpful, communicative, strategic etc"}
+                    style={{ fieldSizing: 'content' } as React.CSSProperties}
                     value={dialogNote}
                     onChange={(e) => setDialogNote(e.target.value)}
                   />
