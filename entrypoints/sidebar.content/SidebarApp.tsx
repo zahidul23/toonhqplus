@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   BLOCKED: 'toonhq-blocked',
   SIDEBAR_OPEN: 'toonhqplus-sidebar-open',
   NAVBAR_CONFIG: 'toonhqplus-navbar-config',
+  NOTES: 'toonhqplus-notes',
 } as const;
 
 interface ToonData {
@@ -23,6 +24,73 @@ interface DialogState {
   toon: ToonData;
   source: 'main' | 'sidebar';
   otherListName?: string;
+}
+
+const SPECIES_MAP: Record<number, string> = {
+  1: 'bear',
+  2: 'cat',
+  3: 'dog',
+  4: 'duck',
+  5: 'horse',
+  6: 'monkey',
+  7: 'mouse',
+  8: 'pig',
+  9: 'rabbit',
+  10: 'deer',
+  11: 'crocodile',
+};
+
+function getToonPhoto(toon: ToonData): string | undefined {
+  if (toon.photo) return toon.photo;
+  if (toon.species != null && SPECIES_MAP[toon.species]) {
+    return `https://toonhq.org/static/assets/species/${SPECIES_MAP[toon.species]}.png`;
+  }
+  return undefined;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) {
+    const mins = Math.floor(diffInSeconds / 60);
+    return `${mins}m ago`;
+  }
+  if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours}h ago`;
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function RelativeTime({ date }: { date: string }) {
+  const [display, setDisplay] = useState(() => formatRelativeTime(date));
+
+  useEffect(() => {
+    // Initial check
+    setDisplay(formatRelativeTime(date));
+
+    // Dynamic interval: 30s for items < 1h, 5m for items < 24h, 1h otherwise
+    const getDelay = () => {
+      const diff = Date.now() - new Date(date).getTime();
+      if (diff < 3600000) return 30000;
+      if (diff < 86400000) return 300000;
+      return 3600000;
+    };
+
+    let timeoutId: any;
+    const update = () => {
+      setDisplay(formatRelativeTime(date));
+      timeoutId = setTimeout(update, getDelay());
+    };
+
+    timeoutId = setTimeout(update, getDelay());
+    return () => clearTimeout(timeoutId);
+  }, [date]);
+
+  return <span>{display}</span>;
 }
 
 function normalizeToIds(raw: unknown): number[] {
@@ -52,11 +120,14 @@ async function updateToonList(
 ) {
   const otherKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
   const result = await browser.storage.local.get([listKey, otherKey, 'toonhqplus-toons']);
-  
+
   let list: number[] = Array.isArray(result[listKey]) ? result[listKey] : [];
   let otherList: number[] = Array.isArray(result[otherKey]) ? result[otherKey] : [];
   const toonId = Number(toon.id);
   const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
+
+  const notesResult = await browser.storage.local.get(STORAGE_KEYS.NOTES);
+  const notes = (notesResult[STORAGE_KEYS.NOTES] as Record<number, string>) || {};
 
   if (type === 'remove') {
     list = list.filter(id => id !== toonId);
@@ -68,22 +139,25 @@ async function updateToonList(
     if (otherList.includes(toonId)) {
       otherList = otherList.filter(id => id !== toonId);
     }
-    
-    // Update cache with toon details and note
+
+    // Update cache with toon details
     toonsCache[toonId] = {
       ...toon,
       lastSeen: new Date().toISOString()
     };
+
+    // Manage notes separately
     if (note !== undefined) {
-      if (note.trim()) toonsCache[toonId].note = note.trim();
-      else delete toonsCache[toonId].note;
+      if (note.trim()) notes[toonId] = note.trim();
+      else delete notes[toonId];
     }
   }
 
   await browser.storage.local.set({
     [listKey]: list,
     [otherKey]: otherList,
-    'toonhqplus-toons': toonsCache
+    'toonhqplus-toons': toonsCache,
+    [STORAGE_KEYS.NOTES]: notes
   });
 }
 
@@ -92,6 +166,7 @@ function ToonRow({
   favorites,
   blocked,
   activeToonIds,
+  note,
   refresh,
   isHovered,
   onRequestDialog
@@ -100,12 +175,17 @@ function ToonRow({
   favorites: number[];
   blocked: number[];
   activeToonIds: number[];
+  note?: string;
   refresh: () => void;
   isHovered: boolean;
   onRequestDialog: (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [noteDraft, setNoteDraft] = useState(toon.note || '');
+  const [noteDraft, setNoteDraft] = useState(note || '');
+
+  useEffect(() => {
+    setNoteDraft(note || '');
+  }, [note]);
 
   const isFavorited = favorites.includes(Number(toon.id));
   const isBlocked = blocked.includes(Number(toon.id));
@@ -132,17 +212,15 @@ function ToonRow({
 
   const saveNote = () => {
     if (!listKey) return;
-    browser.storage.local.get(['toonhqplus-toons']).then((result) => {
-      const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
-      const tid = Number(toon.id);
-      if (toonsCache[tid]) {
-        if (!noteDraft.trim()) {
-          delete toonsCache[tid].note;
-        } else {
-          toonsCache[tid].note = noteDraft.trim();
-        }
-        browser.storage.local.set({ 'toonhqplus-toons': toonsCache }).then(refresh);
+    const tid = Number(toon.id);
+    browser.storage.local.get([STORAGE_KEYS.NOTES]).then((result) => {
+      const notes = (result[STORAGE_KEYS.NOTES] as Record<number, string>) || {};
+      if (noteDraft.trim()) {
+        notes[tid] = noteDraft.trim();
+      } else {
+        delete notes[tid];
       }
+      browser.storage.local.set({ [STORAGE_KEYS.NOTES]: notes }).then(refresh);
       setIsEditing(false);
     });
   };
@@ -160,17 +238,20 @@ function ToonRow({
       ref={rowRef}
       className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-colors ${bgColorClass} ${textColorClass}`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 overflow-hidden">
-          {toon.photo && (
-            <img src={toon.photo} alt={toon.name} className="h-6 w-6 shrink-0 rounded-full" />
-          )}
+      <div className="flex items-center gap-1">
+        <div className="flex flex-1 items-center gap-2 overflow-hidden">
+          {(() => {
+            const photo = getToonPhoto(toon);
+            return photo ? (
+              <img src={photo} alt={toon.name} className="h-6 w-6 shrink-0 rounded-full bg-black/10" />
+            ) : null;
+          })()}
           <span className="truncate">
             {toon.name}
             {toon.laff != null ? ` (${toon.laff})` : ''}
           </span>
         </div>
-        <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-1 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-200 overflow-hidden">
           {!isOwnToon && (
             <>
               {listKey ? (
@@ -181,10 +262,25 @@ function ToonRow({
                       setIsEditing(true);
                       setNoteDraft(toon.note || '');
                     }}
-                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
+                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white"
                     title="Edit note"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+                      onRequestDialog('move', targetKey, toon, 'sidebar');
+                    }}
+                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-black/20 hover:text-white"
+                    title={listKey === STORAGE_KEYS.FAVORITES ? "Move to Stinky Toons" : "Move to Toony Toons"}
+                  >
+                    {listKey === STORAGE_KEYS.FAVORITES ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -194,7 +290,7 @@ function ToonRow({
                     className="shrink-0 rounded p-1 text-[#cf222e] hover:bg-[#ffebe9] dark:text-[#ff7b72] dark:hover:bg-[#ad130dde]"
                     title="Remove from list"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                   </button>
                 </>
               ) : (
@@ -204,20 +300,20 @@ function ToonRow({
                       e.stopPropagation();
                       onRequestDialog('add', STORAGE_KEYS.FAVORITES, toon, 'sidebar');
                     }}
-                    className="rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white dark:hover:bg-[#1f8454]"
+                    className="rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white"
                     title="Add to Toony Toons"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
                   </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onRequestDialog('add', STORAGE_KEYS.BLOCKED, toon, 'sidebar');
                     }}
-                    className="rounded p-1 text-green-100/50 hover:bg-red-600 hover:text-white dark:hover:bg-red-600"
+                    className="rounded p-1 text-green-100/50 hover:bg-red-600 hover:text-white"
                     title="Add to Stinky Toons"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
                   </button>
                 </div>
               )}
@@ -268,9 +364,9 @@ function ToonRow({
             </button>
           </div>
         </div>
-      ) : toon.note ? (
+      ) : note ? (
         <div className="ml-8 whitespace-pre-wrap text-xs leading-snug text-green-100/80 italic">
-          {toon.note}
+          {note}
         </div>
       ) : null}
     </li>
@@ -287,12 +383,12 @@ const DEFAULT_NAV_ITEMS = [
   { id: 'doodles', label: 'Pet Shop Doodles', href: '/doodles/', colorClass: 'shop' },
 ];
 
-function NavbarSettings({ 
-  config, 
-  onUpdate 
-}: { 
-  config: { pinned: string[], dropdown: string[] }, 
-  onUpdate: (newConfig: { pinned: string[], dropdown: string[] }) => void 
+function NavbarSettings({
+  config,
+  onUpdate
+}: {
+  config: { pinned: string[], dropdown: string[] },
+  onUpdate: (newConfig: { pinned: string[], dropdown: string[] }) => void
 }) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<{ list: 'pinned' | 'dropdown', index: number } | null>(null);
@@ -302,13 +398,13 @@ function NavbarSettings({
     // Remove from source
     const items = [...newConfig[from]].filter(itemId => itemId !== id);
     newConfig[from] = items;
-    
+
     // Add to target
     const targetItems = [...newConfig[to]];
     const insertAt = atIndex !== undefined ? atIndex : targetItems.length;
     targetItems.splice(insertAt, 0, id);
     newConfig[to] = targetItems;
-    
+
     onUpdate(newConfig);
   };
 
@@ -326,12 +422,12 @@ function NavbarSettings({
   const onDragOverRow = (e: React.DragEvent, list: 'pinned' | 'dropdown', id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     const items = config[list];
     const index = items.indexOf(id);
-    
+
     // Choose the index before or after the row based on cursor position
     const targetIndex = e.clientY < midY ? index : index + 1;
     setDragOverInfo({ list, index: targetIndex });
@@ -344,7 +440,7 @@ function NavbarSettings({
     if (!id) return;
 
     const sourceList = config.pinned.includes(id) ? 'pinned' : 'dropdown';
-    
+
     // If targetIndex isn't provided (e.g. drop on empty container), append to end
     let finalIndex = targetIndex !== undefined ? targetIndex : config[targetList].length;
 
@@ -392,8 +488,8 @@ function NavbarSettings({
     const isDragging = draggedId === id;
 
     return (
-      <div 
-        key={id} 
+      <div
+        key={id}
         draggable
         onDragStart={(e) => onDragStart(e, id)}
         onDragOver={(e) => onDragOverRow(e, listType, id)}
@@ -411,7 +507,7 @@ function NavbarSettings({
         className={`flex items-center justify-between gap-2 rounded bg-black/20 p-2 hover:bg-black/30 cursor-move transition-all ${isDragging ? 'opacity-20 scale-95' : 'opacity-100'}`}
       >
         <div className="flex items-center gap-2 pointer-events-none">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/30"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/30"><circle cx="9" cy="5" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="9" cy="19" r="1" /><circle cx="15" cy="5" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="19" r="1" /></svg>
           <div className={`h-2 w-2 rounded-full bg-current ${item.colorClass === 'blue' ? 'text-blue-400' : item.colorClass === 'green' ? 'text-green-400' : item.colorClass === 'steel' ? 'text-slate-400' : item.colorClass === 'fishing' ? 'text-cyan-400' : 'text-pink-400'}`} />
           <span className="text-sm font-medium text-white">{item.label}</span>
         </div>
@@ -456,12 +552,13 @@ function NavbarSettings({
 
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('toons');
+  const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('history');
 
   const [favorites, setFavorites] = useState<number[]>([]);
   const [blocked, setBlocked] = useState<number[]>([]);
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
   const [historyToons, setHistoryToons] = useState<Record<number, any>>({});
+  const [notes, setNotes] = useState<Record<number, string>>({});
   const [activeToonIds, setActiveToonIds] = useState<number[]>([]);
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -480,9 +577,10 @@ export function SidebarApp() {
       setFavorites(f);
       setBlocked(b);
     });
-    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids', STORAGE_KEYS.NAVBAR_CONFIG]).then((result) => {
+    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids', STORAGE_KEYS.NAVBAR_CONFIG, STORAGE_KEYS.NOTES]).then((result) => {
       setHistoryGroups((result['toonhqplus-history'] as Record<number, any>) || {});
       setHistoryToons((result['toonhqplus-toons'] as Record<number, any>) || {});
+      setNotes((result[STORAGE_KEYS.NOTES] as Record<number, string>) || {});
       setActiveToonIds((result['toonhqplus-active-toon-ids'] as number[]) || []);
       if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
         setNavbarConfig(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
@@ -501,9 +599,9 @@ export function SidebarApp() {
     const isBlocked = blocked.includes(Number(toon.id));
 
     if (type === 'add') {
-       if ((listKey === STORAGE_KEYS.FAVORITES && isBlocked) || (listKey === STORAGE_KEYS.BLOCKED && isFavorited)) {
-         actualType = 'move';
-       }
+      if ((listKey === STORAGE_KEYS.FAVORITES && isBlocked) || (listKey === STORAGE_KEYS.BLOCKED && isFavorited)) {
+        actualType = 'move';
+      }
     }
 
     setDialog({
@@ -514,7 +612,7 @@ export function SidebarApp() {
       source,
       otherListName
     });
-    setDialogNote(toon.note || '');
+    setDialogNote(notes[Number(toon.id)] || '');
     if (source === 'sidebar' || !open) {
       setOpen(true);
       browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: true });
@@ -534,7 +632,7 @@ export function SidebarApp() {
 
     window.addEventListener('toonhq-plus-toon-hover', handleHover);
     window.addEventListener('toonhq-plus-toon-unhover', handleUnhover);
-    
+
     const handleRemoteRequest = (e: Event) => {
       const { type, listKey, toon, source } = (e as CustomEvent).detail;
       handleRequestDialog(type, listKey, toon, source || 'main');
@@ -580,6 +678,9 @@ export function SidebarApp() {
       if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
         setNavbarConfig(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
       }
+      if (STORAGE_KEYS.NOTES in changes) {
+        setNotes((changes[STORAGE_KEYS.NOTES]?.newValue as Record<number, string>) || {});
+      }
     };
     browser.storage.onChanged.addListener(listener);
     return () => browser.storage.onChanged.removeListener(listener);
@@ -597,19 +698,13 @@ export function SidebarApp() {
           }}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
         >
-          {open ? 'Close' : 'ToonHQ+'}
+          {open ? 'Close' : 'HQ+'}
         </button>
       </div>
       {open && (
         <aside className="w-80 flex-1 flex flex-col min-h-0 rounded-lg border border-[#10462d] bg-[#1f8454] shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d] overflow-hidden">
 
           <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
-            <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-              onClick={() => setActiveTab('toons')}
-            >
-              Toons
-            </button>
             <button
               className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
               onClick={() => {
@@ -618,6 +713,12 @@ export function SidebarApp() {
               }}
             >
               History
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              onClick={() => setActiveTab('toons')}
+            >
+              Toons
             </button>
             <button
               className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
@@ -642,7 +743,7 @@ export function SidebarApp() {
                         const toon = historyToons[id];
                         if (!toon) return null;
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} refresh={refresh} isHovered={!!isHovered} onRequestDialog={handleRequestDialog} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} onRequestDialog={handleRequestDialog} />;
                       })
                     )}
                   </ul>
@@ -660,7 +761,7 @@ export function SidebarApp() {
                         const toon = historyToons[id];
                         if (!toon) return null;
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} refresh={refresh} isHovered={!!isHovered} onRequestDialog={handleRequestDialog} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} onRequestDialog={handleRequestDialog} />;
                       })
                     )}
                   </ul>
@@ -680,7 +781,11 @@ export function SidebarApp() {
                         <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
                       ) : (
                         Object.values(historyGroups)
-                          .sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime())
+                          .sort((a: any, b: any) => {
+                            const timeA = new Date(a.userJoinedAt || a.created).getTime();
+                            const timeB = new Date(b.userJoinedAt || b.created).getTime();
+                            return timeB - timeA;
+                          })
                           .map((group) => {
                             const typeData = groupTypes.find((t) => t.id === group.type);
                             const groupName = typeData ? typeData.name : `Group #${group.id}`;
@@ -693,11 +798,14 @@ export function SidebarApp() {
                                 <div>
                                   <span className="block text-sm font-bold text-white">{groupName}</span>
                                   <span className="block text-xs text-green-200 mt-1">
-                                    {new Date(group.created).toLocaleString()}
+                                    <RelativeTime date={group.userJoinedAt || group.created} />
                                   </span>
                                 </div>
                                 <div className="text-sm font-medium text-emerald-300">
-                                  {group.members?.length || 0} toon{group.members?.length === 1 ? '' : 's'}
+                                  {(() => {
+                                    const count = group.memberMetadata ? Object.keys(group.memberMetadata).length : (group.memberIds?.length ?? group.members?.length ?? 0);
+                                    return `${count} toon${count === 1 ? '' : 's'}`;
+                                  })()}
                                 </div>
                               </button>
                             );
@@ -719,28 +827,66 @@ export function SidebarApp() {
                       </h3>
                     </div>
                     <ul className="flex-1 space-y-1 overflow-y-auto pr-1">
-                      {historyGroups[selectedHistoryGroup]?.members?.map((m: any) => {
-                        const cachedToon = m.toon?.id ? historyToons[m.toon.id] : null;
-                        const toonId = m.toon?.id ?? cachedToon?.id;
-                        const toonData: ToonData = {
-                          id: toonId?.toString() ?? '0',
-                          name: m.toon?.name || cachedToon?.name || 'Unknown Toon',
-                          photo: m.toon?.photo || cachedToon?.photo || '',
-                          note: ''
-                        };
+                      {(() => {
+                        const group = historyGroups[selectedHistoryGroup];
+                        const ids = group?.memberMetadata
+                          ? Object.keys(group.memberMetadata).map(Number)
+                          : (group?.memberIds || group?.members?.map((m: any) => m.toon?.id) || []);
+
+                        const userActiveIds: number[] = [];
+                        const otherActiveIds: number[] = [];
+                        const userLeftIds: number[] = [];
+                        const otherLeftIds: number[] = [];
+
+                        (ids as number[]).forEach((id: number) => {
+                          const isUserToon = activeToonIds.includes(id);
+                          const hasLeft = !!group?.memberMetadata?.[id]?.left;
+
+                          if (isUserToon) {
+                            if (hasLeft) userLeftIds.push(id);
+                            else userActiveIds.push(id);
+                          } else {
+                            if (hasLeft) otherLeftIds.push(id);
+                            else otherActiveIds.push(id);
+                          }
+                        });
+
+                        const renderRows = (targetIds: number[]) =>
+                          targetIds.map((id: number) => {
+                            const toonData = historyToons[id];
+                            if (!toonData) return null;
+                            return (
+                              <ToonRow
+                                key={id}
+                                toon={toonData}
+                                favorites={favorites}
+                                blocked={blocked}
+                                activeToonIds={activeToonIds}
+                                note={notes[id]}
+                                refresh={refresh}
+                                isHovered={false}
+                                onRequestDialog={handleRequestDialog}
+                              />
+                            );
+                          });
+
                         return (
-                          <ToonRow
-                            key={toonId || Math.random()}
-                            toon={toonData}
-                            favorites={favorites}
-                            blocked={blocked}
-                            activeToonIds={activeToonIds}
-                             refresh={refresh}
-                            isHovered={false}
-                            onRequestDialog={handleRequestDialog}
-                          />
+                          <>
+                            {renderRows([...userActiveIds, ...otherActiveIds])}
+                            {(userLeftIds.length > 0 || otherLeftIds.length > 0) && (
+                              <li key="left-header" className="pt-2">
+                                <div className="flex items-center gap-2 px-1 mb-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-300/40">Left</span>
+                                  <div className="h-px flex-1 bg-green-500/10" />
+                                </div>
+                                <ul className="space-y-1 opacity-60 grayscale-[0.2]">
+                                  {renderRows([...userLeftIds, ...otherLeftIds])}
+                                </ul>
+                              </li>
+                            )}
+                          </>
                         );
-                      })}
+                      })()}
                     </ul>
                   </div>
                 )}
@@ -753,13 +899,13 @@ export function SidebarApp() {
                   Customization
                 </h3>
                 <div className="flex-1 flex flex-col min-h-0 p-1">
-                   <NavbarSettings 
-                     config={navbarConfig} 
-                     onUpdate={(newConfig) => {
-                       setNavbarConfig(newConfig);
-                       browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
-                     }} 
-                   />
+                  <NavbarSettings
+                    config={navbarConfig}
+                    onUpdate={(newConfig) => {
+                      setNavbarConfig(newConfig);
+                      browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
+                    }}
+                  />
                 </div>
               </section>
             )}
@@ -768,28 +914,32 @@ export function SidebarApp() {
       )}
 
       {dialog && dialog.isOpen && (
-        <div 
-          className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${
-            dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'
-          }`}
+        <div
+          className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'
+            }`}
           onClick={() => setDialog(null)}
         >
-          <div 
-            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${
-              dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'
-            } ${dialog.source === 'main' ? '' : 'mr-4'}`}
+          <div
+            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'
+              } ${dialog.source === 'main' ? '' : 'mr-4'}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex flex-col items-center gap-3 text-center">
-              {dialog.toon.photo && (
-                <img src={dialog.toon.photo} className={`h-16 w-16 rounded-full border-2 shadow-md ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
-              )}
+              {(() => {
+                const photo = getToonPhoto(dialog.toon);
+                return photo ? (
+                  <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
+                ) : null;
+              })()}
               <div>
-                <h4 className="text-lg font-bold text-white leading-tight">{dialog.toon.name}</h4>
+                <h4 className="text-lg font-bold text-white leading-tight">
+                  {dialog.toon.name}
+                  {dialog.toon.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon.laff})</span>}
+                </h4>
                 <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
-                  {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` : 
-                   dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                   `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
+                  {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                    dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                      `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
                 </p>
               </div>
             </div>
@@ -801,9 +951,8 @@ export function SidebarApp() {
                 </label>
                 <textarea
                   autoFocus
-                  className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner ${
-                    dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
-                  }`}
+                  className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
+                    }`}
                   placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, slow, training, bad choices" : "Nice, helpful, communicative, strategic etc"}
                   rows={3}
                   value={dialogNote}
@@ -820,13 +969,27 @@ export function SidebarApp() {
                     setDialog(null);
                   });
                 }}
-                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 ${
-                  (dialog.type === 'remove' || dialog.listKey === STORAGE_KEYS.BLOCKED) ? 'bg-red-600 hover:bg-red-700 ring-red-400/50' : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
-                } focus:outline-none focus:ring-2`}
+                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 ${(dialog.type === 'remove' || dialog.listKey === STORAGE_KEYS.BLOCKED) ? 'bg-red-600 hover:bg-red-700 ring-red-400/50' : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
+                  } focus:outline-none focus:ring-2`}
               >
-                {dialog.type === 'remove' ? 'Remove Toon' : 
-                 dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
+                  {dialog.type === 'remove' ? 'Remove Toon' :
+                  dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
               </button>
+              {dialog.type === 'remove' && (
+                <button
+                  onClick={() => {
+                    const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+                    setDialog({
+                      ...dialog,
+                      type: 'move',
+                      listKey: otherKey
+                    });
+                  }}
+                  className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95"
+                >
+                  Move to {dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons'}
+                </button>
+              )}
               <button
                 onClick={() => setDialog(null)}
                 className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95"
