@@ -1,9 +1,11 @@
-import react, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { groupTypes } from './groupTypes';
 
 const STORAGE_KEYS = {
   FAVORITES: 'toonhq-favorites',
   BLOCKED: 'toonhq-blocked',
+  SIDEBAR_OPEN: 'toonhqplus-sidebar-open',
+  NAVBAR_CONFIG: 'toonhqplus-navbar-config',
 } as const;
 
 interface ToonData {
@@ -145,7 +147,7 @@ function ToonRow({
     });
   };
 
-  const rowRef = react.useRef<HTMLLIElement>(null);
+  const rowRef = React.useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     if (isHovered && rowRef.current) {
@@ -275,9 +277,186 @@ function ToonRow({
   );
 }
 
+const DEFAULT_NAV_ITEMS = [
+  { id: 'invasions', label: 'Invasions', href: '/invasions/', colorClass: 'blue' },
+  { id: 'groups', label: 'Groups', href: '/groups/', colorClass: 'green' },
+  { id: 'fishing', label: 'Fishing', href: '/fishing/', colorClass: 'fishing' },
+  { id: 'ccg', label: 'CCG', href: '/ccg/', colorClass: 'steel' },
+  { id: 'field-offices', label: 'Field Offices', href: '/field-offices/', colorClass: 'steel' },
+  { id: 'gardening', label: 'Gardening', href: '/gardening/', colorClass: 'green' },
+  { id: 'doodles', label: 'Pet Shop Doodles', href: '/doodles/', colorClass: 'shop' },
+];
+
+function NavbarSettings({ 
+  config, 
+  onUpdate 
+}: { 
+  config: { pinned: string[], dropdown: string[] }, 
+  onUpdate: (newConfig: { pinned: string[], dropdown: string[] }) => void 
+}) {
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverInfo, setDragOverInfo] = useState<{ list: 'pinned' | 'dropdown', index: number } | null>(null);
+
+  const moveItem = (id: string, from: 'pinned' | 'dropdown', to: 'pinned' | 'dropdown', atIndex?: number) => {
+    const newConfig = { ...config };
+    // Remove from source
+    const items = [...newConfig[from]].filter(itemId => itemId !== id);
+    newConfig[from] = items;
+    
+    // Add to target
+    const targetItems = [...newConfig[to]];
+    const insertAt = atIndex !== undefined ? atIndex : targetItems.length;
+    targetItems.splice(insertAt, 0, id);
+    newConfig[to] = targetItems;
+    
+    onUpdate(newConfig);
+  };
+
+  const onDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const onDragOver = (e: React.DragEvent, list: 'pinned' | 'dropdown', index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverInfo({ list, index });
+  };
+
+  const onDragOverRow = (e: React.DragEvent, list: 'pinned' | 'dropdown', id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const items = config[list];
+    const index = items.indexOf(id);
+    
+    // Choose the index before or after the row based on cursor position
+    const targetIndex = e.clientY < midY ? index : index + 1;
+    setDragOverInfo({ list, index: targetIndex });
+  };
+
+  const onDrop = (e: React.DragEvent, targetList: 'pinned' | 'dropdown', targetIndex?: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = e.dataTransfer.getData('text/plain');
+    if (!id) return;
+
+    const sourceList = config.pinned.includes(id) ? 'pinned' : 'dropdown';
+    
+    // If targetIndex isn't provided (e.g. drop on empty container), append to end
+    let finalIndex = targetIndex !== undefined ? targetIndex : config[targetList].length;
+
+    if (sourceList === targetList) {
+      const items = [...config[targetList]];
+      const oldIndex = items.indexOf(id);
+      if (oldIndex !== -1) {
+        items.splice(oldIndex, 1);
+        // Adjust index if we moved an item from before the target to after it
+        const adjustedIndex = finalIndex > oldIndex ? finalIndex - 1 : finalIndex;
+        items.splice(adjustedIndex, 0, id);
+        onUpdate({ ...config, [targetList]: items });
+      }
+    } else {
+      moveItem(id, sourceList, targetList, finalIndex);
+    }
+    setDraggedId(null);
+    setDragOverInfo(null);
+  };
+
+  const renderDropZone = (list: 'pinned' | 'dropdown', index: number) => {
+    const isActive = dragOverInfo?.list === list && dragOverInfo?.index === index;
+    // Don't show drop zone immediately before or after the item being dragged in the same list
+    if (draggedId) {
+      const isSourceList = config[list].includes(draggedId);
+      if (isSourceList) {
+        const itemIdx = config[list].indexOf(draggedId);
+        if (index === itemIdx || index === itemIdx + 1) return null;
+      }
+    }
+
+    return (
+      <div
+        onDragOver={(e) => onDragOver(e, list, index)}
+        onDragLeave={() => setDragOverInfo(null)}
+        onDrop={(e) => onDrop(e, list, index)}
+        className={`transition-all duration-200 rounded ${isActive ? 'h-10 bg-emerald-500/20 border-2 border-dashed border-emerald-500/40 my-1' : 'h-1'}`}
+      />
+    );
+  };
+
+  const renderItemRow = (id: string, listType: 'pinned' | 'dropdown') => {
+    const item = DEFAULT_NAV_ITEMS.find(n => n.id === id);
+    if (!item) return null;
+    const isDragging = draggedId === id;
+
+    return (
+      <div 
+        key={id} 
+        draggable
+        onDragStart={(e) => onDragStart(e, id)}
+        onDragOver={(e) => onDragOverRow(e, listType, id)}
+        onDrop={(e) => {
+          // Calculate the nearest index again on drop
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          const index = config[listType].indexOf(id);
+          onDrop(e, listType, e.clientY < midY ? index : index + 1);
+        }}
+        onDragEnd={() => {
+          setDraggedId(null);
+          setDragOverInfo(null);
+        }}
+        className={`flex items-center justify-between gap-2 rounded bg-black/20 p-2 hover:bg-black/30 cursor-move transition-all ${isDragging ? 'opacity-20 scale-95' : 'opacity-100'}`}
+      >
+        <div className="flex items-center gap-2 pointer-events-none">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/30"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+          <div className={`h-2 w-2 rounded-full bg-current ${item.colorClass === 'blue' ? 'text-blue-400' : item.colorClass === 'green' ? 'text-green-400' : item.colorClass === 'steel' ? 'text-slate-400' : item.colorClass === 'fishing' ? 'text-cyan-400' : 'text-pink-400'}`} />
+          <span className="text-sm font-medium text-white">{item.label}</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4 overflow-y-auto pr-1">
+      <p className="text-xs text-green-100/70 leading-relaxed bg-black/20 p-2 rounded border border-white/5">
+        Drag and drop items to customize your navigation bar. <strong>Pinned Pages</strong> show in the main bar, while <strong>Hidden Pages</strong> move to the "More" menu.
+      </p>
+      <div>
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-green-300/80">Pinned Pages</h4>
+        <div className="flex flex-col">
+          {config.pinned.map((id, i) => (
+            <React.Fragment key={id}>
+              {renderDropZone('pinned', i)}
+              {renderItemRow(id, 'pinned')}
+            </React.Fragment>
+          ))}
+          {renderDropZone('pinned', config.pinned.length)}
+          {config.pinned.length === 0 && <div className="text-center text-xs italic text-green-200/30 p-4 border-2 border-dashed border-white/5 rounded">Drop items here to pin.</div>}
+        </div>
+      </div>
+      <div>
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-green-300/80">Hidden Pages</h4>
+        <div className="flex flex-col">
+          {config.dropdown.map((id, i) => (
+            <React.Fragment key={id}>
+              {renderDropZone('dropdown', i)}
+              {renderItemRow(id, 'dropdown')}
+            </React.Fragment>
+          ))}
+          {renderDropZone('dropdown', config.dropdown.length)}
+          {config.dropdown.length === 0 && <div className="text-center text-xs italic text-green-200/30 p-4 border-2 border-dashed border-white/5 rounded">Drop items here to hide.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<'toons' | 'history'>('toons');
+  const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('toons');
 
   const [favorites, setFavorites] = useState<number[]>([]);
   const [blocked, setBlocked] = useState<number[]>([]);
@@ -288,6 +467,11 @@ export function SidebarApp() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
 
+  const [navbarConfig, setNavbarConfig] = useState<{ pinned: string[], dropdown: string[] }>({
+    pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+    dropdown: ['field-offices', 'gardening', 'doodles']
+  });
+
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
   const [hoveredToonName, setHoveredToonName] = useState<string | null>(null);
 
@@ -296,10 +480,13 @@ export function SidebarApp() {
       setFavorites(f);
       setBlocked(b);
     });
-    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids']).then((result) => {
+    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids', STORAGE_KEYS.NAVBAR_CONFIG]).then((result) => {
       setHistoryGroups((result['toonhqplus-history'] as Record<number, any>) || {});
       setHistoryToons((result['toonhqplus-toons'] as Record<number, any>) || {});
       setActiveToonIds((result['toonhqplus-active-toon-ids'] as number[]) || []);
+      if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
+        setNavbarConfig(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
+      }
     });
   }, []);
 
@@ -328,7 +515,10 @@ export function SidebarApp() {
       otherListName
     });
     setDialogNote(toon.note || '');
-    if (source === 'sidebar' || !open) setOpen(true); // Ensure sidebar is open if triggered from it or if it was closed
+    if (source === 'sidebar' || !open) {
+      setOpen(true);
+      browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: true });
+    }
   }, [favorites, blocked, open]);
 
   useEffect(() => {
@@ -360,11 +550,20 @@ export function SidebarApp() {
 
   useEffect(() => {
     refresh();
+    browser.storage.local.get(STORAGE_KEYS.SIDEBAR_OPEN).then((result) => {
+      if (result[STORAGE_KEYS.SIDEBAR_OPEN] !== undefined) {
+        setOpen(!!result[STORAGE_KEYS.SIDEBAR_OPEN]);
+      }
+    });
+
     const listener = (
       changes: { [key: string]: { newValue?: unknown } },
       areaName: string,
     ) => {
       if (areaName !== 'local') return;
+      if (STORAGE_KEYS.SIDEBAR_OPEN in changes) {
+        setOpen(!!changes[STORAGE_KEYS.SIDEBAR_OPEN]?.newValue);
+      }
       if (STORAGE_KEYS.FAVORITES in changes)
         setFavorites(normalizeToIds(changes[STORAGE_KEYS.FAVORITES]?.newValue));
       if (STORAGE_KEYS.BLOCKED in changes)
@@ -378,6 +577,9 @@ export function SidebarApp() {
       if ('toonhqplus-active-toon-ids' in changes) {
         setActiveToonIds((changes['toonhqplus-active-toon-ids']?.newValue as number[]) || []);
       }
+      if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
+        setNavbarConfig(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
+      }
     };
     browser.storage.onChanged.addListener(listener);
     return () => browser.storage.onChanged.removeListener(listener);
@@ -388,7 +590,11 @@ export function SidebarApp() {
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => {
+            const next = !open;
+            setOpen(next);
+            browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: next });
+          }}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
         >
           {open ? 'Close' : 'ToonHQ+'}
@@ -412,6 +618,12 @@ export function SidebarApp() {
               }}
             >
               History
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              Settings
             </button>
           </div>
 
@@ -532,6 +744,23 @@ export function SidebarApp() {
                     </ul>
                   </div>
                 )}
+              </section>
+            )}
+
+            {activeTab === 'settings' && (
+              <section className="flex-1 flex flex-col min-h-0">
+                <h3 className="mb-3 shrink-0 text-sm font-medium text-green-50">
+                  Customization
+                </h3>
+                <div className="flex-1 flex flex-col min-h-0 p-1">
+                   <NavbarSettings 
+                     config={navbarConfig} 
+                     onUpdate={(newConfig) => {
+                       setNavbarConfig(newConfig);
+                       browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
+                     }} 
+                   />
+                </div>
               </section>
             )}
           </div>

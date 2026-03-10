@@ -5,7 +5,12 @@ import './style.css';
 
 
 
-const STORAGE_KEYS = { FAVORITES: 'toonhq-favorites', BLOCKED: 'toonhq-blocked' } as const;
+const STORAGE_KEYS = {
+  FAVORITES: 'toonhq-favorites',
+  BLOCKED: 'toonhq-blocked',
+  SIDEBAR_OPEN: 'toonhqplus-sidebar-open',
+  NAVBAR_CONFIG: 'toonhqplus-navbar-config',
+} as const;
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
 
@@ -558,6 +563,141 @@ const updateBossInfo = () => {
     tooltipEl.innerHTML = html;
   }
 }
+const CONFIGURABLE_NAV_ITEMS: Record<string, { label: string, href: string, colorClass: string }> = {
+  'invasions': { label: 'Invasions', href: '/invasions/', colorClass: 'blue' },
+  'groups': { label: 'Groups', href: '/groups/', colorClass: 'green' },
+  'fishing': { label: 'Fishing', href: '/fishing/', colorClass: 'fishing' },
+  'ccg': { label: 'CCG', href: '/ccg/', colorClass: 'steel' },
+  'field-offices': { label: 'Field Offices', href: '/field-offices/', colorClass: 'steel' },
+  'gardening': { label: 'Gardening', href: '/gardening/', colorClass: 'green' },
+  'doodles': { label: 'Pet Shop Doodles', href: '/doodles/', colorClass: 'shop' },
+};
+
+function applyNavbarCustomization(config: { pinned: string[], dropdown: string[] }) {
+  const navbarUl = document.querySelector('ul.navbar-nav.ml-auto');
+  if (!navbarUl) return;
+
+  // Avoid infinite loops & redundant updates
+  const currentConfigStr = JSON.stringify(config);
+  if (navbarUl.getAttribute('data-toonhq-customized') === currentConfigStr) return;
+  navbarUl.setAttribute('data-toonhq-customized', currentConfigStr);
+
+  // 1. Identify "More" dropdown and its components
+  const moreLi = navbarUl.querySelector('.nav-item.b-nav-dropdown.dropdown.red') as HTMLElement | null;
+  const moreDropdownUl = moreLi?.querySelector('.dropdown-menu') as HTMLElement | null;
+  if (!moreLi || !moreDropdownUl) return;
+
+  // 2. Map all configurable nodes (both main and dropdown versions)
+  // We want to keep the original nodes to preserve Vue/Bootstrap listeners
+  const nodesMap: Record<string, { mobile?: HTMLElement, desktop?: HTMLElement }> = {};
+  
+  // Scrape everything currently in the DOM
+  const allLis = navbarUl.querySelectorAll('li');
+  allLis.forEach(li => {
+    if (li === moreLi) return;
+    const a = li.querySelector('a');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href) return;
+
+    for (const [id, item] of Object.entries(CONFIGURABLE_NAV_ITEMS)) {
+      if (href.includes(item.href)) {
+        if (!nodesMap[id]) nodesMap[id] = {};
+        
+        const isDropdownItem = a.classList.contains('dropdown-item');
+        const isMobileOnly = li.classList.contains('d-lg-none');
+
+        if (isDropdownItem) {
+          nodesMap[id].desktop = li as HTMLElement;
+        } else if (isMobileOnly) {
+          nodesMap[id].mobile = li as HTMLElement;
+        } else {
+          // It's a standard pinned item
+          nodesMap[id].mobile = li as HTMLElement;
+        }
+      }
+    }
+  });
+
+  // 3. Clear the containers temporarily
+  // We don't use innerHTML = '' to avoid losing event listeners on the "More" toggle
+  const fragment = document.createDocumentFragment();
+  moreDropdownUl.innerHTML = '';
+
+  // 4. Re-append items based on config
+  
+  // Process Pinned
+  config.pinned.forEach(id => {
+    const item = CONFIGURABLE_NAV_ITEMS[id];
+    let node = nodesMap[id]?.mobile || nodesMap[id]?.desktop;
+    
+    if (node) {
+      // Ensure it has pinned styling
+      node.className = item.colorClass;
+      node.removeAttribute('role');
+      const a = node.querySelector('a');
+      if (a) {
+        a.className = ''; // Remove dropdown-item
+        a.removeAttribute('role');
+      }
+      fragment.appendChild(node);
+    }
+  });
+
+  // Process Dropdown
+  config.dropdown.forEach(id => {
+    const item = CONFIGURABLE_NAV_ITEMS[id];
+    
+    // We need two versions: Mobile-only in main UL, and Dropdown-item in More menu
+    let mobileNode = nodesMap[id]?.mobile;
+    let desktopNode = nodesMap[id]?.desktop;
+
+    // Ensure we have a mobile version (pinned style + hidden on desktop)
+    if (!mobileNode && desktopNode) {
+      mobileNode = desktopNode.cloneNode(true) as HTMLElement;
+    }
+    if (mobileNode) {
+      mobileNode.className = `${item.colorClass} d-block d-lg-none`;
+      mobileNode.removeAttribute('role');
+      const a = mobileNode.querySelector('a');
+      if (a) {
+        a.className = '';
+        a.removeAttribute('role');
+      }
+      fragment.appendChild(mobileNode);
+    }
+
+    // Ensure we have a desktop version (inside the dropdown)
+    if (!desktopNode && mobileNode) {
+      desktopNode = mobileNode.cloneNode(true) as HTMLElement;
+    }
+    if (desktopNode) {
+      desktopNode.className = item.colorClass;
+      desktopNode.setAttribute('role', 'presentation');
+      const a = desktopNode.querySelector('a');
+      if (a) {
+        a.className = 'dropdown-item';
+        a.setAttribute('role', 'menuitem');
+      }
+      moreDropdownUl.appendChild(desktopNode);
+    }
+  });
+
+  // 5. Finalize the navbar
+  // Keep the "More" button visible only if needed
+  if (config.dropdown.length > 0) {
+    moreLi.classList.remove('d-none');
+    moreLi.classList.add('d-lg-block');
+    fragment.appendChild(moreLi);
+  } else {
+    moreLi.classList.add('d-none');
+    moreLi.classList.remove('d-lg-block');
+  }
+
+  navbarUl.innerHTML = '';
+  navbarUl.appendChild(fragment);
+}
+
 const groupsState: Record<number, any> = {};
 const activeToons: Record<number, any> = {};
 
@@ -772,10 +912,20 @@ export default defineContentScript({
 
     updateBossInfo();
     applyRowHighlights();
+
+    browser.storage.local.get(STORAGE_KEYS.NAVBAR_CONFIG).then((result) => {
+      if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
+        applyNavbarCustomization(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
+      }
+    });
+
     browser.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
       if (STORAGE_KEYS.FAVORITES in changes || STORAGE_KEYS.BLOCKED in changes)
         applyRowHighlights();
+      if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
+        applyNavbarCustomization(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
+      }
     });
 
     let highlightTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -785,6 +935,12 @@ export default defineContentScript({
         highlightTimeout = null;
         applyRowHighlights();
         updateBossInfo();
+        
+        browser.storage.local.get(STORAGE_KEYS.NAVBAR_CONFIG).then((result) => {
+          if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
+            applyNavbarCustomization(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
+          }
+        });
       }, 150);
     });
     observer.observe(document.body, { childList: true, subtree: true });
