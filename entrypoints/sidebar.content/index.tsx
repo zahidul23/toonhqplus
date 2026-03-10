@@ -590,7 +590,7 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   // 2. Map all configurable nodes (both main and dropdown versions)
   // We want to keep the original nodes to preserve Vue/Bootstrap listeners
   const nodesMap: Record<string, { mobile?: HTMLElement, desktop?: HTMLElement }> = {};
-  
+
   // Scrape everything currently in the DOM
   const allLis = navbarUl.querySelectorAll('li');
   allLis.forEach(li => {
@@ -603,7 +603,7 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
     for (const [id, item] of Object.entries(CONFIGURABLE_NAV_ITEMS)) {
       if (href.includes(item.href)) {
         if (!nodesMap[id]) nodesMap[id] = {};
-        
+
         const isDropdownItem = a.classList.contains('dropdown-item');
         const isMobileOnly = li.classList.contains('d-lg-none');
 
@@ -625,12 +625,12 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   moreDropdownUl.innerHTML = '';
 
   // 4. Re-append items based on config
-  
+
   // Process Pinned
   config.pinned.forEach(id => {
     const item = CONFIGURABLE_NAV_ITEMS[id];
     let node = nodesMap[id]?.mobile || nodesMap[id]?.desktop;
-    
+
     if (node) {
       // Ensure it has pinned styling
       node.className = item.colorClass;
@@ -647,7 +647,7 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   // Process Dropdown
   config.dropdown.forEach(id => {
     const item = CONFIGURABLE_NAV_ITEMS[id];
-    
+
     // We need two versions: Mobile-only in main UL, and Dropdown-item in More menu
     let mobileNode = nodesMap[id]?.mobile;
     let desktopNode = nodesMap[id]?.desktop;
@@ -716,15 +716,15 @@ export default defineContentScript({
         toonsData.forEach((toon: any) => {
           activeToons[toon.id] = toon;
           toons[toon.id] = toon;
-          
+
           // Sync with storage if better data seen
           const cached = toonsCache[toon.id];
-          if (!cached || 
-              cached.laff !== toon.laff || 
-              cached.level !== toon.level || 
-              cached.name !== toon.name ||
-              cached.photo !== toon.photo ||
-              cached.species !== toon.species) {
+          if (!cached ||
+            cached.laff !== toon.laff ||
+            cached.level !== toon.level ||
+            cached.name !== toon.name ||
+            cached.photo !== toon.photo ||
+            cached.species !== toon.species) {
             toonsCache[toon.id] = {
               ...(cached || {}),
               ...toon,
@@ -733,7 +733,7 @@ export default defineContentScript({
           }
         });
         console.log('[ToonHQ+] Initial active toons loaded:', Object.keys(activeToons).length, 'toons.');
-        browser.storage.local.set({ 
+        browser.storage.local.set({
           'toonhqplus-active-toon-ids': Object.keys(activeToons).map(Number),
           'toonhqplus-toons': toonsCache
         });
@@ -742,38 +742,38 @@ export default defineContentScript({
       console.error('[ToonHQ+] Failed to fetch active toons', e);
     }
 
+    const syncToonDataInternal = (members: any[], toonsCache: Record<number, any>) => {
+      let changed = false;
+      members.forEach((m) => {
+        const incoming = m.toon || (m.id && m.name ? m : { ...m });
+        if (incoming && incoming.id) {
+          const id = incoming.id;
+          toons[id] = incoming;
+
+          const cached = toonsCache[id];
+          if (!cached ||
+            cached.laff !== incoming.laff ||
+            cached.level !== incoming.level ||
+            cached.name !== incoming.name ||
+            cached.photo !== incoming.photo ||
+            cached.species !== incoming.species) {
+            toonsCache[id] = {
+              ...(cached || {}),
+              ...incoming,
+              lastSeen: new Date().toISOString()
+            };
+            changed = true;
+          }
+        }
+      });
+      return changed;
+    };
+
     const syncToonData = (members: any[]) => {
       if (!members || !Array.isArray(members)) return;
-      
       browser.storage.local.get('toonhqplus-toons').then(result => {
         const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
-        let changed = false;
-
-        members.forEach((m) => {
-          const incoming = m.toon || (m.id && m.name ? m : { ...m }); // Handle member, toon, or raw data
-          if (incoming && incoming.id) {
-            const id = incoming.id;
-            toons[id] = incoming;
-            
-            const cached = toonsCache[id];
-            // Update if no cache or if stats changed
-            if (!cached || 
-                cached.laff !== incoming.laff || 
-                cached.level !== incoming.level || 
-                cached.name !== incoming.name || 
-                cached.photo !== incoming.photo ||
-                cached.species !== incoming.species) {
-              toonsCache[id] = {
-                ...(cached || {}),
-                ...incoming,
-                lastSeen: new Date().toISOString()
-              };
-              changed = true;
-            }
-          }
-        });
-
-        if (changed) {
+        if (syncToonDataInternal(members, toonsCache)) {
           browser.storage.local.set({ 'toonhqplus-toons': toonsCache });
         }
       });
@@ -852,7 +852,7 @@ export default defineContentScript({
       }
     };
 
-    const syncGroupHistory = (group: any) => {
+    const syncGroupHistory = (group: any, leavingId?: number) => {
       if (!group || !Array.isArray(group.members)) return;
 
       const activeMember = group.members.find((m: any) => m.toon && activeToons[m.toon.id]);
@@ -862,8 +862,8 @@ export default defineContentScript({
         const history = (result['toonhqplus-history'] as Record<number, any>) || {};
         const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
 
-        // Update toon cache via syncToonData to avoid duplication
-        syncToonData(group.members);
+        // Merge toon data updates into the same atomic-ish write
+        syncToonDataInternal(group.members, toonsCache);
 
         const groupHistory = history[group.id] || {
           id: group.id,
@@ -873,30 +873,24 @@ export default defineContentScript({
           userJoinedAt: activeMember.joined || group.created
         };
 
-        // Ensure we preserve the earliest user join time
         if (!groupHistory.userJoinedAt || new Date(activeMember.joined) < new Date(groupHistory.userJoinedAt)) {
           groupHistory.userJoinedAt = activeMember.joined || group.created;
         }
 
         const metadata = groupHistory.memberMetadata || {};
-        
-        // Migrate old format if needed
-        if (groupHistory.memberIds) {
-          groupHistory.memberIds.forEach((id: number) => {
-            if (!metadata[id]) metadata[id] = { joined: group.created, left: null };
-          });
-          delete groupHistory.memberIds;
-        }
-        if (groupHistory.members) {
-          groupHistory.members.forEach((m: any) => {
-            if (m.toon?.id && !metadata[m.toon.id]) {
-              metadata[m.toon.id] = { joined: m.joined || group.created, left: m.left || null };
-            }
-          });
-          delete groupHistory.members;
-        }
 
-        // Update with current members
+        // Update with current members and detect leaves
+        const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
+
+        // 1. Mark anyone not in current members as left (if not already marked)
+        Object.keys(metadata).forEach(idKey => {
+          const id = Number(idKey);
+          if (!currentMemberIds.has(id) && !metadata[id].left) {
+            metadata[id].left = new Date().toISOString();
+          }
+        });
+
+        // 2. Add/Update current members
         group.members.forEach((m: any) => {
           if (m.toon && m.toon.id) {
             const id = m.toon.id;
@@ -906,6 +900,11 @@ export default defineContentScript({
             };
           }
         });
+
+        // 3. Handle explicit leave if provided (redundancy for speed)
+        if (leavingId && metadata[leavingId]) {
+          metadata[leavingId].left = metadata[leavingId].left || new Date().toISOString();
+        }
 
         groupHistory.memberMetadata = metadata;
         history[group.id] = groupHistory;
@@ -983,9 +982,11 @@ export default defineContentScript({
                   }
                 } else if (eventName === 'member_left') {
                   if (groupsState[data.group]) {
+                    const leavingToonId = groupsState[data.group].members.find((m: any) => m.id === data.id)?.toon?.id;
                     groupsState[data.group].members = groupsState[data.group].members.filter(
                       (m: any) => m.id !== data.id
                     );
+                    syncGroupHistory(groupsState[data.group], leavingToonId);
                   }
                 }
               } else {
@@ -1075,7 +1076,7 @@ export default defineContentScript({
         highlightTimeout = null;
         applyRowHighlights();
         updateBossInfo();
-        
+
         browser.storage.local.get(STORAGE_KEYS.NAVBAR_CONFIG).then((result) => {
           if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
             applyNavbarCustomization(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
