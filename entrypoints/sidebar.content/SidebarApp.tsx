@@ -7,6 +7,8 @@ const STORAGE_KEYS = {
   SIDEBAR_OPEN: 'toonhqplus-sidebar-open',
   NAVBAR_CONFIG: 'toonhqplus-navbar-config',
   NOTES: 'toonhqplus-notes',
+  BOSS_INFO_ENABLED: 'toonhqplus-boss-info-enabled',
+  ACTIVE_TAB: 'toonhqplus-active-tab',
 } as const;
 
 interface ToonData {
@@ -553,6 +555,7 @@ function NavbarSettings({
 
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
+  const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
   const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('history');
 
   const [favorites, setFavorites] = useState<number[]>([]);
@@ -612,13 +615,19 @@ export function SidebarApp() {
       setFavorites(f);
       setBlocked(b);
     });
-    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids', STORAGE_KEYS.NAVBAR_CONFIG, STORAGE_KEYS.NOTES]).then((result) => {
+    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids', STORAGE_KEYS.NAVBAR_CONFIG, STORAGE_KEYS.NOTES, STORAGE_KEYS.BOSS_INFO_ENABLED, STORAGE_KEYS.ACTIVE_TAB]).then((result) => {
       setHistoryGroups((result['toonhqplus-history'] as Record<number, any>) || {});
       setHistoryToons((result['toonhqplus-toons'] as Record<number, any>) || {});
       setNotes((result[STORAGE_KEYS.NOTES] as Record<number, string>) || {});
       setActiveToonIds((result['toonhqplus-active-toon-ids'] as number[]) || []);
       if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
         setNavbarConfig(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
+      }
+      if (STORAGE_KEYS.BOSS_INFO_ENABLED in result) {
+        setBossInfoEnabled(result[STORAGE_KEYS.BOSS_INFO_ENABLED] !== false);
+      }
+      if (result[STORAGE_KEYS.ACTIVE_TAB]) {
+        setActiveTab(result[STORAGE_KEYS.ACTIVE_TAB] as any);
       }
     });
   }, []);
@@ -713,6 +722,12 @@ export function SidebarApp() {
       if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
         setNavbarConfig(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
       }
+      if (STORAGE_KEYS.BOSS_INFO_ENABLED in changes) {
+        setBossInfoEnabled(changes[STORAGE_KEYS.BOSS_INFO_ENABLED]?.newValue !== false);
+      }
+      if (STORAGE_KEYS.ACTIVE_TAB in changes) {
+        setActiveTab(changes[STORAGE_KEYS.ACTIVE_TAB]?.newValue as any);
+      }
       if (STORAGE_KEYS.NOTES in changes) {
         setNotes((changes[STORAGE_KEYS.NOTES]?.newValue as Record<number, string>) || {});
       }
@@ -750,19 +765,26 @@ export function SidebarApp() {
               onClick={() => {
                 setActiveTab('history');
                 setSelectedHistoryGroup(null);
+                browser.storage.local.set({ [STORAGE_KEYS.ACTIVE_TAB]: 'history' });
               }}
             >
               History
             </button>
             <button
               className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-              onClick={() => setActiveTab('toons')}
+              onClick={() => {
+                setActiveTab('toons');
+                browser.storage.local.set({ [STORAGE_KEYS.ACTIVE_TAB]: 'toons' });
+              }}
             >
               Toons
             </button>
             <button
               className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-              onClick={() => setActiveTab('settings')}
+              onClick={() => {
+                setActiveTab('settings');
+                browser.storage.local.set({ [STORAGE_KEYS.ACTIVE_TAB]: 'settings' });
+              }}
             >
               Settings
             </button>
@@ -955,6 +977,25 @@ export function SidebarApp() {
                         browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
                       }}
                     />
+
+                    <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-7 w-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+                        </div>
+                        <div className="text-sm font-bold text-white">Boss Info Overlay</div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const next = !bossInfoEnabled;
+                          setBossInfoEnabled(next);
+                          browser.storage.local.set({ [STORAGE_KEYS.BOSS_INFO_ENABLED]: next });
+                        }}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${bossInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-3 pt-3 border-t border-white/5">

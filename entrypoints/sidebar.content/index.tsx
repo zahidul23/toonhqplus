@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   BLOCKED: 'toonhq-blocked',
   SIDEBAR_OPEN: 'toonhqplus-sidebar-open',
   NAVBAR_CONFIG: 'toonhqplus-navbar-config',
+  BOSS_INFO_ENABLED: 'toonhqplus-boss-info-enabled',
 } as const;
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
@@ -45,7 +46,7 @@ function injectHighlightStyles() {
     tr.group-member-row.${ROW_CLASS_BLOCKED} td { background: rgba(239, 68, 68, 0.12) !important; }
 
     /* enlarge dialog used by site; original rule sets 900px !important */
-    .group-details-dialog { width: 1000px !important; max-width: 1000px !important; }
+    .group-details-dialog { width: 980px !important; max-width: 980px !important; }
 
     /* tooltip for boss info */
     .boss-info {
@@ -510,6 +511,16 @@ const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, boss
 };
 
 const updateBossInfo = () => {
+  if (bossInfoEnabled === false) {
+    const dialog = document.querySelector('.group-details-dialog');
+    const thisBossInfo = dialog?.querySelector(".boss-info");
+    if (thisBossInfo) {
+      // If it exists but we are disabled, hide/remove it
+      thisBossInfo.remove();
+      // If we made a wrapper, we might need to revert that too, but removing the info is usually enough
+    }
+    return;
+  }
   const dialog = document.querySelector('.group-details-dialog');
   const thisBossInfo = dialog?.querySelector(".boss-info");
   if (!dialog || !thisBossInfo) return;
@@ -702,6 +713,7 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
 
 const groupsState: Record<number, any> = {};
 const activeToons: Record<number, any> = {};
+let bossInfoEnabled = true;
 
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
@@ -1003,17 +1015,22 @@ export default defineContentScript({
     });
 
     injectHighlightStyles();
-    // also ensure any .group-details-dialog gets forced to 1000px width inline
+    // also ensure any .group-details-dialog gets forced to 980px width inline
     const fixDialog = (d: HTMLElement) => {
       d.style.setProperty('width', '980px', 'important');
+      if (bossInfoEnabled === false) return;
       // if dialog contains an h4, log its text and maybe append info
       const h4 = d.querySelector('h4');
       if (h4) {
+        if (d.querySelector('.boss-info')) {
+          updateBossInfo();
+          return;
+        }
         const title = h4.innerText.trim();
         if (title === 'CEO' || title === 'CJ') {
           // create a wrapper div to hold both headings
           const wrapper = document.createElement('div');
-          wrapper.className = 'text-center mt-2 mb-3';
+          wrapper.className = '';
           // flex-center with gap
           wrapper.style.display = 'flex';
           wrapper.style.justifyContent = 'center';
@@ -1024,12 +1041,13 @@ export default defineContentScript({
           const parent = h4.parentElement;
           if (parent) {
             parent.insertBefore(wrapper, h4);
+            h4.classList.add('text-center', 'mt-2', 'mb-3');
             wrapper.appendChild(h4);
           }
 
           // new h4 for boss info (pink slips, lawyer count, etc)
           const newH4 = document.createElement('h4');
-          newH4.classList.add('boss-info');
+          newH4.classList.add('boss-info', 'text-center', 'mt-2', 'mb-3');
           wrapper.appendChild(newH4);
         }
         setTimeout(() => {
@@ -1056,9 +1074,12 @@ export default defineContentScript({
     updateBossInfo();
     applyRowHighlights();
 
-    browser.storage.local.get(STORAGE_KEYS.NAVBAR_CONFIG).then((result) => {
+    browser.storage.local.get([STORAGE_KEYS.NAVBAR_CONFIG, STORAGE_KEYS.BOSS_INFO_ENABLED]).then((result) => {
       if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
         applyNavbarCustomization(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
+      }
+      if (STORAGE_KEYS.BOSS_INFO_ENABLED in result) {
+        bossInfoEnabled = result[STORAGE_KEYS.BOSS_INFO_ENABLED] !== false;
       }
     });
 
@@ -1068,6 +1089,14 @@ export default defineContentScript({
         applyRowHighlights();
       if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
         applyNavbarCustomization(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
+      }
+      if (STORAGE_KEYS.BOSS_INFO_ENABLED in changes) {
+        bossInfoEnabled = changes[STORAGE_KEYS.BOSS_INFO_ENABLED]?.newValue !== false;
+        if (bossInfoEnabled) {
+          document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
+        } else {
+          updateBossInfo();
+        }
       }
     });
 
