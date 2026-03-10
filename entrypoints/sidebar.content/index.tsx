@@ -735,11 +735,11 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   if (config.dropdown.length > 0) {
     moreLi.classList.remove('d-none');
     moreLi.classList.add('d-lg-block');
-    fragment.appendChild(moreLi);
   } else {
     moreLi.classList.add('d-none');
     moreLi.classList.remove('d-lg-block');
   }
+  fragment.appendChild(moreLi);
 
   navbarUl.innerHTML = '';
   navbarUl.appendChild(fragment);

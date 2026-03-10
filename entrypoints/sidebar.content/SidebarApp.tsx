@@ -330,7 +330,7 @@ function ToonRow({
           <textarea
             autoFocus
             className="w-full flex-1 resize-y custom-scrollbar max-h-32 rounded border border-[#1f8454] bg-black/20 px-2 py-1 text-xs text-white placeholder-green-100/30 focus:border-green-400 focus:outline-none"
-            placeholder={isBlocked ? "Rude, griefing, bad gags" : "Add a note..."}
+            placeholder={isBlocked ? "Rude, griefing, bad gags, etc..." : "Nice, helpful, communicative, strategic etc..."}
             style={{ fieldSizing: 'content' } as React.CSSProperties}
             value={noteDraft}
             onChange={(e) => setNoteDraft(e.target.value)}
@@ -1115,7 +1115,7 @@ export function SidebarApp() {
                     autoFocus
                     className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner custom-scrollbar resize-y min-h-[5rem] max-h-32 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
                       }`}
-                    placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, bad gags" : "Nice, helpful, communicative, strategic etc"}
+                    placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, bad gags, etc..." : "Nice, helpful, communicative, strategic etc..."}
                     style={{ fieldSizing: 'content' } as React.CSSProperties}
                     value={dialogNote}
                     onChange={(e) => setDialogNote(e.target.value)}
