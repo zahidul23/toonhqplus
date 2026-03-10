@@ -361,6 +361,8 @@ const getSuitLevel = (suitString: string) => {
   const isPrestiged = suitString.substring(1, 2) === '2';
   const levelPart = parseInt(suitString.substring(2), 16);
 
+  if (levelPart == 0) return 1;
+
   // Do presiged levels add onto the normal levels? Assume no for now
   let totalValue = isPrestiged ? 78 : ((4 * cogPart) + levelPart - 4);
 
