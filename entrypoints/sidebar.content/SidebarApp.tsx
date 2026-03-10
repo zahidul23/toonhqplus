@@ -261,7 +261,7 @@ function ToonRow({
                     type="button"
                     onClick={() => {
                       setIsEditing(true);
-                      setNoteDraft(toon.note || '');
+                      setNoteDraft(toon.note || note || '');
                     }}
                     className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white cursor-pointer"
                     title="Edit note"
