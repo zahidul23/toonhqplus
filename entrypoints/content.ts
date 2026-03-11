@@ -1,5 +1,5 @@
 export default defineContentScript({
-  matches: ['*://*.google.com/*'],
+  matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
   main() {
   },
 });
