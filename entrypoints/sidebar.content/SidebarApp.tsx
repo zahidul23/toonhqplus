@@ -172,6 +172,7 @@ function ToonRow({
   note,
   refresh,
   isHovered,
+  isJustAdded,
   onRequestDialog
 }: {
   toon: ToonData;
@@ -181,6 +182,7 @@ function ToonRow({
   note?: string;
   refresh: () => void;
   isHovered: boolean;
+  isJustAdded?: boolean;
   onRequestDialog: (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -200,7 +202,9 @@ function ToonRow({
   let bgColorClass = isHovered ? defaultHoverClass : 'hover:bg-[#10462d]/60';
   let textColorClass = 'text-white';
 
-  if (!isHovered) {
+  if (isJustAdded) {
+    bgColorClass = isBlocked ? 'bg-red-500/60 ring-2 ring-red-400' : 'bg-emerald-500/60 ring-2 ring-emerald-400';
+  } else if (!isHovered) {
     if (isOwnToon) {
       bgColorClass = 'bg-[#cae9fc] dark:bg-[#cae9fcbd]';
       textColorClass = 'text-[#004a77] dark:text-[#cae9fc]';
@@ -239,7 +243,7 @@ function ToonRow({
   return (
     <li
       ref={rowRef}
-      className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-colors ${bgColorClass} ${textColorClass}`}
+      className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-1000 ${bgColorClass} ${textColorClass}`}
     >
       <div className="flex items-center gap-1">
         <div className="flex flex-1 items-center gap-2 overflow-hidden">
@@ -575,6 +579,7 @@ export function SidebarApp() {
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
+  const [justAddedId, setJustAddedId] = useState<number | null>(null);
 
   const [navbarConfig, setNavbarConfig] = useState<{ pinned: string[], dropdown: string[] }>({
     pinned: ['invasions', 'groups', 'fishing', 'ccg'],
@@ -665,7 +670,14 @@ export function SidebarApp() {
       otherListName
     });
     setDialogNote(notes[Number(toon.id)] || '');
-    if (source === 'sidebar' || !open) {
+    if (source === 'main') {
+      setOpen(true);
+      setActiveTab('toons');
+      browser.storage.local.set({
+        [STORAGE_KEYS.SIDEBAR_OPEN]: true,
+        [STORAGE_KEYS.ACTIVE_TAB]: 'toons'
+      });
+    } else if (!open) {
       setOpen(true);
       browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: true });
     }
@@ -813,7 +825,7 @@ export function SidebarApp() {
                         const toon = historyToons[id];
                         if (!toon) return null;
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} onRequestDialog={handleRequestDialog} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === Number(toon.id)} onRequestDialog={handleRequestDialog} />;
                       })
                     )}
                   </ul>
@@ -831,7 +843,7 @@ export function SidebarApp() {
                         const toon = historyToons[id];
                         if (!toon) return null;
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} onRequestDialog={handleRequestDialog} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === Number(toon.id)} onRequestDialog={handleRequestDialog} />;
                       })
                     )}
                   </ul>
@@ -945,6 +957,7 @@ export function SidebarApp() {
                                 note={notes[id]}
                                 refresh={refresh}
                                 isHovered={false}
+                                isJustAdded={justAddedId === Number(toonData.id)}
                                 onRequestDialog={handleRequestDialog}
                               />
                             );
@@ -1162,6 +1175,10 @@ export function SidebarApp() {
                       });
                     } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
                       updateToonList(dialog.type, dialog.listKey, dialog.toon, dialogNote).then(() => {
+                        if (dialog.type === 'add' || dialog.type === 'move') {
+                          setJustAddedId(dialog.toon!.id);
+                          setTimeout(() => setJustAddedId(null), 500);
+                        }
                         refresh();
                         setDialog(null);
                       });
