@@ -1,7 +1,7 @@
 /**
  * db.ts — ToonHQ+ IndexedDB wrapper
  *
- * Database: "toonhqplus"  Version: 1
+ * Database: "toonhqplus"  Version: 2
  *
  * Object stores:
  *   toons         — keyed by numeric toon id; hashId secondary index
@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'toonhqplus';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -100,7 +100,19 @@ export function openDB(): Promise<IDBDatabase> {
       }
     };
 
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // Recover from empty DB (e.g. navfouc opened first with a high version and no onupgradeneeded)
+      if (db.objectStoreNames.length === 0) {
+        db.close();
+        dbPromise = null;
+        const delReq = indexedDB.deleteDatabase(DB_NAME);
+        delReq.onsuccess = () => openDB().then(resolve).catch(reject);
+        delReq.onerror = () => reject(delReq.error);
+        return;
+      }
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
@@ -108,7 +120,19 @@ export function openDB(): Promise<IDBDatabase> {
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
+const EXPECTED_STORES = ['toons', 'toony_toons', 'stinky_toons', 'notes', 'groups', 'group_members', 'settings'] as const;
+
 function tx(db: IDBDatabase, stores: string | string[], mode: IDBTransactionMode = 'readonly'): IDBTransaction {
+  const list = Array.isArray(stores) ? stores : [stores];
+  const missing = list.filter(s => !db.objectStoreNames.contains(s));
+  if (missing.length > 0) {
+    const existing = Array.from(db.objectStoreNames);
+    throw new Error(
+      `[ToonHQ+] IndexedDB: object store(s) not found: ${missing.join(', ')}. ` +
+      `Requested: ${list.join(', ')}. Existing in DB: ${existing.length ? existing.join(', ') : '(none)'}. ` +
+      `DB version may need upgrade (current: ${db.version}).`
+    );
+  }
   return db.transaction(stores, mode);
 }
 

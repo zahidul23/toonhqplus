@@ -6,6 +6,9 @@ export default defineContentScript({
     let hasConfig = false;
     try {
       await new Promise<void>((resolve) => {
+        // Open with version 1 so we never create the DB: only the sidebar's openDB() (with
+// onupgradeneeded) should do that. If we opened with DB_VERSION here and ran first,
+// the DB would be created at that version with no object stores.
         const req = indexedDB.open('toonhqplus', 1);
         req.onsuccess = () => {
           const db = req.result;
