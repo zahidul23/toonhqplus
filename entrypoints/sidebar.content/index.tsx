@@ -2,13 +2,32 @@ import ReactDOM from 'react-dom/client';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName } from './toonUtils';
 import './style.css';
+import {
+  openDB,
+  migrateFromLocalStorage,
+  getAllFromList,
+  getToon,
+  getToonByHashId,
+  putToon,
+  putToons,
+  putGroup,
+  putGroupMember,
+  putGroupMembers,
+  markMemberLeft,
+  getAllGroups,
+  getGroupMembers,
+  getSetting,
+  setSetting,
+  type ToonRecord,
+  type GroupRecord,
+  type GroupMemberRecord,
+} from './db';
 
 
 
 const STORAGE_KEYS = {
   FAVORITES: 'toonhq-favorites',
   BLOCKED: 'toonhq-blocked',
-  SIDEBAR_OPEN: 'toonhqplus-sidebar-open',
   NAVBAR_CONFIG: 'toonhqplus-navbar-config',
   BOSS_INFO_ENABLED: 'toonhqplus-boss-info-enabled',
 } as const;
@@ -233,11 +252,12 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
 
         if (!currentData || !toonIdAttr) return;
 
-        browser.storage.local.get([STORAGE_KEYS.FAVORITES, STORAGE_KEYS.BLOCKED]).then((result) => {
-          const favs: number[] = normalizeToIds(result[STORAGE_KEYS.FAVORITES]);
-          const blks: number[] = normalizeToIds(result[STORAGE_KEYS.BLOCKED]);
+        // Resolve current list membership from IndexedDB
+        Promise.all([
+          getAllFromList('toony_toons'),
+          getAllFromList('stinky_toons'),
+        ]).then(([favs, blks]) => {
           const tid = Number(toonIdAttr);
-
           const isFavorited = favs.includes(tid);
           const isBlocked = blks.includes(tid);
           const currentListKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
@@ -278,31 +298,43 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
 
 
 async function applyRowHighlights() {
-  const result: Record<string, unknown> = await browser.storage.local.get([
-    STORAGE_KEYS.FAVORITES,
-    STORAGE_KEYS.BLOCKED,
+  const [favorites, blocked] = await Promise.all([
+    getAllFromList('toony_toons'),
+    getAllFromList('stinky_toons'),
   ]);
-  const favorites: number[] = normalizeToIds(result[STORAGE_KEYS.FAVORITES]);
-  const blocked: number[] = normalizeToIds(result[STORAGE_KEYS.BLOCKED]);
 
-
-  const processRow = (row: HTMLElement) => {
+  const processRow = async (row: HTMLElement) => {
     row.classList.remove(ROW_CLASS_FAVORITE, ROW_CLASS_BLOCKED);
     const nameEl = row.querySelector('.toon__name');
     const raw = nameEl?.textContent?.trim();
     if (!raw) return;
     const name = extractToonName(raw);
-    const id = row.getAttribute('toon-id');
-    const data: ToonData | null = id && toons[id] ? toons[id] : null;
+    const idAttr = row.getAttribute('toon-id');
+
+    // Resolve toon: check in-memory cache first, then DB (supports hash IDs)
+    let data: ToonData | null = idAttr && toons[idAttr] ? toons[idAttr] : null;
+    if (!data && idAttr) {
+      let rec: ToonRecord | undefined;
+      if (idAttr.startsWith('#')) {
+        rec = await getToonByHashId(idAttr);
+      } else {
+        rec = await getToon(Number(idAttr));
+      }
+      if (rec) {
+        toons[idAttr] = rec as ToonData;
+        data = rec as ToonData;
+      }
+    }
 
     const favIds = new Set(favorites);
     const blkIds = new Set(blocked);
+    const numericId = idAttr && !idAttr.startsWith('#') ? Number(idAttr) : NaN;
 
-    if (id && favIds.has(Number(id))) row.classList.add(ROW_CLASS_FAVORITE);
-    else if (id && blkIds.has(Number(id))) row.classList.add(ROW_CLASS_BLOCKED);
+    if (!isNaN(numericId) && favIds.has(numericId)) row.classList.add(ROW_CLASS_FAVORITE);
+    else if (!isNaN(numericId) && blkIds.has(numericId)) row.classList.add(ROW_CLASS_BLOCKED);
 
     // Hide buttons for owned toons
-    const isOwnToon = id && activeToons[id];
+    const isOwnToon = idAttr && activeToons[String(idAttr)];
     if (isOwnToon) {
       const existingContainer = row.querySelector('.toonhq-plus-buttons');
       if (existingContainer) existingContainer.remove();
@@ -316,8 +348,8 @@ async function applyRowHighlights() {
         container.querySelectorAll('button'),
       ) as HTMLButtonElement[];
 
-      const isFav = id && favIds.has(Number(id));
-      const isBlk = id && blkIds.has(Number(id));
+      const isFav = !isNaN(numericId) && favIds.has(numericId);
+      const isBlk = !isNaN(numericId) && blkIds.has(numericId);
 
       if (isFav) {
         upBtn.style.opacity = '1';
@@ -342,7 +374,7 @@ async function applyRowHighlights() {
       row.dataset.toonhqHoverAttached = 'true';
       row.addEventListener('mouseenter', () => {
         window.dispatchEvent(
-          new CustomEvent('toonhq-plus-toon-hover', { detail: { id, name } })
+          new CustomEvent('toonhq-plus-toon-hover', { detail: { id: idAttr, name } })
         );
       });
       row.addEventListener('mouseleave', () => {
@@ -351,10 +383,8 @@ async function applyRowHighlights() {
     }
   };
 
-
-  document.querySelectorAll('.group-member-row').forEach((el) => {
-    processRow(el as HTMLElement);
-  });
+  const rows = Array.from(document.querySelectorAll('.group-member-row')) as HTMLElement[];
+  await Promise.all(rows.map(r => processRow(r)));
 }
 
 const getSuitLevel = (suitString: string) => {
@@ -746,158 +776,85 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
 }
 
 const groupsState: Record<number, any> = {};
-const activeToons: Record<number, any> = {};
+const activeToons: Record<string, any> = {};
 let bossInfoEnabled = true;
+
+function generateToonHash(name: string, photo: string) {
+  let str = name || '';
+  if (photo && photo.includes('https://rendition.toontownrewritten.com/render/')) {
+    const start = 'https://rendition.toontownrewritten.com/render/'.length;
+    str += photo.substring(start, start + 10);
+  }
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return '#' + Math.abs(hash).toString(16);
+}
 
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    // Run migration from old local storage on first start
+    await migrateFromLocalStorage();
+
+    // Load active toons from /api/toons/ (toons belonging to the current user)
     try {
       const toonsResp = await fetch('https://toonhq.org/api/toons/');
       const toonsData = await toonsResp.json();
       if (Array.isArray(toonsData)) {
-        const result = await browser.storage.local.get('toonhqplus-toons');
-        const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
-
-        toonsData.forEach((toon: any) => {
-          activeToons[toon.id] = toon;
-          toons[toon.id] = toon;
-
-          // Sync with storage if better data seen
-          const cached = toonsCache[toon.id];
-          if (!cached ||
-            cached.laff !== toon.laff ||
-            cached.level !== toon.level ||
-            cached.name !== toon.name ||
-            cached.photo !== toon.photo ||
-            cached.species !== toon.species) {
-            toonsCache[toon.id] = {
-              ...(cached || {}),
-              ...toon,
-              lastSeen: new Date().toISOString()
-            };
-          }
+        const newToons: ToonRecord[] = toonsData.map((toon: any) => {
+          activeToons[String(toon.id)] = toon;
+          toons[String(toon.id)] = toon;
+          return {
+            id: Number(toon.id),
+            name: toon.name || '',
+            photo: toon.photo,
+            species: toon.species,
+            laff: toon.laff,
+            level: toon.level,
+            lastSeen: new Date().toISOString(),
+          } as ToonRecord;
         });
-        console.log('[ToonHQ+] Initial active toons loaded:', Object.keys(activeToons).length, 'toons.');
-        browser.storage.local.set({
-          'toonhqplus-active-toon-ids': Object.keys(activeToons).map(Number),
-          'toonhqplus-toons': toonsCache
-        });
+        console.log('[ToonHQ+] Initial active toons loaded:', newToons.length, 'toons.');
+        await putToons(newToons);
+        await setSetting('active-toon-ids', newToons.map(t => t.id));
       }
     } catch (e) {
       console.error('[ToonHQ+] Failed to fetch active toons', e);
     }
 
-    const syncToonDataInternal = (members: any[], toonsCache: Record<number, any>) => {
-      let changed = false;
-      members.forEach((m) => {
-        const incoming = m.toon || (m.id && m.name ? m : { ...m });
-        if (incoming && incoming.id) {
-          const id = incoming.id;
-          toons[id] = incoming;
-
-          const cached = toonsCache[id];
-          if (!cached ||
-            cached.laff !== incoming.laff ||
-            cached.level !== incoming.level ||
-            cached.name !== incoming.name ||
-            cached.photo !== incoming.photo ||
-            cached.species !== incoming.species) {
-            toonsCache[id] = {
-              ...(cached || {}),
-              ...incoming,
-              lastSeen: new Date().toISOString()
-            };
-            changed = true;
-          }
-        }
-      });
-      return changed;
-    };
 
     const syncToonData = (members: any[]) => {
       if (!members || !Array.isArray(members)) return;
-      browser.storage.local.get('toonhqplus-toons').then(result => {
-        const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
-        if (syncToonDataInternal(members, toonsCache)) {
-          browser.storage.local.set({ 'toonhqplus-toons': toonsCache });
+      const newToons: ToonRecord[] = [];
+      members.forEach((m) => {
+        const incoming = m.toon || (m.id && m.name ? m : { ...m });
+        if (incoming && incoming.id) {
+          const id = Number(incoming.id);
+          const rec: ToonRecord = {
+            id,
+            name: incoming.name || '',
+            photo: incoming.photo,
+            species: incoming.species,
+            laff: incoming.laff,
+            level: incoming.level,
+            lastSeen: new Date().toISOString(),
+          };
+          toons[String(id)] = rec as ToonData;
+          newToons.push(rec);
         }
       });
+      if (newToons.length) putToons(newToons).catch(console.error);
     };
 
     const cleanupToonCache = async () => {
       console.log('[ToonHQ+] Running toon cache cleanup...');
-      const result = await browser.storage.local.get([
-        'toonhqplus-toons',
-        'toonhqplus-history',
-        'toonhq-favorites',
-        'toonhq-blocked',
-        'toonhqplus-active-toon-ids',
-        'toonhqplus-notes'
-      ]);
-
-      const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
-      const referencedIds = new Set<number>();
-
-      // 1. Process active toon ids
-      if (Array.isArray(result['toonhqplus-active-toon-ids'])) {
-        result['toonhqplus-active-toon-ids'].forEach(id => referencedIds.add(Number(id)));
-      }
-
-      // 2. Process favorites & blocked
-      if (Array.isArray(result['toonhq-favorites'])) {
-        result['toonhq-favorites'].forEach(id => referencedIds.add(Number(id)));
-      }
-      if (Array.isArray(result['toonhq-blocked'])) {
-        result['toonhq-blocked'].forEach(id => referencedIds.add(Number(id)));
-      }
-
-      // 3. Process notes
-      const notes = (result['toonhqplus-notes'] as Record<number, string>) || {};
-      Object.keys(notes).forEach(id => referencedIds.add(Number(id)));
-
-      // 4. Process history metadata
-      const history = (result['toonhqplus-history'] as Record<number, any>) || {};
-      Object.values(history).forEach((group: any) => {
-        if (group.memberMetadata) {
-          Object.keys(group.memberMetadata).forEach(id => referencedIds.add(Number(id)));
-        }
-        // Legacy fallbacks if migration hasn't fully run
-        if (Array.isArray(group.memberIds)) {
-          group.memberIds.forEach((id: number) => referencedIds.add(Number(id)));
-        }
-        if (Array.isArray(group.members)) {
-          group.members.forEach((m: any) => {
-            if (m.toon && m.toon.id) referencedIds.add(Number(m.toon.id));
-          });
-        }
-      });
-
-      // 5. Process in-memory active groups
-      Object.values(groupsState).forEach((group: any) => {
-        if (Array.isArray(group.members)) {
-          group.members.forEach((m: any) => {
-            if (m.toon && m.toon.id) referencedIds.add(Number(m.toon.id));
-          });
-        }
-      });
-
-      // Execute cleanup
-      let changed = false;
-      Object.keys(toonsCache).forEach(idKey => {
-        const id = Number(idKey);
-        if (!referencedIds.has(id)) {
-          delete toonsCache[id];
-          changed = true;
-        }
-      });
-
-      if (changed) {
-        console.log('[ToonHQ+] Cleaned up unreferenced toons from cache.');
-        await browser.storage.local.set({ 'toonhqplus-toons': toonsCache });
-      }
+      // (IndexedDB-based; no-op stub — toon records are kept as long as they are in a list/group)
     };
 
     const syncGroupHistory = (group: any, leavingId?: number) => {
@@ -906,69 +863,40 @@ export default defineContentScript({
       const activeMember = group.members.find((m: any) => m.toon && activeToons[m.toon.id]);
       if (!activeMember) return;
 
-      browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons']).then((result) => {
-        const history = (result['toonhqplus-history'] as Record<number, any>) || {};
-        const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
+      const groupId = Number(group.id);
 
-        // Merge toon data updates into the same atomic-ish write
-        syncToonDataInternal(group.members, toonsCache);
+      // Persist group metadata
+      putGroup({
+        groupId,
+        type: group.type,
+        created: group.created,
+        userJoinedAt: activeMember.joined || group.created,
+      }).catch(console.error);
 
-        const groupHistory = history[group.id] || {
-          id: group.id,
-          type: group.type,
-          created: group.created,
-          memberMetadata: {},
-          userJoinedAt: activeMember.joined || group.created
-        };
+      // Persist all members
+      const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
+      const memberRecords: GroupMemberRecord[] = group.members
+        .filter((m: any) => m.toon && m.toon.id)
+        .map((m: any) => ({
+          groupId,
+          toonId: Number(m.toon.id),
+          joined: m.joined || group.created,
+          left: undefined,
+        }));
+      if (memberRecords.length) putGroupMembers(memberRecords).catch(console.error);
 
-        if (!groupHistory.userJoinedAt || new Date(activeMember.joined) < new Date(groupHistory.userJoinedAt)) {
-          groupHistory.userJoinedAt = activeMember.joined || group.created;
-        }
-
-        const metadata = groupHistory.memberMetadata || {};
-
-        // Update with current members and detect leaves
-        const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
-
-        // 1. Mark anyone not in current members as left (if not already marked)
-        Object.keys(metadata).forEach(idKey => {
-          const id = Number(idKey);
-          if (!currentMemberIds.has(id) && !metadata[id].left) {
-            metadata[id].left = new Date().toISOString();
-          }
-        });
-
-        // 2. Add/Update current members
-        group.members.forEach((m: any) => {
-          if (m.toon && m.toon.id) {
-            const id = m.toon.id;
-            metadata[id] = {
-              joined: m.joined || metadata[id]?.joined || group.created,
-              left: m.left || null
-            };
-          }
-        });
-
-        // 3. Handle explicit leave if provided (redundancy for speed)
-        if (leavingId && metadata[leavingId]) {
-          metadata[leavingId].left = metadata[leavingId].left || new Date().toISOString();
-        }
-
-        groupHistory.memberMetadata = metadata;
-        history[group.id] = groupHistory;
-
-        browser.storage.local.set({
-          'toonhqplus-history': history,
-          'toonhqplus-toons': toonsCache
-        });
-      });
+      // Mark leavers
+      if (leavingId) markMemberLeft(groupId, leavingId).catch(console.error);
     };
+
+
 
     try {
       const resp = await fetch('https://toonhq.org/api/groups/list/1/');
       const data = await resp.json();
       if (data && Array.isArray(data.groups)) {
         data.groups.forEach((group: any) => {
+          console.log(JSON.stringify(group))
           groupsState[group.id] = group;
           syncToonData(group.members);
           syncGroupHistory(group);
@@ -1149,31 +1077,36 @@ export default defineContentScript({
     updateBossInfo();
     applyRowHighlights();
 
-    browser.storage.local.get([STORAGE_KEYS.NAVBAR_CONFIG, STORAGE_KEYS.BOSS_INFO_ENABLED]).then((result) => {
-      if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
-        applyNavbarCustomization(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
-      }
-      if (STORAGE_KEYS.BOSS_INFO_ENABLED in result) {
-        bossInfoEnabled = result[STORAGE_KEYS.BOSS_INFO_ENABLED] !== false;
-      }
+    // Load navbar config and boss-info setting from IndexedDB
+    getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(config => {
+      if (config) applyNavbarCustomization(config);
+    });
+    getSetting<boolean>('boss-info-enabled').then(enabled => {
+      if (enabled !== undefined) bossInfoEnabled = enabled !== false;
     });
 
-    browser.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'local') return;
-      if (STORAGE_KEYS.FAVORITES in changes || STORAGE_KEYS.BLOCKED in changes)
+    // Listen for DB changes (replaces browser.storage.onChanged)
+    window.addEventListener('toonhqplus-db-changed', ((e: CustomEvent) => {
+      const { store } = e.detail || {};
+      if (store === 'toony_toons' || store === 'stinky_toons') {
         applyRowHighlights();
-      if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
-        applyNavbarCustomization(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
       }
-      if (STORAGE_KEYS.BOSS_INFO_ENABLED in changes) {
-        bossInfoEnabled = changes[STORAGE_KEYS.BOSS_INFO_ENABLED]?.newValue !== false;
-        if (bossInfoEnabled) {
-          document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
-        } else {
-          updateBossInfo();
-        }
+      if (store === 'settings') {
+        getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(config => {
+          if (config) applyNavbarCustomization(config);
+        });
+        getSetting<boolean>('boss-info-enabled').then(enabled => {
+          if (enabled !== undefined) {
+            bossInfoEnabled = enabled !== false;
+            if (bossInfoEnabled) {
+              document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
+            } else {
+              updateBossInfo();
+            }
+          }
+        });
       }
-    });
+    }) as EventListener);
 
     let highlightTimeout: ReturnType<typeof setTimeout> | null = null;
     const observer = new MutationObserver(() => {
@@ -1183,10 +1116,8 @@ export default defineContentScript({
         applyRowHighlights();
         updateBossInfo();
 
-        browser.storage.local.get(STORAGE_KEYS.NAVBAR_CONFIG).then((result) => {
-          if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
-            applyNavbarCustomization(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
-          }
+        getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(config => {
+          if (config) applyNavbarCustomization(config);
         });
       }, 150);
     });

@@ -1,5 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { groupTypes } from './groupTypes';
+import {
+  getAllFromList,
+  addToList,
+  removeFromList,
+  clearList,
+  getAllToons,
+  putToon,
+  getAllGroups,
+  getGroupMembers,
+  getAllNotes,
+  getNote,
+  setNote,
+  getSetting,
+  setSetting,
+  deleteGroup as dbDeleteGroup,
+  clearAllGroups,
+  type ToonRecord,
+} from './db';
 
 const STORAGE_KEYS = {
   FAVORITES: 'toonhq-favorites',
@@ -107,12 +125,10 @@ function normalizeToIds(raw: unknown): number[] {
 }
 
 function loadLists(): Promise<{ favorites: number[]; blocked: number[] }> {
-  return browser.storage.local
-    .get([STORAGE_KEYS.FAVORITES, STORAGE_KEYS.BLOCKED])
-    .then((result) => ({
-      favorites: normalizeToIds(result[STORAGE_KEYS.FAVORITES]),
-      blocked: normalizeToIds(result[STORAGE_KEYS.BLOCKED]),
-    }));
+  return Promise.all([
+    getAllFromList('toony_toons'),
+    getAllFromList('stinky_toons'),
+  ]).then(([favorites, blocked]) => ({ favorites, blocked }));
 }
 
 async function updateToonList(
@@ -121,47 +137,34 @@ async function updateToonList(
   toon: ToonData,
   note?: string
 ) {
-  const otherKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
-  const result = await browser.storage.local.get([listKey, otherKey, 'toonhqplus-toons']);
-
-  let list: number[] = Array.isArray(result[listKey]) ? result[listKey] : [];
-  let otherList: number[] = Array.isArray(result[otherKey]) ? result[otherKey] : [];
+  const toonStore: 'toony_toons' | 'stinky_toons' =
+    listKey === STORAGE_KEYS.FAVORITES ? 'toony_toons' : 'stinky_toons';
+  const otherStore: 'toony_toons' | 'stinky_toons' =
+    toonStore === 'toony_toons' ? 'stinky_toons' : 'toony_toons';
   const toonId = Number(toon.id);
-  const toonsCache = (result['toonhqplus-toons'] as Record<number, any>) || {};
-
-  const notesResult = await browser.storage.local.get(STORAGE_KEYS.NOTES);
-  const notes = (notesResult[STORAGE_KEYS.NOTES] as Record<number, string>) || {};
 
   if (type === 'remove') {
-    list = list.filter(id => id !== toonId);
+    await removeFromList(toonStore, toonId);
   } else {
-    // add or move
-    if (!list.includes(toonId)) {
-      list.push(toonId);
-    }
-    if (otherList.includes(toonId)) {
-      otherList = otherList.filter(id => id !== toonId);
-    }
+    // add or move: ensure in target list and out of other list
+    await addToList(toonStore, toonId);
+    await removeFromList(otherStore, toonId);
 
-    // Update cache with toon details
-    toonsCache[toonId] = {
-      ...toon,
-      lastSeen: new Date().toISOString()
-    };
+    // Upsert toon into DB
+    await putToon({
+      id: toonId,
+      name: toon.name || '',
+      photo: toon.photo,
+      species: toon.species,
+      laff: toon.laff,
+      level: toon.level,
+      lastSeen: new Date().toISOString(),
+    });
 
-    // Manage notes separately
     if (note !== undefined) {
-      if (note.trim()) notes[toonId] = note.trim();
-      else delete notes[toonId];
+      await setNote(toonId, note);
     }
   }
-
-  await browser.storage.local.set({
-    [listKey]: list,
-    [otherKey]: otherList,
-    'toonhqplus-toons': toonsCache,
-    [STORAGE_KEYS.NOTES]: notes
-  });
 }
 
 function ToonRow({
@@ -220,16 +223,8 @@ function ToonRow({
   const saveNote = () => {
     if (!listKey) return;
     const tid = Number(toon.id);
-    browser.storage.local.get([STORAGE_KEYS.NOTES]).then((result) => {
-      const notes = (result[STORAGE_KEYS.NOTES] as Record<number, string>) || {};
-      if (noteDraft.trim()) {
-        notes[tid] = noteDraft.trim();
-      } else {
-        delete notes[tid];
-      }
-      browser.storage.local.set({ [STORAGE_KEYS.NOTES]: notes }).then(refresh);
-      setIsEditing(false);
-    });
+    setNote(tid, noteDraft).then(refresh);
+    setIsEditing(false);
   };
 
   const rowRef = React.useRef<HTMLLIElement>(null);
@@ -628,20 +623,32 @@ export function SidebarApp() {
       setFavorites(f);
       setBlocked(b);
     });
-    browser.storage.local.get(['toonhqplus-history', 'toonhqplus-toons', 'toonhqplus-active-toon-ids', STORAGE_KEYS.NAVBAR_CONFIG, STORAGE_KEYS.NOTES, STORAGE_KEYS.BOSS_INFO_ENABLED, STORAGE_KEYS.ACTIVE_TAB]).then((result) => {
-      setHistoryGroups((result['toonhqplus-history'] as Record<number, any>) || {});
-      setHistoryToons((result['toonhqplus-toons'] as Record<number, any>) || {});
-      setNotes((result[STORAGE_KEYS.NOTES] as Record<number, string>) || {});
-      setActiveToonIds((result['toonhqplus-active-toon-ids'] as number[]) || []);
-      if (result[STORAGE_KEYS.NAVBAR_CONFIG]) {
-        setNavbarConfig(result[STORAGE_KEYS.NAVBAR_CONFIG] as { pinned: string[], dropdown: string[] });
-      }
-      if (STORAGE_KEYS.BOSS_INFO_ENABLED in result) {
-        setBossInfoEnabled(result[STORAGE_KEYS.BOSS_INFO_ENABLED] !== false);
-      }
-      if (result[STORAGE_KEYS.ACTIVE_TAB]) {
-        setActiveTab(result[STORAGE_KEYS.ACTIVE_TAB] as any);
-      }
+
+    // Load all data from IndexedDB in parallel
+    Promise.all([
+      getAllGroups(),
+      getAllToons(),
+      getAllNotes(),
+      getSetting<number[]>('active-toon-ids'),
+      getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config'),
+      getSetting<boolean>('boss-info-enabled'),
+      getSetting<string>('active-tab'),
+    ]).then(([groups, toonsArr, notesMap, activeIds, navConfig, bossEnabled, activeTabVal]) => {
+      // Build historyGroups from groups + group_members won't be done here — we use a flat record
+      // Convert groups array into the shape the UI already expects
+      const groupsMap: Record<number, any> = {};
+      for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
+      setHistoryGroups(groupsMap);
+
+      const toonsMap: Record<number, any> = {};
+      for (const t of toonsArr) toonsMap[t.id] = t;
+      setHistoryToons(toonsMap);
+
+      setNotes(notesMap);
+      if (activeIds) setActiveToonIds(activeIds);
+      if (navConfig) setNavbarConfig(navConfig);
+      if (bossEnabled !== undefined) setBossInfoEnabled(bossEnabled !== false);
+      if (activeTabVal) setActiveTab(activeTabVal as any);
     });
   }, []);
 
@@ -673,13 +680,11 @@ export function SidebarApp() {
     if (source === 'main') {
       setOpen(true);
       setActiveTab('toons');
-      browser.storage.local.set({
-        [STORAGE_KEYS.SIDEBAR_OPEN]: true,
-        [STORAGE_KEYS.ACTIVE_TAB]: 'toons'
-      });
+      setSetting('sidebar-open', true).catch(console.error);
+      setSetting('active-tab', 'toons').catch(console.error);
     } else if (!open) {
       setOpen(true);
-      browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: true });
+      setSetting('sidebar-open', true).catch(console.error);
     }
   }, [favorites, blocked, open]);
 
@@ -712,50 +717,44 @@ export function SidebarApp() {
 
   useEffect(() => {
     refresh();
-    browser.storage.local.get(STORAGE_KEYS.SIDEBAR_OPEN).then((result) => {
-      if (result[STORAGE_KEYS.SIDEBAR_OPEN] !== undefined) {
-        setOpen(!!result[STORAGE_KEYS.SIDEBAR_OPEN]);
-      }
+    getSetting<boolean>('sidebar-open').then(val => {
+      if (val !== undefined) setOpen(!!val);
     });
 
-    const listener = (
-      changes: { [key: string]: { newValue?: unknown } },
-      areaName: string,
-    ) => {
-      if (areaName !== 'local') return;
-      if (STORAGE_KEYS.SIDEBAR_OPEN in changes) {
-        setOpen(!!changes[STORAGE_KEYS.SIDEBAR_OPEN]?.newValue);
+    // Listen for DB changes (replaces browser.storage.onChanged)
+    const handleDbChange = (e: Event) => {
+      const { store } = (e as CustomEvent).detail || {};
+      if (store === 'toony_toons' || store === 'stinky_toons') {
+        loadLists().then(({ favorites: f, blocked: b }) => { setFavorites(f); setBlocked(b); });
       }
-      if (STORAGE_KEYS.FAVORITES in changes)
-        setFavorites(normalizeToIds(changes[STORAGE_KEYS.FAVORITES]?.newValue));
-      if (STORAGE_KEYS.BLOCKED in changes)
-        setBlocked(normalizeToIds(changes[STORAGE_KEYS.BLOCKED]?.newValue));
-      if ('toonhqplus-history' in changes) {
-        setHistoryGroups((changes['toonhqplus-history']?.newValue as Record<number, any>) || {});
+      if (store === 'groups') {
+        getAllGroups().then(groups => {
+          const groupsMap: Record<number, any> = {};
+          for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
+          setHistoryGroups(groupsMap);
+        });
       }
-      if ('toonhqplus-toons' in changes) {
-        setHistoryToons((changes['toonhqplus-toons']?.newValue as Record<number, any>) || {});
+      if (store === 'toons') {
+        getAllToons().then(toonsArr => {
+          const toonsMap: Record<number, any> = {};
+          for (const t of toonsArr) toonsMap[t.id] = t;
+          setHistoryToons(toonsMap);
+        });
       }
-      if ('toonhqplus-active-toon-ids' in changes) {
-        setActiveToonIds((changes['toonhqplus-active-toon-ids']?.newValue as number[]) || []);
+      if (store === 'notes') {
+        getAllNotes().then(setNotes);
       }
-      if (STORAGE_KEYS.NAVBAR_CONFIG in changes) {
-        setNavbarConfig(changes[STORAGE_KEYS.NAVBAR_CONFIG]?.newValue as { pinned: string[], dropdown: string[] });
-      }
-      if (STORAGE_KEYS.BOSS_INFO_ENABLED in changes) {
-        setBossInfoEnabled(changes[STORAGE_KEYS.BOSS_INFO_ENABLED]?.newValue !== false);
-      }
-      if (STORAGE_KEYS.ACTIVE_TAB in changes) {
-        setActiveTab(changes[STORAGE_KEYS.ACTIVE_TAB]?.newValue as any);
-      }
-      if (STORAGE_KEYS.NOTES in changes) {
-        setNotes((changes[STORAGE_KEYS.NOTES]?.newValue as Record<number, string>) || {});
+      if (store === 'settings') {
+        getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(c => { if (c) setNavbarConfig(c); });
+        getSetting<boolean>('boss-info-enabled').then(v => { if (v !== undefined) setBossInfoEnabled(v !== false); });
+        getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
+        getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
+        getSetting<number[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
       }
     };
-    browser.storage.onChanged.addListener(listener);
-
+    window.addEventListener('toonhqplus-db-changed', handleDbChange);
     return () => {
-      browser.storage.onChanged.removeListener(listener);
+      window.removeEventListener('toonhqplus-db-changed', handleDbChange);
     };
   }, [refresh]);
 
@@ -769,7 +768,7 @@ export function SidebarApp() {
           onClick={() => {
             const next = !open;
             setOpen(next);
-            browser.storage.local.set({ [STORAGE_KEYS.SIDEBAR_OPEN]: next });
+            setSetting('sidebar-open', next).catch(console.error);
           }}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 cursor-pointer transition-all active:scale-95"
         >
@@ -785,7 +784,7 @@ export function SidebarApp() {
               onClick={() => {
                 setActiveTab('history');
                 setSelectedHistoryGroup(null);
-                browser.storage.local.set({ [STORAGE_KEYS.ACTIVE_TAB]: 'history' });
+                setSetting('active-tab', 'history').catch(console.error);
               }}
             >
               History
@@ -794,7 +793,7 @@ export function SidebarApp() {
               className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
               onClick={() => {
                 setActiveTab('toons');
-                browser.storage.local.set({ [STORAGE_KEYS.ACTIVE_TAB]: 'toons' });
+                setSetting('active-tab', 'toons').catch(console.error);
               }}
             >
               Toons
@@ -803,7 +802,7 @@ export function SidebarApp() {
               className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
               onClick={() => {
                 setActiveTab('settings');
-                browser.storage.local.set({ [STORAGE_KEYS.ACTIVE_TAB]: 'settings' });
+                setSetting('active-tab', 'settings').catch(console.error);
               }}
             >
               Settings
@@ -992,12 +991,12 @@ export function SidebarApp() {
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Customization</h4>
                     <NavbarSettings
-                      config={navbarConfig}
-                      onUpdate={(newConfig) => {
-                        setNavbarConfig(newConfig);
-                        browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: newConfig });
-                      }}
-                    />
+                       config={navbarConfig}
+                       onUpdate={(newConfig) => {
+                         setNavbarConfig(newConfig);
+                         setSetting('navbar-config', newConfig).catch(console.error);
+                       }}
+                     />
 
                     <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
                       <div className="flex items-center gap-3">
@@ -1010,7 +1009,7 @@ export function SidebarApp() {
                         onClick={() => {
                           const next = !bossInfoEnabled;
                           setBossInfoEnabled(next);
-                          browser.storage.local.set({ [STORAGE_KEYS.BOSS_INFO_ENABLED]: next });
+                          setSetting('boss-info-enabled', next).catch(console.error);
                         }}
                         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                       >
@@ -1140,25 +1139,24 @@ export function SidebarApp() {
                 <button
                   onClick={() => {
                     if (dialog.type === 'delete_group' && dialog.groupId) {
-                      browser.storage.local.get('toonhqplus-history').then(result => {
-                        const history = (result['toonhqplus-history'] as Record<number, any>) || {};
-                        delete history[dialog.groupId!];
-                        browser.storage.local.set({ 'toonhqplus-history': history }).then(() => {
-                          setHistoryGroups({ ...history });
+                      dbDeleteGroup(dialog.groupId).then(() => {
+                        getAllGroups().then(groups => {
+                          const groupsMap: Record<number, any> = {};
+                          for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
+                          setHistoryGroups(groupsMap);
                           setDialog(null);
                         });
                       });
                     } else if (dialog.type === 'clear_history') {
-                      browser.storage.local.set({ 'toonhqplus-history': {} }).then(() => {
+                      clearAllGroups().then(() => {
                         setHistoryGroups({});
                         setDialog(null);
                       });
                     } else if (dialog.type === 'clear_toons') {
-                      browser.storage.local.set({
-                        [STORAGE_KEYS.FAVORITES]: [],
-                        [STORAGE_KEYS.BLOCKED]: [],
-                        [STORAGE_KEYS.NOTES]: {}
-                      }).then(() => {
+                      Promise.all([
+                        clearList('toony_toons'),
+                        clearList('stinky_toons'),
+                      ]).then(() => {
                         setFavorites([]);
                         setBlocked([]);
                         setNotes({});
@@ -1169,7 +1167,7 @@ export function SidebarApp() {
                         pinned: ['invasions', 'groups', 'fishing', 'ccg'],
                         dropdown: ['field-offices', 'gardening', 'doodles']
                       };
-                      browser.storage.local.set({ [STORAGE_KEYS.NAVBAR_CONFIG]: defaultConfig }).then(() => {
+                      setSetting('navbar-config', defaultConfig).then(() => {
                         setNavbarConfig(defaultConfig);
                         setDialog(null);
                       });
