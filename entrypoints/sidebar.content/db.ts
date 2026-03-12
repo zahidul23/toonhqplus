@@ -322,6 +322,11 @@ export async function clearAllGroups(): Promise<void> {
 
 // ─── Group Members ────────────────────────────────────────────────────────────
 
+export async function getAllGroupMembers(): Promise<GroupMemberRecord[]> {
+  const db = await openDB();
+  return promisifyRequest(tx(db, 'group_members').objectStore('group_members').getAll());
+}
+
 export async function getGroupMembers(groupId: number): Promise<GroupMemberRecord[]> {
   const db = await openDB();
   return promisifyRequest(

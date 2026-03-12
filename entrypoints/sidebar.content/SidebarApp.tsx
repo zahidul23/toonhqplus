@@ -9,6 +9,7 @@ import {
   putToon,
   getAllGroups,
   getGroupMembers,
+  getAllGroupMembers,
   getAllNotes,
   getNote,
   setNote,
@@ -568,6 +569,7 @@ export function SidebarApp() {
   const [favorites, setFavorites] = useState<ToonId[]>([]);
   const [blocked, setBlocked] = useState<ToonId[]>([]);
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
+  const [historyGroupMembers, setHistoryGroupMembers] = useState<Record<number, any>>({});
   const [historyToons, setHistoryToons] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [activeToonIds, setActiveToonIds] = useState<number[]>([]);
@@ -633,12 +635,25 @@ export function SidebarApp() {
       getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config'),
       getSetting<boolean>('boss-info-enabled'),
       getSetting<string>('active-tab'),
-    ]).then(([groups, toonsArr, notesMap, activeIds, navConfig, bossEnabled, activeTabVal]) => {
+      getAllGroupMembers(),
+    ]).then(([groups, toonsArr, notesMap, activeIds, navConfig, bossEnabled, activeTabVal, groupMembers]) => {
       // Build historyGroups from groups + group_members won't be done here — we use a flat record
       // Convert groups array into the shape the UI already expects
       const groupsMap: Record<number, any> = {};
       for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
       setHistoryGroups(groupsMap);
+
+
+      const historyGroupMembersMap: Record<number, any> = {};
+
+      groupMembers.forEach(m => { 
+        if (historyGroupMembersMap[m.groupId]) {
+          historyGroupMembersMap[m.groupId].toonIds.push(m.toonId);
+        } else {
+          historyGroupMembersMap[m.groupId] = { toonIds: [m.toonId] };
+        }
+      });
+      setHistoryGroupMembers(historyGroupMembersMap);
 
       const toonsMap: Record<string, any> = {};
       for (const t of toonsArr) toonsMap[String(t.id)] = t;
@@ -872,6 +887,7 @@ export function SidebarApp() {
                           .map((group) => {
                             const typeData = groupTypes.find((t) => t.id === group.type);
                             const groupName = typeData ? typeData.name : `Group #${group.id}`;
+                            const groupMembers = historyGroupMembers[group.id];
                             return (
                               <div key={group.id} className="group relative">
                                 <button
@@ -885,10 +901,7 @@ export function SidebarApp() {
                                     </span>
                                   </div>
                                   <div className="text-sm font-medium text-emerald-300 shrink-0">
-                                    {(() => {
-                                      const count = group.memberMetadata ? Object.keys(group.memberMetadata).length : (group.memberIds?.length ?? group.members?.length ?? 0);
-                                      return `${count} toon${count === 1 ? '' : 's'}`;
-                                    })()}
+                                    {groupMembers?.toonIds?.length} toon{groupMembers?.toonIds?.length === 1 ? '' : 's'}
                                   </div>
                                 </button>
                                 <button
@@ -920,9 +933,8 @@ export function SidebarApp() {
                     <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
                       {(() => {
                         const group = historyGroups[selectedHistoryGroup];
-                        const ids = group?.memberMetadata
-                          ? Object.keys(group.memberMetadata).map(Number)
-                          : (group?.memberIds || group?.members?.map((m: any) => m.toon?.id) || []);
+                        console.log(group);
+                        const ids = historyGroupMembers[group.id]?.toonIds;
 
                         const userActiveIds: number[] = [];
                         const otherActiveIds: number[] = [];
