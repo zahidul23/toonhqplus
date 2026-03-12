@@ -933,7 +933,6 @@ export function SidebarApp() {
                     <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
                       {(() => {
                         const group = historyGroups[selectedHistoryGroup];
-                        console.log(group);
                         const ids = historyGroupMembers[group.id]?.toonIds;
 
                         const userActiveIds: number[] = [];
