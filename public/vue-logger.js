@@ -31,7 +31,7 @@
           tid = String(vue.toon.id);
         } else {
           tid = generateToonHash(vue.toon.name, vue.toon.photo);
-          el.style.setProperty('filter', 'blur(2px)');
+          el.style.setProperty('filter', 'blur(1px)');
         }
 
         if (el.getAttribute('toon-id') !== tid) {

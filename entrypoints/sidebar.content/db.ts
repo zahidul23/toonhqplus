@@ -19,7 +19,8 @@ const DB_VERSION = 3;
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface ToonRecord {
-  id: number;
+  /** Numeric toon id from API, or generated hash (e.g. "#abc12") when API provides no id. */
+  id: number | string;
   name: string;
   photo?: string;
   species?: number;
@@ -30,8 +31,11 @@ export interface ToonRecord {
   [key: string]: any;
 }
 
+/** Toon id: numeric from API or string hash (e.g. "#abc12") when no id. */
+export type ToonId = number | string;
+
 export interface NoteRecord {
-  toonId: number;
+  toonId: ToonId;
   text: string;
 }
 
@@ -44,7 +48,7 @@ export interface GroupRecord {
 
 export interface GroupMemberRecord {
   groupId: number;
-  toonId: number;
+  toonId: ToonId;
   joined?: string;
   left?: string;
 }
@@ -156,6 +160,13 @@ function notifyChanged(store: string, key?: IDBValidKey) {
   window.dispatchEvent(new CustomEvent('toonhqplus-db-changed', { detail: { store, key } }));
 }
 
+/** IndexedDB valid key: number (not NaN), non-empty string, etc. */
+function isValidIdKey(id: unknown): id is number | string {
+  if (typeof id === 'number') return !isNaN(id);
+  if (typeof id === 'string') return id.length > 0;
+  return false;
+}
+
 // ─── Toons ────────────────────────────────────────────────────────────────────
 
 export async function getToon(id: number): Promise<ToonRecord | undefined> {
@@ -171,6 +182,7 @@ export async function getToonByHashId(hashId: string): Promise<ToonRecord | unde
 }
 
 export async function putToon(toon: ToonRecord): Promise<void> {
+  if (!isValidIdKey(toon.id)) return;
   const db = await openDB();
   const t = tx(db, 'toons', 'readwrite');
   t.objectStore('toons').put(toon);
@@ -179,11 +191,12 @@ export async function putToon(toon: ToonRecord): Promise<void> {
 }
 
 export async function putToons(toons: ToonRecord[]): Promise<void> {
-  if (!toons.length) return;
+  const valid = toons.filter(t => isValidIdKey(t.id));
+  if (!valid.length) return;
   const db = await openDB();
   const t = tx(db, 'toons', 'readwrite');
   const store = t.objectStore('toons');
-  for (const toon of toons) store.put(toon);
+  for (const toon of valid) store.put(toon);
   await promisifyTx(t);
   notifyChanged('toons');
 }
@@ -195,15 +208,16 @@ export async function getAllToons(): Promise<ToonRecord[]> {
 
 // ─── Toony / Stinky lists ──────────────────────────────────────────────────────
 
-export async function getAllFromList(store: ListStore): Promise<number[]> {
+export async function getAllFromList(store: ListStore): Promise<ToonId[]> {
   const db = await openDB();
-  const records: { toonId: number }[] = await promisifyRequest(
+  const records: { toonId: ToonId }[] = await promisifyRequest(
     tx(db, store).objectStore(store).getAll()
   );
   return records.map(r => r.toonId);
 }
 
-export async function addToList(store: ListStore, toonId: number): Promise<void> {
+export async function addToList(store: ListStore, toonId: ToonId): Promise<void> {
+  if (!isValidIdKey(toonId)) return;
   const db = await openDB();
   const t = tx(db, store, 'readwrite');
   t.objectStore(store).put({ toonId });
@@ -211,7 +225,8 @@ export async function addToList(store: ListStore, toonId: number): Promise<void>
   notifyChanged(store, toonId);
 }
 
-export async function removeFromList(store: ListStore, toonId: number): Promise<void> {
+export async function removeFromList(store: ListStore, toonId: ToonId): Promise<void> {
+  if (!isValidIdKey(toonId)) return;
   const db = await openDB();
   const t = tx(db, store, 'readwrite');
   t.objectStore(store).delete(toonId);
@@ -229,7 +244,8 @@ export async function clearList(store: ListStore): Promise<void> {
 
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
-export async function getNote(toonId: number): Promise<string | undefined> {
+export async function getNote(toonId: ToonId): Promise<string | undefined> {
+  if (!isValidIdKey(toonId)) return undefined;
   const db = await openDB();
   const rec: NoteRecord | undefined = await promisifyRequest(
     tx(db, 'notes').objectStore('notes').get(toonId)
@@ -237,7 +253,8 @@ export async function getNote(toonId: number): Promise<string | undefined> {
   return rec?.text;
 }
 
-export async function setNote(toonId: number, text: string): Promise<void> {
+export async function setNote(toonId: ToonId, text: string): Promise<void> {
+  if (!isValidIdKey(toonId)) return;
   const db = await openDB();
   const t = tx(db, 'notes', 'readwrite');
   if (text.trim()) {
@@ -249,13 +266,13 @@ export async function setNote(toonId: number, text: string): Promise<void> {
   notifyChanged('notes', toonId);
 }
 
-export async function getAllNotes(): Promise<Record<number, string>> {
+export async function getAllNotes(): Promise<Record<string, string>> {
   const db = await openDB();
   const records: NoteRecord[] = await promisifyRequest(
     tx(db, 'notes').objectStore('notes').getAll()
   );
-  const out: Record<number, string> = {};
-  for (const r of records) out[r.toonId] = r.text;
+  const out: Record<string, string> = {};
+  for (const r of records) out[String(r.toonId)] = r.text;
   return out;
 }
 
@@ -282,7 +299,7 @@ export async function deleteGroup(groupId: number): Promise<void> {
   const idx = t.objectStore('group_members').index('by_groupId');
   const req = idx.getAllKeys(IDBKeyRange.only(groupId));
   req.onsuccess = () => {
-    const keys = req.result as [number, number][];
+    const keys = req.result as [number, ToonId][];
     for (const k of keys) t.objectStore('group_members').delete(k);
   };
   await promisifyTx(t);
@@ -313,6 +330,7 @@ export async function getGroupMembers(groupId: number): Promise<GroupMemberRecor
 }
 
 export async function putGroupMember(record: GroupMemberRecord): Promise<void> {
+  if (!isValidIdKey(record.toonId)) return;
   const db = await openDB();
   const t = tx(db, 'group_members', 'readwrite');
   t.objectStore('group_members').put(record);
@@ -320,15 +338,17 @@ export async function putGroupMember(record: GroupMemberRecord): Promise<void> {
 }
 
 export async function putGroupMembers(records: GroupMemberRecord[]): Promise<void> {
-  if (!records.length) return;
+  const valid = records.filter(r => isValidIdKey(r.toonId));
+  if (!valid.length) return;
   const db = await openDB();
   const t = tx(db, 'group_members', 'readwrite');
   const store = t.objectStore('group_members');
-  for (const r of records) store.put(r);
+  for (const r of valid) store.put(r);
   await promisifyTx(t);
 }
 
-export async function markMemberLeft(groupId: number, toonId: number): Promise<void> {
+export async function markMemberLeft(groupId: number, toonId: ToonId): Promise<void> {
+  if (!isValidIdKey(toonId)) return;
   const db = await openDB();
   const t = tx(db, 'group_members', 'readwrite');
   const store = t.objectStore('group_members');
@@ -400,17 +420,19 @@ export async function migrateFromLocalStorage(): Promise<void> {
     const oldNotes: Record<number, string> = (result['toonhqplus-notes'] as Record<number, string>) || {};
     const oldHistory: Record<number, any> = (result['toonhqplus-history'] as Record<number, any>) || {};
 
-    // Migrate toons
-    const toonRecords: ToonRecord[] = Object.values(toonsCache).map((t: any) => ({
-      id: Number(t.id),
-      name: t.name || '',
-      photo: t.photo,
-      species: t.species,
-      laff: t.laff,
-      level: t.level,
-      lastSeen: t.lastSeen,
-      hashId: t.hashId,
-    }));
+    // Migrate toons (skip entries without valid id to avoid IDB invalid-key errors)
+    const toonRecords: ToonRecord[] = Object.values(toonsCache)
+      .map((t: any) => ({
+        id: typeof t.id === 'number' && !isNaN(t.id) ? t.id : Number(t.id),
+        name: t.name || '',
+        photo: t.photo,
+        species: t.species,
+        laff: t.laff,
+        level: t.level,
+        lastSeen: t.lastSeen,
+        hashId: t.hashId,
+      }))
+      .filter(t => isValidIdKey(t.id));
     if (toonRecords.length) await putToons(toonRecords);
 
     // Migrate lists

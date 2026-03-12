@@ -244,20 +244,33 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
         background: 'none',
         padding: '0',
       });
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const toonIdAttr = row.getAttribute('toon-id');
-        const currentData: ToonData | null =
+        let currentData: ToonData | null =
           toonIdAttr && toons[toonIdAttr] ? toons[toonIdAttr] : null;
+
+        // If row uses hash id (#...), resolve toon from DB: first by numeric id, then by hash
+        if (!currentData && toonIdAttr?.startsWith('#')) {
+          const afterHash = toonIdAttr.slice(1);
+          const asNum = Number(afterHash);
+          let rec: ToonRecord | undefined =
+            !isNaN(asNum) ? await getToon(asNum) : undefined;
+          if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(toonIdAttr);
+          if (rec) {
+            toons[toonIdAttr] = rec as ToonData;
+            currentData = rec as ToonData;
+          }
+        }
 
         if (!currentData || !toonIdAttr) return;
 
-        // Resolve current list membership from IndexedDB
+        // Resolve current list membership from IndexedDB (use resolved toon's numeric id)
         Promise.all([
           getAllFromList('toony_toons'),
           getAllFromList('stinky_toons'),
         ]).then(([favs, blks]) => {
-          const tid = Number(toonIdAttr);
+          const tid = currentData!.id;
           const isFavorited = favs.includes(tid);
           const isBlocked = blks.includes(tid);
           const currentListKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
@@ -316,7 +329,10 @@ async function applyRowHighlights() {
     if (!data && idAttr) {
       let rec: ToonRecord | undefined;
       if (idAttr.startsWith('#')) {
-        rec = await getToonByHashId(idAttr);
+        const afterHash = idAttr.slice(1);
+        const asNum = Number(afterHash);
+        rec = !isNaN(asNum) ? await getToon(asNum) : undefined;
+        if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(idAttr);
       } else {
         rec = await getToon(Number(idAttr));
       }
@@ -328,10 +344,10 @@ async function applyRowHighlights() {
 
     const favIds = new Set(favorites);
     const blkIds = new Set(blocked);
-    const numericId = idAttr && !idAttr.startsWith('#') ? Number(idAttr) : NaN;
+    const resolvedId = data?.id ?? (idAttr && !idAttr.startsWith('#') ? Number(idAttr) : idAttr ?? null);
 
-    if (!isNaN(numericId) && favIds.has(numericId)) row.classList.add(ROW_CLASS_FAVORITE);
-    else if (!isNaN(numericId) && blkIds.has(numericId)) row.classList.add(ROW_CLASS_BLOCKED);
+    if (resolvedId != null && favIds.has(resolvedId)) row.classList.add(ROW_CLASS_FAVORITE);
+    else if (resolvedId != null && blkIds.has(resolvedId)) row.classList.add(ROW_CLASS_BLOCKED);
 
     // Hide buttons for owned toons
     const isOwnToon = idAttr && activeToons[String(idAttr)];
@@ -348,8 +364,8 @@ async function applyRowHighlights() {
         container.querySelectorAll('button'),
       ) as HTMLButtonElement[];
 
-      const isFav = !isNaN(numericId) && favIds.has(numericId);
-      const isBlk = !isNaN(numericId) && blkIds.has(numericId);
+      const isFav = resolvedId != null && favIds.has(resolvedId);
+      const isBlk = resolvedId != null && blkIds.has(resolvedId);
 
       if (isFav) {
         upBtn.style.opacity = '1';
@@ -776,6 +792,10 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
 }
 
 const groupsState: Record<number, any> = {};
+/** Member id (from API/websocket) -> toon id, for resolving member_left events. */
+const memberIdToToonId: Record<number, number | string> = {};
+/** Group id -> set of member ids in that group; cleared on group_disbanded. */
+const groupMemberIds: Record<number, Set<number>> = {};
 const activeToons: Record<string, any> = {};
 let bossInfoEnabled = true;
 
@@ -802,6 +822,7 @@ export default defineContentScript({
     // Run migration from old local storage on first start
     await migrateFromLocalStorage();
 
+    // 1) Fetch owned toons first
     // Load active toons from /api/toons/ (toons belonging to the current user)
     try {
       const toonsResp = await fetch('https://toonhq.org/api/toons/');
@@ -829,25 +850,43 @@ export default defineContentScript({
     }
 
 
+    /** Update in-memory member id -> toon id mapping (and per-group sets) from a members list. */
+    const updateMemberIdMaps = (groupId: number, members: any[]) => {
+      if (!Array.isArray(members)) return;
+      if (!groupMemberIds[groupId]) groupMemberIds[groupId] = new Set();
+      for (const m of members) {
+        const memberId = m?.id != null ? Number(m.id) : undefined;
+        const toonId = m?.toon?.id != null ? Number(m.toon.id) : undefined;
+        if (memberId != null && toonId != null) {
+          memberIdToToonId[memberId] = toonId;
+          groupMemberIds[groupId].add(memberId);
+        }
+      }
+    };
+
     const syncToonData = (members: any[]) => {
       if (!members || !Array.isArray(members)) return;
       const newToons: ToonRecord[] = [];
       members.forEach((m) => {
         const incoming = m.toon || (m.id && m.name ? m : { ...m });
-        if (incoming && incoming.id) {
-          const id = Number(incoming.id);
-          const rec: ToonRecord = {
-            id,
-            name: incoming.name || '',
-            photo: incoming.photo,
-            species: incoming.species,
-            laff: incoming.laff,
-            level: incoming.level,
-            lastSeen: new Date().toISOString(),
-          };
-          toons[String(id)] = rec as ToonData;
-          newToons.push(rec);
-        }
+        if (!incoming?.name && !incoming?.photo) return;
+
+        const numericId = incoming.id != null && !isNaN(Number(incoming.id)) ? Number(incoming.id) : null;
+        const hashId = incoming.hashId ?? incoming.toon?.hashId ?? generateToonHash(incoming.name || '', incoming.photo || '');
+
+        const id: number | string = numericId ?? hashId;
+        const rec: ToonRecord = {
+          id,
+          name: incoming.name || '',
+          photo: incoming.photo,
+          species: incoming.species,
+          laff: incoming.laff,
+          level: incoming.level,
+          lastSeen: new Date().toISOString(),
+          hashId,
+        };
+        toons[String(id)] = rec as ToonData;
+        newToons.push(rec);
       });
       if (newToons.length) putToons(newToons).catch(console.error);
     };
@@ -857,13 +896,14 @@ export default defineContentScript({
       // (IndexedDB-based; no-op stub — toon records are kept as long as they are in a list/group)
     };
 
-    const syncGroupHistory = (group: any, leavingId?: number) => {
+    const syncGroupHistory = (group: any, leavingToonId?: number | string) => {
       if (!group || !Array.isArray(group.members)) return;
+
+      const groupId = Number(group.id);
+      updateMemberIdMaps(groupId, group.members);
 
       const activeMember = group.members.find((m: any) => m.toon && activeToons[m.toon.id]);
       if (!activeMember) return;
-
-      const groupId = Number(group.id);
 
       // Persist group metadata
       putGroup({
@@ -876,27 +916,27 @@ export default defineContentScript({
       // Persist all members
       const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
       const memberRecords: GroupMemberRecord[] = group.members
-        .filter((m: any) => m.toon && m.toon.id)
+        .filter((m: any) => m.toon && m.toon.id != null)
         .map((m: any) => ({
           groupId,
-          toonId: Number(m.toon.id),
+          toonId: typeof m.toon.id === 'string' ? m.toon.id : Number(m.toon.id),
           joined: m.joined || group.created,
           left: undefined,
         }));
       if (memberRecords.length) putGroupMembers(memberRecords).catch(console.error);
 
       // Mark leavers
-      if (leavingId) markMemberLeft(groupId, leavingId).catch(console.error);
+      if (leavingToonId != null) markMemberLeft(groupId, leavingToonId).catch(console.error);
     };
 
 
 
+    // 2) Fetch current groups
     try {
       const resp = await fetch('https://toonhq.org/api/groups/list/1/');
       const data = await resp.json();
       if (data && Array.isArray(data.groups)) {
         data.groups.forEach((group: any) => {
-          console.log(JSON.stringify(group))
           groupsState[group.id] = group;
           syncToonData(group.members);
           syncGroupHistory(group);
@@ -907,6 +947,7 @@ export default defineContentScript({
       console.error('[ToonHQ+] Failed to fetch initial groups list', e);
     }
 
+    // 3) Then start websocket to listen for group changes
     // Run cleanup on startup and every 30 minutes
     cleanupToonCache();
     setInterval(cleanupToonCache, 30 * 60 * 1000);
@@ -949,16 +990,24 @@ export default defineContentScript({
                   syncToonData(data.members);
                   syncGroupHistory(data);
                 } else if (eventName === 'group_disbanded') {
-                  delete groupsState[data.id];
+                  const gid = data.id;
+                  if (groupMemberIds[gid]) {
+                    for (const mid of groupMemberIds[gid]) delete memberIdToToonId[mid];
+                    delete groupMemberIds[gid];
+                  }
+                  delete groupsState[gid];
                 } else if (eventName === 'member_joined') {
                   if (groupsState[data.group]) {
                     groupsState[data.group].members.push(data);
+                    updateMemberIdMaps(Number(data.group), [data]);
                     syncToonData([data]);
                     syncGroupHistory(groupsState[data.group]);
                   }
                 } else if (eventName === 'member_left') {
                   if (groupsState[data.group]) {
-                    const leavingToonId = groupsState[data.group].members.find((m: any) => m.id === data.id)?.toon?.id;
+                    const leavingToonId = memberIdToToonId[data.id];
+                    if (groupMemberIds[data.group]) groupMemberIds[data.group].delete(data.id);
+                    delete memberIdToToonId[data.id];
                     groupsState[data.group].members = groupsState[data.group].members.filter(
                       (m: any) => m.id !== data.id
                     );
@@ -1026,7 +1075,7 @@ export default defineContentScript({
 
         setTimeout(() => {
           updateBossInfo();
-        }, 500);
+        }, 250);
       }
     };
     document.querySelectorAll('.group-details-dialog').forEach(el => {

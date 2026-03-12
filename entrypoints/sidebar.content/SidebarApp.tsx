@@ -17,6 +17,7 @@ import {
   deleteGroup as dbDeleteGroup,
   clearAllGroups,
   type ToonRecord,
+  type ToonId,
 } from './db';
 
 const STORAGE_KEYS = {
@@ -30,7 +31,7 @@ const STORAGE_KEYS = {
 } as const;
 
 interface ToonData {
-  id: number;
+  id: ToonId;
   name: string;
   photo?: string;
   note?: string;
@@ -141,7 +142,7 @@ async function updateToonList(
     listKey === STORAGE_KEYS.FAVORITES ? 'toony_toons' : 'stinky_toons';
   const otherStore: 'toony_toons' | 'stinky_toons' =
     toonStore === 'toony_toons' ? 'stinky_toons' : 'toony_toons';
-  const toonId = Number(toon.id);
+  const toonId = toon.id;
 
   if (type === 'remove') {
     await removeFromList(toonStore, toonId);
@@ -179,8 +180,8 @@ function ToonRow({
   onRequestDialog
 }: {
   toon: ToonData;
-  favorites: number[];
-  blocked: number[];
+  favorites: ToonId[];
+  blocked: ToonId[];
   activeToonIds: number[];
   note?: string;
   refresh: () => void;
@@ -195,10 +196,10 @@ function ToonRow({
     setNoteDraft(note || '');
   }, [note]);
 
-  const isFavorited = favorites.includes(Number(toon.id));
-  const isBlocked = blocked.includes(Number(toon.id));
+  const isFavorited = favorites.includes(toon.id);
+  const isBlocked = blocked.includes(toon.id);
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
-  const isOwnToon = activeToonIds.includes(Number(toon.id));
+  const isOwnToon = typeof toon.id === 'number' && activeToonIds.includes(toon.id);
 
   // Determine row background color
   const defaultHoverClass = isBlocked ? 'bg-red-600/90 shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
@@ -222,8 +223,7 @@ function ToonRow({
 
   const saveNote = () => {
     if (!listKey) return;
-    const tid = Number(toon.id);
-    setNote(tid, noteDraft).then(refresh);
+    setNote(toon.id, noteDraft).then(refresh);
     setIsEditing(false);
   };
 
@@ -565,16 +565,16 @@ export function SidebarApp() {
   const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
   const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('history');
 
-  const [favorites, setFavorites] = useState<number[]>([]);
-  const [blocked, setBlocked] = useState<number[]>([]);
+  const [favorites, setFavorites] = useState<ToonId[]>([]);
+  const [blocked, setBlocked] = useState<ToonId[]>([]);
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
-  const [historyToons, setHistoryToons] = useState<Record<number, any>>({});
-  const [notes, setNotes] = useState<Record<number, string>>({});
+  const [historyToons, setHistoryToons] = useState<Record<string, any>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [activeToonIds, setActiveToonIds] = useState<number[]>([]);
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
-  const [justAddedId, setJustAddedId] = useState<number | null>(null);
+  const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
 
   const [navbarConfig, setNavbarConfig] = useState<{ pinned: string[], dropdown: string[] }>({
     pinned: ['invasions', 'groups', 'fishing', 'ccg'],
@@ -640,8 +640,8 @@ export function SidebarApp() {
       for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
       setHistoryGroups(groupsMap);
 
-      const toonsMap: Record<number, any> = {};
-      for (const t of toonsArr) toonsMap[t.id] = t;
+      const toonsMap: Record<string, any> = {};
+      for (const t of toonsArr) toonsMap[String(t.id)] = t;
       setHistoryToons(toonsMap);
 
       setNotes(notesMap);
@@ -659,8 +659,8 @@ export function SidebarApp() {
 
     // Auto-detect if it's a "move" (it exists in the other list)
     let actualType = type;
-    const isFavorited = favorites.includes(Number(toon.id));
-    const isBlocked = blocked.includes(Number(toon.id));
+    const isFavorited = favorites.includes(toon.id);
+    const isBlocked = blocked.includes(toon.id);
 
     if (type === 'add') {
       if ((listKey === STORAGE_KEYS.FAVORITES && isBlocked) || (listKey === STORAGE_KEYS.BLOCKED && isFavorited)) {
@@ -676,7 +676,7 @@ export function SidebarApp() {
       source,
       otherListName
     });
-    setDialogNote(notes[Number(toon.id)] || '');
+    setDialogNote(notes[String(toon.id)] || '');
     if (source === 'main') {
       setOpen(true);
       setActiveTab('toons');
@@ -824,7 +824,7 @@ export function SidebarApp() {
                         const toon = historyToons[id];
                         if (!toon) return null;
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === Number(toon.id)} onRequestDialog={handleRequestDialog} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[String(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === toon.id} onRequestDialog={handleRequestDialog} />;
                       })
                     )}
                   </ul>
@@ -842,7 +842,7 @@ export function SidebarApp() {
                         const toon = historyToons[id];
                         if (!toon) return null;
                         const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[Number(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === Number(toon.id)} onRequestDialog={handleRequestDialog} />;
+                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[String(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === toon.id} onRequestDialog={handleRequestDialog} />;
                       })
                     )}
                   </ul>
@@ -944,7 +944,7 @@ export function SidebarApp() {
 
                         const renderRows = (targetIds: number[]) =>
                           targetIds.map((id: number) => {
-                            const toonData = historyToons[id];
+                            const toonData = historyToons[String(id)];
                             if (!toonData) return null;
                             return (
                               <ToonRow
@@ -953,10 +953,10 @@ export function SidebarApp() {
                                 favorites={favorites}
                                 blocked={blocked}
                                 activeToonIds={activeToonIds}
-                                note={notes[id]}
+                                note={notes[String(id)]}
                                 refresh={refresh}
                                 isHovered={false}
-                                isJustAdded={justAddedId === Number(toonData.id)}
+                                isJustAdded={justAddedId === toonData.id}
                                 onRequestDialog={handleRequestDialog}
                               />
                             );
