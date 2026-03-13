@@ -593,8 +593,8 @@ const updateBossInfo = () => {
   let suitValues: number[] = [];
   for (const row of rows) {
     const suitImg = row.querySelector('.toon__track--suit img');
-    if (suitImg instanceof HTMLImageElement && suitImg.title) {
-      suitValues.push(getCogValueFromName(suitImg.title));
+    if (suitImg instanceof HTMLElement && (suitImg.title || suitImg.dataset.originalTitle)) {
+      suitValues.push(getCogValueFromName(suitImg.title || suitImg.dataset.originalTitle || ''));
     }
   }
 
@@ -810,7 +810,7 @@ const memberIdToToonId: Record<number, string> = {};
 /** Group id -> set of member ids in that group; cleared on group_disbanded. */
 const groupMemberIds: Record<number, Set<number>> = {};
 const activeToons: Record<string, any> = {};
-let bossInfoEnabled = true;
+let bossInfoEnabled = false;
 
 function generateToonHash(name: string, photo: string) {
   let str = name || '';
@@ -1059,6 +1059,9 @@ export default defineContentScript({
     // also ensure any .group-details-dialog gets forced to 980px width inline
     const fixDialog = (d: HTMLElement) => {
       d.style.setProperty('width', '980px', 'important');
+      getSetting("boss-info-enabled").then(get => {
+        bossInfoEnabled = get !== false;
+      });
       if (bossInfoEnabled === false) return;
 
       const wrapper = d.querySelector('.boss-title-wrapper') as HTMLElement | null;

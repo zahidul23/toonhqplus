@@ -1019,6 +1019,7 @@ export function SidebarApp() {
                           const next = !bossInfoEnabled;
                           setBossInfoEnabled(next);
                           setSetting('boss-info-enabled', next).catch(console.error);
+                          window.location.replace(window.location.href);
                         }}
                         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                       >
