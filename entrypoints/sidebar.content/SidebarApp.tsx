@@ -116,17 +116,8 @@ function RelativeTime({ date }: { date: string }) {
   return <span>{display}</span>;
 }
 
-function normalizeToIds(raw: unknown): number[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => {
-    if (typeof item === 'object' && item !== null && 'id' in item) {
-      return (item as ToonData).id;
-    }
-    return Number(item);
-  }).filter(id => !isNaN(id));
-}
 
-function loadLists(): Promise<{ favorites: number[]; blocked: number[] }> {
+function loadLists(): Promise<{ favorites: ToonId[]; blocked: ToonId[] }> {
   return Promise.all([
     getAllFromList('toony_toons'),
     getAllFromList('stinky_toons'),
@@ -183,7 +174,7 @@ function ToonRow({
   toon: ToonData;
   favorites: ToonId[];
   blocked: ToonId[];
-  activeToonIds: number[];
+  activeToonIds: ToonId[];
   note?: string;
   refresh: () => void;
   isHovered: boolean;
@@ -200,7 +191,7 @@ function ToonRow({
   const isFavorited = favorites.includes(toon.id);
   const isBlocked = blocked.includes(toon.id);
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
-  const isOwnToon = typeof toon.id === 'number' && activeToonIds.includes(toon.id);
+  const isOwnToon = activeToonIds.includes(toon.id);
 
   // Determine row background color
   const defaultHoverClass = isBlocked ? 'bg-red-600/90 shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
@@ -570,9 +561,9 @@ export function SidebarApp() {
   const [blocked, setBlocked] = useState<ToonId[]>([]);
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
   const [historyGroupMembers, setHistoryGroupMembers] = useState<Record<number, any>>({});
-  const [historyToons, setHistoryToons] = useState<Record<string, any>>({});
+  const [historyToons, setHistoryToons] = useState<Record<ToonId, any>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [activeToonIds, setActiveToonIds] = useState<number[]>([]);
+  const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
@@ -631,7 +622,7 @@ export function SidebarApp() {
       getAllGroups(),
       getAllToons(),
       getAllNotes(),
-      getSetting<number[]>('active-toon-ids'),
+      getSetting<ToonId[]>('active-toon-ids'),
       getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config'),
       getSetting<boolean>('boss-info-enabled'),
       getSetting<string>('active-tab'),
@@ -645,18 +636,17 @@ export function SidebarApp() {
 
 
       const historyGroupMembersMap: Record<number, any> = {};
-
       groupMembers.forEach(m => { 
         if (historyGroupMembersMap[m.groupId]) {
-          historyGroupMembersMap[m.groupId].toonIds.push(m.toonId);
+          historyGroupMembersMap[m.groupId].toons.push({toonId: m.toonId, left: m.left});
         } else {
-          historyGroupMembersMap[m.groupId] = { toonIds: [m.toonId] };
+          historyGroupMembersMap[m.groupId] = { toons: [{toonId: m.toonId, left: m.left}] };
         }
       });
       setHistoryGroupMembers(historyGroupMembersMap);
 
-      const toonsMap: Record<string, any> = {};
-      for (const t of toonsArr) toonsMap[String(t.id)] = t;
+      const toonsMap: Record<ToonId, any> = {};
+      for (const t of toonsArr) toonsMap[t.id] = t;
       setHistoryToons(toonsMap);
 
       setNotes(notesMap);
@@ -748,10 +738,21 @@ export function SidebarApp() {
           for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
           setHistoryGroups(groupsMap);
         });
+        getAllGroupMembers().then(groupMembers => {
+          const historyGroupMembersMap: Record<number, any> = {};
+          groupMembers.forEach(m => { 
+            if (historyGroupMembersMap[m.groupId]) {
+              historyGroupMembersMap[m.groupId].toons.push({toonId: m.toonId, left: m.left});
+            } else {
+              historyGroupMembersMap[m.groupId] = { toons: [{toonId: m.toonId, left: m.left}] };
+            }
+          });
+          setHistoryGroupMembers(historyGroupMembersMap);
+        });
       }
       if (store === 'toons') {
         getAllToons().then(toonsArr => {
-          const toonsMap: Record<number, any> = {};
+          const toonsMap: Record<ToonId, any> = {};
           for (const t of toonsArr) toonsMap[t.id] = t;
           setHistoryToons(toonsMap);
         });
@@ -764,7 +765,7 @@ export function SidebarApp() {
         getSetting<boolean>('boss-info-enabled').then(v => { if (v !== undefined) setBossInfoEnabled(v !== false); });
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
-        getSetting<number[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
+        getSetting<string[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
       }
     };
     window.addEventListener('toonhqplus-db-changed', handleDbChange);
@@ -901,7 +902,7 @@ export function SidebarApp() {
                                     </span>
                                   </div>
                                   <div className="text-sm font-medium text-emerald-300 shrink-0">
-                                    {groupMembers?.toonIds?.length} toon{groupMembers?.toonIds?.length === 1 ? '' : 's'}
+                                    {groupMembers?.toons?.length} toon{groupMembers?.toons?.length === 1 ? '' : 's'}
                                   </div>
                                 </button>
                                 <button
@@ -933,29 +934,29 @@ export function SidebarApp() {
                     <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
                       {(() => {
                         const group = historyGroups[selectedHistoryGroup];
-                        const ids = historyGroupMembers[group.id]?.toonIds;
+                        const toons = historyGroupMembers[group.id]?.toons;
 
-                        const userActiveIds: number[] = [];
-                        const otherActiveIds: number[] = [];
-                        const userLeftIds: number[] = [];
-                        const otherLeftIds: number[] = [];
+                        const userActiveIds: ToonId[] = [];
+                        const otherActiveIds: ToonId[] = [];
+                        const userLeftIds: ToonId[] = [];
+                        const otherLeftIds: ToonId[] = [];
 
-                        (ids as number[]).forEach((id: number) => {
-                          const isUserToon = activeToonIds.includes(id);
-                          const hasLeft = !!group?.memberMetadata?.[id]?.left;
+                        (toons).forEach((toon : {toonId: ToonId, left: boolean}) => {
+                          const isUserToon = activeToonIds.includes(toon.toonId);
+                          const hasLeft = toon.left;
 
                           if (isUserToon) {
-                            if (hasLeft) userLeftIds.push(id);
-                            else userActiveIds.push(id);
+                            if (hasLeft) userLeftIds.push(toon.toonId);
+                            else userActiveIds.push(toon.toonId);
                           } else {
-                            if (hasLeft) otherLeftIds.push(id);
-                            else otherActiveIds.push(id);
+                            if (hasLeft) otherLeftIds.push(toon.toonId);
+                            else otherActiveIds.push(toon.toonId);
                           }
                         });
 
-                        const renderRows = (targetIds: number[]) =>
-                          targetIds.map((id: number) => {
-                            const toonData = historyToons[String(id)];
+                        const renderRows = (targetIds: ToonId[]) =>
+                          targetIds.map((id: ToonId) => {
+                            const toonData = historyToons[id];
                             if (!toonData) return null;
                             return (
                               <ToonRow

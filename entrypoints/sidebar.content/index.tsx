@@ -35,18 +35,9 @@ const STORAGE_KEYS = {
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
 
-function normalizeToIds(raw: unknown): number[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => {
-    if (typeof item === 'object' && item !== null && 'id' in item) {
-      return (item as ToonData).id;
-    }
-    return Number(item);
-  }).filter(id => !isNaN(id));
-}
 
 interface ToonData {
-  id: number;
+  id: string;
   name: string;
   photo?: string;
   // include any other fields we care about
@@ -254,9 +245,8 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
         // If row uses hash id (#...), resolve toon from DB: first by numeric id, then by hash
         if (!currentData && toonIdAttr?.startsWith('#')) {
           const afterHash = toonIdAttr.slice(1);
-          const asNum = Number(afterHash);
           let rec: ToonRecord | undefined =
-            !isNaN(asNum) ? await getToon(asNum) : undefined;
+            /^\d+$/.test(afterHash) ? await getToon(afterHash) : undefined;
           if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(toonIdAttr);
           if (rec) {
             toons[toonIdAttr] = rec as ToonData;
@@ -331,11 +321,10 @@ async function applyRowHighlights() {
       let rec: ToonRecord | undefined;
       if (idAttr.startsWith('#')) {
         const afterHash = idAttr.slice(1);
-        const asNum = Number(afterHash);
-        rec = !isNaN(asNum) ? await getToon(asNum) : undefined;
+        rec = /^\d+$/.test(afterHash) ? await getToon(afterHash) : undefined;
         if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(idAttr);
       } else {
-        rec = await getToon(Number(idAttr));
+        rec = await getToon(idAttr);
       }
       if (rec) {
         toons[idAttr] = rec as ToonData;
@@ -345,7 +334,7 @@ async function applyRowHighlights() {
 
     const favIds = new Set(favorites);
     const blkIds = new Set(blocked);
-    const resolvedId = data?.id ?? (idAttr && !idAttr.startsWith('#') ? Number(idAttr) : idAttr ?? null);
+    const resolvedId = data?.id ?? idAttr ?? null;
 
     if (resolvedId != null && favIds.has(resolvedId)) row.classList.add(ROW_CLASS_FAVORITE);
     else if (resolvedId != null && blkIds.has(resolvedId)) row.classList.add(ROW_CLASS_BLOCKED);
@@ -456,6 +445,32 @@ const getCogNameForLevel = (level: number, suit: string) => {
     return (suit === "lawbot" ? "Big Wig" : "The Big Cheese") + " " + (level - 28);
   }
 }
+
+const getCogValueFromName = (name: string) => {
+    const cleanName = name.replace(/<[^>]*>?/gm, ' ');
+    if (cleanName.includes("2.0")) return 78;
+
+    const levelMatch = cleanName.match(/Level\s+(\d+)/i) || cleanName.match(/(\d+)$/);
+    const level = levelMatch ? parseInt(levelMatch[1]) : 1;
+
+    const offsets = {
+      "Bottom Feeder": 0, "Flunky": 0,
+      "Bloodsucker": 4, "Pencil Pusher": 4,
+      "Double Talker": 8, "Yesman": 8,
+      "Ambulance Chaser": 12, "Micromanager": 12,
+      "Back Stabber": 16, "Downsizer": 16,
+      "Spin Doctor": 20, "Head Hunter": 20,
+      "Legal Eagle": 24, "Corporate Raider": 24,
+      "Big Wig": 28, "The Big Cheese": 28,
+    };
+
+    for (const [cog, offset] of Object.entries(offsets)) {
+      if (cleanName.includes(cog)) {
+        return level + offset;
+      }
+    }
+    return level;
+  };
 
 interface CJDifficultyTier {
   tier: number;
@@ -577,12 +592,9 @@ const updateBossInfo = () => {
   const rows = dialog.querySelectorAll('.group-member-row');
   let suitValues: number[] = [];
   for (const row of rows) {
-    const id = row.getAttribute('toon-id');
-    if (id && toons[id]) {
-      const t = toons[id];
-      const cogString = t[thisBossKey] || "";
-      const suitValue = getSuitLevel(cogString);
-      suitValues.push(suitValue);
+    const suitImg = row.querySelector('.toon__track--suit img');
+    if (suitImg instanceof HTMLImageElement && suitImg.title) {
+      suitValues.push(getCogValueFromName(suitImg.title));
     }
   }
 
@@ -794,7 +806,7 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
 
 const groupsState: Record<number, any> = {};
 /** Member id (from API/websocket) -> toon id, for resolving member_left events. */
-const memberIdToToonId: Record<number, number | string> = {};
+const memberIdToToonId: Record<number, string> = {};
 /** Group id -> set of member ids in that group; cleared on group_disbanded. */
 const groupMemberIds: Record<number, Set<number>> = {};
 const activeToons: Record<string, any> = {};
@@ -815,6 +827,15 @@ function generateToonHash(name: string, photo: string) {
   return '#' + Math.abs(hash).toString(16);
 }
 
+function applyToonHash(toon: any) {
+  if (toon.name) {
+    toon.hashId = generateToonHash(toon.name, toon.photo);
+  }
+  if (!toon.id) {
+    toon.id = toon.hashId;
+  }
+}
+
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
   cssInjectionMode: 'ui',
@@ -830,10 +851,12 @@ export default defineContentScript({
       const toonsData = await toonsResp.json();
       if (Array.isArray(toonsData)) {
         const newToons: ToonRecord[] = toonsData.map((toon: any) => {
-          activeToons[String(toon.id)] = toon;
-          toons[String(toon.id)] = toon;
+          const id = String(toon.id);
+          const normalized = { ...toon, id };
+          activeToons[id] = normalized;
+          toons[id] = normalized;
           return {
-            id: Number(toon.id),
+            id,
             name: toon.name || '',
             photo: toon.photo,
             species: toon.species,
@@ -857,7 +880,7 @@ export default defineContentScript({
       if (!groupMemberIds[groupId]) groupMemberIds[groupId] = new Set();
       for (const m of members) {
         const memberId = m?.id != null ? Number(m.id) : undefined;
-        const toonId = m?.toon?.id != null ? Number(m.toon.id) : undefined;
+        const toonId = m?.toon?.id != null ? String(m.toon.id) : String(generateToonHash(m.name || '', m.photo || ''));
         if (memberId != null && toonId != null) {
           memberIdToToonId[memberId] = toonId;
           groupMemberIds[groupId].add(memberId);
@@ -872,10 +895,10 @@ export default defineContentScript({
         const incoming = m.toon || (m.id && m.name ? m : { ...m });
         if (!incoming?.name && !incoming?.photo) return;
 
-        const numericId = incoming.id != null && !isNaN(Number(incoming.id)) ? Number(incoming.id) : null;
+        const numericId = incoming.id != null && !isNaN(Number(incoming.id)) ? String(Number(incoming.id)) : null;
         const hashId = incoming.hashId ?? incoming.toon?.hashId ?? generateToonHash(incoming.name || '', incoming.photo || '');
 
-        const id: number | string = numericId ?? hashId;
+        const id: string = numericId ?? String(hashId);
         const rec: ToonRecord = {
           id,
           name: incoming.name || '',
@@ -886,7 +909,7 @@ export default defineContentScript({
           lastSeen: new Date().toISOString(),
           hashId,
         };
-        toons[String(id)] = rec as ToonData;
+        toons[id] = rec as ToonData;
         newToons.push(rec);
       });
       if (newToons.length) putToons(newToons).catch(console.error);
@@ -897,13 +920,13 @@ export default defineContentScript({
       // (IndexedDB-based; no-op stub — toon records are kept as long as they are in a list/group)
     };
 
-    const syncGroupHistory = (group: any, leavingToonId?: number | string) => {
+    const syncGroupHistory = (group: any, leavingToonId?: string) => {
       if (!group || !Array.isArray(group.members)) return;
 
       const groupId = Number(group.id);
       updateMemberIdMaps(groupId, group.members);
 
-      const activeMember = group.members.find((m: any) => m.toon && activeToons[m.toon.id]);
+      const activeMember = group.members.find((m: any) => m.toon && activeToons[String(m.toon.id)]);
       if (!activeMember) return;
 
       // Persist group metadata
@@ -917,17 +940,13 @@ export default defineContentScript({
       // Persist all members
       const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
       const memberRecords: GroupMemberRecord[] = group.members
-        .filter((m: any) => m.toon && m.toon.id != null)
         .map((m: any) => ({
           groupId,
-          toonId: typeof m.toon.id === 'string' ? m.toon.id : Number(m.toon.id),
+          toonId: String(m.toon.id || generateToonHash(m.name || '', m.photo || '')),
           joined: m.joined || group.created,
-          left: undefined,
+          left: m.left || null,
         }));
       if (memberRecords.length) putGroupMembers(memberRecords).catch(console.error);
-
-      // Mark leavers
-      if (leavingToonId != null) markMemberLeft(groupId, leavingToonId).catch(console.error);
     };
 
 
@@ -938,6 +957,11 @@ export default defineContentScript({
       const data = await resp.json();
       if (data && Array.isArray(data.groups)) {
         data.groups.forEach((group: any) => {
+          group.members?.forEach((m: any) => {
+            if (m.toon) {
+            applyToonHash(m.toon);
+            }
+          });
           groupsState[group.id] = group;
           syncToonData(group.members);
           syncGroupHistory(group);
@@ -999,6 +1023,12 @@ export default defineContentScript({
                   delete groupsState[gid];
                 } else if (eventName === 'member_joined') {
                   if (groupsState[data.group]) {
+                    
+                    data.toon.hashId = generateToonHash(data.toon.name || '', data.toon.photo || '');
+                    if (!data.toon.id) {
+                      data.toon.id = data.toon.hashId;
+                    }
+
                     groupsState[data.group].members.push(data);
                     updateMemberIdMaps(Number(data.group), [data]);
                     syncToonData([data]);
@@ -1007,12 +1037,11 @@ export default defineContentScript({
                 } else if (eventName === 'member_left') {
                   if (groupsState[data.group]) {
                     const leavingToonId = memberIdToToonId[data.id];
-                    if (groupMemberIds[data.group]) groupMemberIds[data.group].delete(data.id);
-                    delete memberIdToToonId[data.id];
-                    groupsState[data.group].members = groupsState[data.group].members.filter(
-                      (m: any) => m.id !== data.id
-                    );
-                    syncGroupHistory(groupsState[data.group], leavingToonId);
+                    markMemberLeft(data.group, leavingToonId);
+                    groupsState[data.group].members.filter((m: any) => m.id === data.id).forEach((m: any) => {
+                      m.left = new Date().toISOString();
+                    });
+                    syncGroupHistory(groupsState[data.group]);
                   }
                 }
               } else {
@@ -1076,7 +1105,7 @@ export default defineContentScript({
 
         setTimeout(() => {
           updateBossInfo();
-        }, 250);
+        }, 100);
       }
     };
     document.querySelectorAll('.group-details-dialog').forEach(el => {
