@@ -1012,10 +1012,7 @@ export function SidebarApp() {
 
                     <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
                       <div className="flex items-center gap-3">
-                        <div className="h-7 w-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
-                        </div>
-                        <div className="text-sm font-bold text-white">Boss Info Overlay</div>
+                        <div className="text-sm font-bold text-white">Show CEO/CJ Tier</div>
                       </div>
                       <button
                         onClick={() => {
