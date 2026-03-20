@@ -56,8 +56,27 @@ function injectHighlightStyles() {
     tr.group-member-row.${ROW_CLASS_BLOCKED},
     tr.group-member-row.${ROW_CLASS_BLOCKED} td { background: rgba(239, 68, 68, 0.12) !important; }
 
-    /* enlarge dialog used by site; original rule sets 900px !important */
-    .group-details-dialog { width: 980px !important; max-width: 980px !important; }
+    .gdetails__main {
+      width: 100%;
+    }
+
+    .toonhq-plus-buttons {
+      padding-left: 1em;
+    }
+
+    div.group-details-dialog {
+      width: 980px !important;
+    }
+
+    @media (max-width: 1000px) {
+      div.gdetails__speedchat {
+        width: clamp(200px, 100vw - 700px, 300px); 
+      }
+      .toon__info {
+        width: 66% !important;
+        flex: none !important;
+      }
+    }
 
     /* tooltip for boss info */
     .boss-info {
@@ -447,30 +466,30 @@ const getCogNameForLevel = (level: number, suit: string) => {
 }
 
 const getCogValueFromName = (name: string) => {
-    const cleanName = name.replace(/<[^>]*>?/gm, ' ');
-    if (cleanName.includes("2.0")) return 78;
+  const cleanName = name.replace(/<[^>]*>?/gm, ' ');
+  if (cleanName.includes("2.0")) return 78;
 
-    const levelMatch = cleanName.match(/Level\s+(\d+)/i) || cleanName.match(/(\d+)$/);
-    const level = levelMatch ? parseInt(levelMatch[1]) : 1;
+  const levelMatch = cleanName.match(/Level\s+(\d+)/i) || cleanName.match(/(\d+)$/);
+  const level = levelMatch ? parseInt(levelMatch[1]) : 1;
 
-    const offsets = {
-      "Bottom Feeder": 0, "Flunky": 0,
-      "Bloodsucker": 4, "Pencil Pusher": 4,
-      "Double Talker": 8, "Yesman": 8,
-      "Ambulance Chaser": 12, "Micromanager": 12,
-      "Back Stabber": 16, "Downsizer": 16,
-      "Spin Doctor": 20, "Head Hunter": 20,
-      "Legal Eagle": 24, "Corporate Raider": 24,
-      "Big Wig": 28, "The Big Cheese": 28,
-    };
-
-    for (const [cog, offset] of Object.entries(offsets)) {
-      if (cleanName.includes(cog)) {
-        return level + offset;
-      }
-    }
-    return level;
+  const offsets = {
+    "Bottom Feeder": 0, "Flunky": 0,
+    "Bloodsucker": 4, "Pencil Pusher": 4,
+    "Double Talker": 8, "Yesman": 8,
+    "Ambulance Chaser": 12, "Micromanager": 12,
+    "Back Stabber": 16, "Downsizer": 16,
+    "Spin Doctor": 20, "Head Hunter": 20,
+    "Legal Eagle": 24, "Corporate Raider": 24,
+    "Big Wig": 28, "The Big Cheese": 28,
   };
+
+  for (const [cog, offset] of Object.entries(offsets)) {
+    if (cleanName.includes(cog)) {
+      return level + offset;
+    }
+  }
+  return level;
+};
 
 interface CJDifficultyTier {
   tier: number;
@@ -959,7 +978,7 @@ export default defineContentScript({
         data.groups.forEach((group: any) => {
           group.members?.forEach((m: any) => {
             if (m.toon) {
-            applyToonHash(m.toon);
+              applyToonHash(m.toon);
             }
           });
           groupsState[group.id] = group;
@@ -1023,7 +1042,7 @@ export default defineContentScript({
                   delete groupsState[gid];
                 } else if (eventName === 'member_joined') {
                   if (groupsState[data.group]) {
-                    
+
                     data.toon.hashId = generateToonHash(data.toon.name || '', data.toon.photo || '');
                     if (!data.toon.id) {
                       data.toon.id = data.toon.hashId;
@@ -1055,14 +1074,33 @@ export default defineContentScript({
       }
     });
 
+    const bossValuesExist = () => {
+      const dialog = document.querySelector(".group-details-dialog .modal-body");
+      if (!dialog) return true;
+      let childrenText = "";
+      for (const child of dialog.children) {
+        if (child.textContent?.toLowerCase().includes("district")) {
+          break;
+        }
+        childrenText += child.textContent;
+      }
+      if (childrenText.includes("CEO") && childrenText.trim() !== "CEO") {
+        return true;
+      }
+      if (childrenText.includes("CJ") && childrenText.trim() !== "CJ") {
+        return true;
+      }
+      return false;
+    }
+
     injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 980px width inline
     const fixDialog = (d: HTMLElement) => {
-      d.style.setProperty('width', '980px', 'important');
       getSetting("boss-info-enabled").then(get => {
         bossInfoEnabled = get !== false;
       });
       if (bossInfoEnabled === false) return;
+      if (bossValuesExist()) return;
 
       const wrapper = d.querySelector('.boss-title-wrapper') as HTMLElement | null;
       const allH4s = Array.from(d.querySelectorAll('h4'));
