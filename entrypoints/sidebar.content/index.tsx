@@ -18,6 +18,7 @@ import {
   getAllGroupMembers,
   getGroupMembers,
   getSetting,
+  getSettings,
   setSetting,
   getAllNotes,
   type ToonRecord,
@@ -47,7 +48,6 @@ interface ToonData {
 }
 
 const toons: Record<string, ToonData> = {};
-let notesEnabled = false;
 
 function injectHighlightStyles() {
   if (document.querySelector('style[data-toonhq-plus-highlights]')) return;
@@ -525,20 +525,10 @@ async function applyRowHighlights() {
         }
       }
 
-      // Attach hover listeners for sidebar highlight sync
-      if (!row.dataset.toonhqHoverAttached) {
-        row.dataset.toonhqHoverAttached = 'true';
-        row.addEventListener('mouseenter', () => {
-          window.dispatchEvent(
-            new CustomEvent('toonhq-plus-toon-hover', { detail: { id: idAttr, name, source: 'main' } })
-          );
-        });
-        row.addEventListener('mouseleave', () => {
-          window.dispatchEvent(new CustomEvent('toonhq-plus-toon-unhover'));
-        });
-      }
-
       // Add Note Bubble
+      getSetting<boolean>('notes-enabled').then(enabled => {
+        notesEnabled = enabled !== false;
+      });
       if (notesEnabled && (resolvedId != null || index === 0)) {
         const noteText = resolvedId ? allNotes[resolvedId] : '';
         let displayNote = noteText || '';
@@ -796,9 +786,7 @@ const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, boss
   `;
 };
 
-const updateBossInfo = async () => {
-  const enabledSetting = await getSetting<boolean>('boss-info-enabled');
-  bossInfoEnabled = enabledSetting !== false;
+const updateBossInfo = () => {
   if (bossInfoEnabled === false) {
     const dialog = document.querySelector('.group-details-dialog');
     const thisBossInfo = dialog?.querySelector(".boss-info");
@@ -1038,7 +1026,19 @@ const memberIdToToonId: Record<number, string> = {};
 /** Group id -> set of member ids in that group; cleared on group_disbanded. */
 const groupMemberIds: Record<number, Set<number>> = {};
 const activeToons: Record<string, any> = {};
-let bossInfoEnabled = false;
+let bossInfoEnabled = true;
+let notesEnabled = true;
+
+const DEFAULT_SETTINGS: Record<string, any> = {
+  'boss-info-enabled': true,
+  'notes-enabled': true,
+  'navbar-config': {
+    pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+    dropdown: ['field-offices', 'gardening', 'doodles']
+  },
+  'sidebar-open': false,
+  'active-tab': 'history'
+};
 
 function generateToonHash(name: string, photo: string) {
   let str = name || '';
@@ -1071,6 +1071,22 @@ export default defineContentScript({
   async main(ctx) {
     // Run migration from old local storage on first start
     await migrateFromLocalStorage();
+
+    // Ensure all default settings are persisted if they don't exist
+    for (const [key, defaultValue] of Object.entries(DEFAULT_SETTINGS)) {
+      const existing = await getSetting(key);
+      if (existing === undefined) {
+        await setSetting(key, defaultValue);
+      }
+    }
+
+    // Now load everything into local state
+    const currentSettings = await getSettings(Object.keys(DEFAULT_SETTINGS));
+    bossInfoEnabled = currentSettings['boss-info-enabled'] !== false;
+    notesEnabled = currentSettings['notes-enabled'] !== false;
+    if (currentSettings['navbar-config']) {
+      applyNavbarCustomization(currentSettings['navbar-config']);
+    }
 
     // 1) Fetch owned toons first
     // Load active toons from /api/toons/ (toons belonging to the current user)
@@ -1438,10 +1454,7 @@ export default defineContentScript({
 
     injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 980px width inline
-    const fixDialog = async (d: HTMLElement) => {
-      const enabledSetting = await getSetting<boolean>('boss-info-enabled');
-      bossInfoEnabled = enabledSetting !== false;
-
+    const fixDialog = (d: HTMLElement) => {
       if (!bossInfoEnabled) {
         // If disabled, remove any existing injected info and unwrap titles
         const wrapper = d.querySelector('.boss-title-wrapper');
@@ -1551,20 +1564,8 @@ export default defineContentScript({
     dialogObserver.observe(document.body, { childList: true, subtree: true });
     ctx.onInvalidated(() => dialogObserver.disconnect());
 
-
     updateBossInfo();
     applyRowHighlights();
-
-    // Load navbar config and boss-info setting from IndexedDB
-    getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(config => {
-      if (config) applyNavbarCustomization(config);
-    });
-    getSetting<boolean>('boss-info-enabled').then(enabled => {
-      if (enabled !== undefined) bossInfoEnabled = enabled !== false;
-    });
-    getSetting<boolean>('notes-enabled').then(enabled => {
-      if (enabled !== undefined) notesEnabled = enabled !== false;
-    });
 
     let dbHighlightTimeout: ReturnType<typeof setTimeout> | null = null;
     // Listen for DB changes (replaces browser.storage.onChanged)

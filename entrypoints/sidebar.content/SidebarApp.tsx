@@ -17,6 +17,7 @@ import {
   setNote,
   clearNotes,
   getSetting,
+  getSettings,
   setSetting,
   deleteGroup as dbDeleteGroup,
   clearAllGroups,
@@ -188,8 +189,8 @@ async function updateToonList(
 const SUIT_TRACKS = [
   { name: 'Sellbot', key: 'sellbot', color: '#7b00ae' },
   { name: 'Cashbot', key: 'cashbot', color: '#108000' },
-  { name: 'Lawbot', key: 'lawbot', color: '#004aef' },
-  { name: 'Bossbot', key: 'bossbot', color: '#800000' },
+  { name: 'Lawbot', key: 'lawbot', color: '#2e5db1' },
+  { name: 'Bossbot', key: 'bossbot', color: '#8c5d3d' },
 ];
 
 const decodeSuit = (trackId: string, suitCode: string | number | undefined) => {
@@ -223,10 +224,10 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
   if (!toon) return null;
 
   return (
-    <div className="w-[19rem] bg-[#064e3b]/95 backdrop-blur-md border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in zoom-in duration-200">
+    <div className="w-[19rem] bg-[#064e3b] border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200">
       <div className="flex items-center gap-3">
         <div className="relative">
-          <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full" />
+          <div className="absolute inset-0 bg-emerald-500/20 rounded-full" />
           {(() => {
             const photo = getToonPhoto(toon);
             return photo ? (
@@ -242,9 +243,9 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
             );
           })()}
         </div>
-        <div className="flex flex-col">
-          <h4 className="font-bold text-lg leading-tight flex items-baseline gap-2">
-            {toon.name}
+        <div className="flex flex-col min-w-0">
+          <h4 className="font-bold text-lg leading-tight break-words">
+            {toon.name}{' '}
             {toon.laff != null && (
               <span className="text-emerald-400 font-black text-sm tabular-nums">({toon.laff})</span>
             )}
@@ -252,40 +253,48 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 justify-center px-1">
+      <div className="flex flex-col rounded-lg border border-white/10 bg-black/40 shadow-inner overflow-hidden">
         {gagsConfig.map((track) => {
           const level = (toon[track.id] as number) || 0;
-          const gag = level > 0 ? track.gags[level - 1] : track.gags[0];
-          const isMissing = level === 0;
-          const title = isMissing ? `${track.name}less` : gag.name;
           const isPrestiged = toon.prestiges?.includes(track.id);
+          const isMissing = level === 0;
 
           return (
             <div
               key={track.id}
-              className={`w-8 h-8 rounded p-1 flex items-center justify-center relative shadow-sm border ${isMissing ? 'grayscale opacity-40 border-white/5' : 'border-white/10'}`}
-              style={{
-                background: `${track.color}cc`,
-              }}
-              title={title}
+              className={`flex h-9 p-1 items-center gap-0.5 border-b border-white/10 last:border-0 transition-all ${isMissing ? 'opacity-20 grayscale' : 'opacity-100'}`}
+              style={{ background: isMissing ? undefined : `${track.color}11` }}
             >
-              <img
-                src={`https://toonhq.org/static/assets/gags/${gag.image}`}
-                alt={title}
-                draggable="false"
-                className="w-full h-full object-contain"
-              />
-              {isPrestiged && (
-                <div className="absolute -bottom-1.5 -right-1.5 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="w-3.5 h-3.5 fill-emerald-400"
-                    xmlns="http://www.w3.org/2000/svg"
+              {track.gags.map((gag, idx) => {
+                const gagLvl = idx + 1;
+                const isUnlocked = level >= gagLvl;
+                return (
+                  <div
+                    key={gag.name}
+                    className={`flex-1 h-full flex items-center justify-center relative transition-all duration-300 rounded-sm ${isUnlocked ? 'opacity-100 scale-100 shadow-lg' : 'opacity-5 scale-90 grayscale'}`}
+                    style={{
+                      backgroundColor: isUnlocked ? track.color : 'transparent',
+                    }}
+                    title={`${gagLvl}: ${gag.name}`}
                   >
-                    <path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,11 8,9 17,8Z" />
-                  </svg>
-                </div>
-              )}
+                    <img
+                      src={`https://toonhq.org/static/assets/gags/${gag.image}`}
+                      alt={gag.name}
+                      draggable="false"
+                      className="w-6 h-6 object-contain drop-shadow-md"
+                    />
+                    {isPrestiged && isUnlocked && (
+                      <div className="absolute -bottom-1 -right-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+                        <img
+                          src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
+                          alt="Organic"
+                          className="w-3.5 h-3.5 object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
@@ -295,9 +304,15 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
         {SUIT_TRACKS.map((suit) => {
           const suitData = decodeSuit(suit.key, toon[suit.key]);
           return (
-            <div key={suit.name} className="flex flex-col gap-1 rounded-lg bg-black/20 p-2 border border-white/5 relative overflow-hidden group/suit">
+            <div
+              key={suit.name}
+              className={`flex flex-col gap-1 rounded-lg p-2 border relative overflow-hidden group/suit transition-all duration-300 ${suitData ? 'shadow-xl border-white/20' : 'bg-black/20 border-white/5'}`}
+              style={{
+                backgroundColor: suitData ? suit.color : undefined,
+              }}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-bold uppercase tracking-tighter text-white/30 truncate max-w-[90px]">
+                <span className={`text-[10px] font-black uppercase tracking-widest ${suitData ? 'text-white/80' : 'text-white/30'}`}>
                   {suit.name}
                 </span>
               </div>
@@ -314,14 +329,14 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
                   {suitData ? (
                     <>
                       <div className="flex items-center gap-1">
-                        <span className="text-xs font-bold tabular-nums" style={{ color: suit.color }}>
+                        <span className="text-[12px] font-black tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
                           {`Lvl ${suitData.level}`}
                         </span>
                         {suitData.isVersion2 && (
                           <span className="text-[8px] font-black text-emerald-400 uppercase tracking-tighter self-end mb-0.5">V2.0</span>
                         )}
                       </div>
-                      <span className="text-[8px] font-medium text-white/40 leading-tight truncate max-w-[80px]" title={suitData.name}>
+                      <span className="text-[8px] font-medium text-white/70 leading-tight truncate max-w-[80px]" title={suitData.name}>
                         {suitData.name}
                       </span>
                     </>
@@ -765,7 +780,6 @@ export function SidebarApp() {
   const [hoveredToonName, setHoveredToonName] = useState<string | null>(null);
   const [hoverSource, setHoverSource] = useState<'sidebar' | 'main' | null>(null);
   const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; height: number } | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const refresh = useCallback(async () => {
     const [{ favorites: f, blocked: b }, toonsArr, groups, groupMembers, allNotes, ids] = await Promise.all([
@@ -860,6 +874,9 @@ export function SidebarApp() {
       setHoveredToonId(customEvent.detail?.id?.toString() || null);
       setHoveredToonName(customEvent.detail?.name || null);
       setHoverSource(customEvent.detail?.source || 'main');
+      if (customEvent.detail?.rect) {
+        setHoveredRect(customEvent.detail.rect);
+      }
     };
     const handleUnhover = () => {
       setHoveredToonId(null);
@@ -876,23 +893,20 @@ export function SidebarApp() {
     };
     window.addEventListener('toonhqplus-request-dialog', handleRemoteRequest);
 
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-
     return () => {
       window.removeEventListener('toonhq-plus-toon-hover', handleHover);
       window.removeEventListener('toonhq-plus-toon-unhover', handleUnhover);
       window.removeEventListener('toonhqplus-request-dialog', handleRemoteRequest);
-      window.removeEventListener('mousemove', handleMouseMove);
     };
   }, [handleRequestDialog]);
 
   useEffect(() => {
     refresh();
-    getSetting<boolean>('sidebar-open').then(val => {
-      if (val !== undefined) setOpen(!!val);
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled']).then(values => {
+      if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
+      if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
+      if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
+      if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
     });
 
     // Listen for DB changes (replaces browser.storage.onChanged)
@@ -1264,6 +1278,7 @@ export function SidebarApp() {
                             const next = !bossInfoEnabled;
                             setBossInfoEnabled(next);
                             setSetting('boss-info-enabled', next).catch(console.error);
+                            window.location.replace(window.location.href);
                           }}
                           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
@@ -1495,13 +1510,13 @@ export function SidebarApp() {
           : hoveredToonName
             ? Object.values(historyToons).find((t) => t.name === hoveredToonName)
             : null;
-        if (!hoveredToon || hoverSource !== 'sidebar' || !hoveredRect) return null;
+        if (!hoveredToon || !hoveredRect) return null;
 
         return (
           <div
             className="fixed z-[2147483648] pointer-events-none transition-all duration-150"
             style={{
-              top: Math.max(16, Math.min(window.innerHeight - 350, hoveredRect.top + (hoveredRect.height / 2) - 175)), // Vertical center, clamped
+              top: Math.max(16, Math.min(window.innerHeight - 560, hoveredRect.top + (hoveredRect.height / 2) - 280)), // Vertical center, clamped
               right: window.innerWidth - hoveredRect.left + 12, // Offset back to 12px
             }}
           >

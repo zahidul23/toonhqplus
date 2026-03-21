@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'ToonHQ+',
     description: 'ToonHQ+ is a browser extension that enhances the ToonHQ experience.',
-    version: '1.0.7',
+    version: '1.0.8',
     permissions: ['storage'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
 
@@ -24,5 +24,11 @@ export default defineConfig({
       "48": "icon/logo-48.png",
       "128": "icon/logo-128.png"
     },
+  },
+  runner: {
+    // For Chrome-based browsers
+    chromiumArgs: ['https://toonhq.org/groups'],
+    // For Firefox
+    firefoxArgs: ['https://toonhq.org/groups'],
   },
 });
