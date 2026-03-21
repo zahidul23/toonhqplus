@@ -78,6 +78,15 @@ function injectHighlightStyles() {
       }
     }
 
+    .row.text-center:has(.col-6):has(> :nth-child(5)) {
+      @media (min-width: 576px) {
+        div{
+          flex: 0 0 20%;
+          padding: 0;
+        }
+      }
+    }
+
     /* tooltip for boss info */
     .boss-info {
       position: relative;
@@ -995,84 +1004,107 @@ export default defineContentScript({
     // Run cleanup on startup and every 30 minutes
     cleanupToonCache();
     setInterval(cleanupToonCache, 30 * 60 * 1000);
+    let isReconnecting = false;
+    const connectWebSocket = () => {
+      const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');
 
-    const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');
-
-    ws.addEventListener('open', () => {
-      console.log('[ToonHQ+] Direct WebSocket connection opened, sending initialization sequence...');
-      // 4 = Engine.io message, 0 = connect
-      ws.send('40');
-
-      // 4 = Engine.io message, 2 = event, 0 = namespace/ID
-      ws.send('420["track","groups",1]');
-    });
-
-    ws.addEventListener('message', (event) => {
-      if (typeof event.data === 'string') {
-        const str = event.data;
-
-        // Handle Socket.io Ping (2)
-        if (str === '2') {
-          ws.send('3'); // send Pong
+      ws.addEventListener('open', () => {
+        if (isReconnecting) {
+          console.log('[ToonHQ+] Reconnected! Reloading page...');
+          window.location.reload();
           return;
         }
 
-        // Handle Event Payloads
-        const match = str.match(/^(\d+)(.*)$/);
-        if (match) {
-          const prefix = match[1];
-          const payloadString = match[2];
+        console.log('[ToonHQ+] Direct WebSocket connection opened, sending initialization sequence...');
+        // 4 = Engine.io message, 0 = connect
+        ws.send('40');
 
-          if (payloadString) {
-            try {
-              const payload = JSON.parse(payloadString);
-              if (Array.isArray(payload) && typeof payload[0] === 'string') {
-                const eventName = payload[0];
-                const data = payload[1];
-                if (eventName === 'group_created') {
-                  groupsState[data.id] = data;
-                  syncToonData(data.members);
-                  syncGroupHistory(data);
-                } else if (eventName === 'group_disbanded') {
-                  const gid = data.id;
-                  if (groupMemberIds[gid]) {
-                    for (const mid of groupMemberIds[gid]) delete memberIdToToonId[mid];
-                    delete groupMemberIds[gid];
-                  }
-                  delete groupsState[gid];
-                } else if (eventName === 'member_joined') {
-                  if (groupsState[data.group]) {
+        // 4 = Engine.io message, 2 = event, 0 = namespace/ID
+        ws.send('420["track","groups",1]');
+      });
 
-                    data.toon.hashId = generateToonHash(data.toon.name || '', data.toon.photo || '');
-                    if (!data.toon.id) {
-                      data.toon.id = data.toon.hashId;
+      ws.addEventListener('message', (event) => {
+        if (typeof event.data === 'string') {
+          const str = event.data;
+          console.log(str)
+
+          // Handle Socket.io Ping (2)
+          if (str === '2') {
+            ws.send('3'); // send Pong
+            return;
+          }
+
+          // Handle Event Payloads
+          const match = str.match(/^(\d+)(.*)$/);
+          if (match) {
+            const prefix = match[1];
+            const payloadString = match[2];
+
+            if (payloadString) {
+              try {
+                const payload = JSON.parse(payloadString);
+                if (Array.isArray(payload) && typeof payload[0] === 'string') {
+                  const eventName = payload[0];
+                  const data = payload[1];
+                  if (eventName === 'group_created') {
+                    groupsState[data.id] = data;
+                    syncToonData(data.members);
+                    syncGroupHistory(data);
+                  } else if (eventName === 'group_disbanded') {
+                    const gid = data.id;
+                    if (groupMemberIds[gid]) {
+                      for (const mid of groupMemberIds[gid]) delete memberIdToToonId[mid];
+                      delete groupMemberIds[gid];
                     }
+                    delete groupsState[gid];
+                  } else if (eventName === 'member_joined') {
+                    if (groupsState[data.group]) {
 
-                    groupsState[data.group].members.push(data);
-                    updateMemberIdMaps(Number(data.group), [data]);
-                    syncToonData([data]);
-                    syncGroupHistory(groupsState[data.group]);
+                      data.toon.hashId = generateToonHash(data.toon.name || '', data.toon.photo || '');
+                      if (!data.toon.id) {
+                        data.toon.id = data.toon.hashId;
+                      }
+
+                      groupsState[data.group].members.push(data);
+                      updateMemberIdMaps(Number(data.group), [data]);
+                      syncToonData([data]);
+                      syncGroupHistory(groupsState[data.group]);
+                    }
+                  } else if (eventName === 'member_left') {
+                    if (groupsState[data.group]) {
+                      const leavingToonId = memberIdToToonId[data.id];
+                      markMemberLeft(data.group, leavingToonId);
+                      groupsState[data.group].members.filter((m: any) => m.id === data.id).forEach((m: any) => {
+                        m.left = new Date().toISOString();
+                      });
+                      syncGroupHistory(groupsState[data.group]);
+                    }
                   }
-                } else if (eventName === 'member_left') {
-                  if (groupsState[data.group]) {
-                    const leavingToonId = memberIdToToonId[data.id];
-                    markMemberLeft(data.group, leavingToonId);
-                    groupsState[data.group].members.filter((m: any) => m.id === data.id).forEach((m: any) => {
-                      m.left = new Date().toISOString();
-                    });
-                    syncGroupHistory(groupsState[data.group]);
-                  }
+                } else {
+                  console.log(`[ToonHQ+] Socket Message (${prefix}):`, payload);
                 }
-              } else {
-                console.log(`[ToonHQ+] Socket Message (${prefix}):`, payload);
+              } catch (e) {
+                console.log(`[ToonHQ+] Socket Msg (Raw ${prefix}):`, payloadString);
               }
-            } catch (e) {
-              console.log(`[ToonHQ+] Socket Msg (Raw ${prefix}):`, payloadString);
             }
           }
         }
-      }
-    });
+      });
+
+      ws.addEventListener('close', () => {
+        if (!isReconnecting) {
+          console.log('[ToonHQ+] WebSocket closed. Attempting to reconnect...');
+          isReconnecting = true;
+        }
+        setTimeout(connectWebSocket, 5000);
+      });
+
+      ws.addEventListener('error', () => {
+        console.log('[ToonHQ+] WebSocket error.');
+      });
+    };
+
+    connectWebSocket();
 
     const bossValuesExist = () => {
       const dialog = document.querySelector(".group-details-dialog .modal-body");
@@ -1093,6 +1125,84 @@ export default defineContentScript({
       return false;
     }
 
+    const getFacilityRewards = (title: string) => {
+      let rewardType = "";
+      let rewardAmount = "";
+      if (title.includes('factory')) {
+        rewardType = "Merits";
+        if (title.includes('scrap')) {
+          rewardAmount = "350 - 638";
+          if (title.includes('short')) {
+            rewardAmount = "350 - 356";
+          }
+          if (title.includes('long')) {
+            rewardAmount = "596 - 638";
+          }
+        }
+        if (title.includes('steel')) {
+          rewardAmount = "867 - 1630";
+          if (title.includes('short')) {
+            rewardAmount = "867 - 950";
+          }
+          if (title.includes('long')) {
+            rewardAmount = "1525 - 1630";
+          }
+        }
+      }
+      if (title.includes('mint')) {
+        rewardType = "Cogbucks";
+        if (title.includes('coin')) {
+          rewardAmount = "702 - 807";
+        }
+        if (title.includes('bullion')) {
+          rewardAmount = "1626 - 1850";
+        }
+      }
+      if (title.includes('da office')) {
+        rewardType = "Jury Notices";
+        if (title.includes('junior')) {
+          rewardAmount = "781 - 889";
+        }
+        if (title.includes('senior')) {
+          rewardAmount = "1854 - 2082";
+        }
+      }
+      if (title.includes('cog golf')) {
+        rewardType = "Stock Options";
+        if (title.includes('fairway')) {
+          rewardAmount = "882 - 975";
+        }
+        if (title.includes('fringe')) {
+          rewardAmount = "2097 - 2305";
+        }
+      }
+      return { rewardType, rewardAmount };
+    }
+
+    const insertFacilityRewards = (d: HTMLElement) => {
+      const h4 = d.querySelector('h4');
+      if (!h4) return;
+      const title = h4.innerText.toLowerCase().trim();
+      const { rewardType, rewardAmount } = getFacilityRewards(title);
+
+      if (!rewardType || !rewardAmount) return;
+
+      const parentDiv = document.querySelector(".row.text-center:has(.col-6)");
+      if (parentDiv) {
+        if (parentDiv.children.length === 5) {
+          return;
+        }
+        const rewardDiv = document.createElement("div");
+        rewardDiv.className = "col-6 col-sm-3";
+        rewardDiv.innerHTML = `
+          <h6>${rewardType}</h6>
+          <p>${rewardAmount}</p>
+        `;
+        parentDiv.appendChild(rewardDiv);
+      }
+
+    }
+
     injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 980px width inline
     const fixDialog = (d: HTMLElement) => {
@@ -1101,6 +1211,7 @@ export default defineContentScript({
       });
       if (bossInfoEnabled === false) return;
       if (bossValuesExist()) return;
+      insertFacilityRewards(d);
 
       const wrapper = d.querySelector('.boss-title-wrapper') as HTMLElement | null;
       const allH4s = Array.from(d.querySelectorAll('h4'));
