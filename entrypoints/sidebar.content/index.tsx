@@ -19,6 +19,7 @@ import {
   getGroupMembers,
   getSetting,
   setSetting,
+  getAllNotes,
   type ToonRecord,
   type GroupRecord,
   type GroupMemberRecord,
@@ -31,6 +32,7 @@ const STORAGE_KEYS = {
   BLOCKED: 'toonhq-blocked',
   NAVBAR_CONFIG: 'toonhqplus-navbar-config',
   BOSS_INFO_ENABLED: 'toonhqplus-boss-info-enabled',
+  NOTES_ENABLED: 'toonhqplus-notes-enabled',
 } as const;
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
@@ -45,6 +47,7 @@ interface ToonData {
 }
 
 const toons: Record<string, ToonData> = {};
+let notesEnabled = false;
 
 function injectHighlightStyles() {
   if (document.querySelector('style[data-toonhq-plus-highlights]')) return;
@@ -215,6 +218,7 @@ function injectHighlightStyles() {
       display: inline-flex;
       gap: 1em;
       vertical-align: middle;
+      position: relative;
     }
     .toonhq-plus-buttons button {
       cursor: pointer;
@@ -237,6 +241,113 @@ function injectHighlightStyles() {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .note-bubble {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.2;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border: 1px solid #fde68a;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 8px;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    .note-bubble::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 0 6px 6px 6px;
+      border-style: solid;
+      border-color: transparent transparent #fde68a transparent;
+    }
+    .note-bubble::after {
+      content: '';
+      position: absolute;
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 0 6px 6px 6px;
+      border-style: solid;
+      border-color: transparent transparent #fef3c7 transparent;
+    }
+
+    tr.toonhq-plus-note td {
+      border-top: none !important;
+      padding: 0 !important;
+      height: 25px;
+    }
+    tr.toonhq-plus-note.toonhq-plus-favorite,
+    tr.toonhq-plus-note.toonhq-plus-favorite td { background: rgba(34, 197, 94, 0.12) !important; }
+    
+    tr.toonhq-plus-note.toonhq-plus-blocked,
+    tr.toonhq-plus-note.toonhq-plus-blocked td { background: rgba(239, 68, 68, 0.12) !important; }
+
+    .note-bubble {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.2;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border: 1px solid #fde68a;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 13px;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    .note-bubble::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 0 6px 6px 6px;
+      border-style: solid;
+      border-color: transparent transparent #fde68a transparent;
+    }
+    .note-bubble::after {
+      content: '';
+      position: absolute;
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 0 6px 6px 6px;
+      border-style: solid;
+      border-color: transparent transparent #fef3c7 transparent;
+    }
+
+    tr.toonhq-plus-favorite .note-bubble {
+      background: #1f8454;
+      border-color: #1f8454;
+      color: white;
+    }
+    tr.toonhq-plus-favorite .note-bubble::before,
+    tr.toonhq-plus-favorite .note-bubble::after {
+      border-color: transparent transparent #1f8454 transparent;
+    }
+
+    tr.toonhq-plus-blocked .note-bubble {
+      background: #dc2626;
+      border-color: #dc2626;
+      color: white;
+    }
+    tr.toonhq-plus-blocked .note-bubble::before,
+    tr.toonhq-plus-blocked .note-bubble::after {
+      border-color: transparent transparent #dc2626 transparent;
     }
   `;
   (document.head ?? document.documentElement).appendChild(style);
@@ -312,8 +423,8 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
       return btn;
     };
 
-    const thumbsUpSvg = `<div style="background-color: #1f8454; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg></div>`;
-    const blockSvg = `<div style="background-color: #dc2626; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></div>`;
+    const thumbsUpSvg = `<div style="background-color: #1f8454; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg></div>`;
+    const blockSvg = `<div style="background-color: #dc2626; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></div>`;
 
     container.append(
       makeBtn(thumbsUpSvg, 'Add to Toony Toons', STORAGE_KEYS.FAVORITES),
@@ -329,96 +440,183 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
 }
 
 
+let isApplyingHighlights = false;
+let pendingHighlight = false;
+
 async function applyRowHighlights() {
-  const [favorites, blocked] = await Promise.all([
-    getAllFromList('toony_toons'),
-    getAllFromList('stinky_toons'),
-  ]);
+  if (isApplyingHighlights) {
+    pendingHighlight = true;
+    return;
+  }
+  isApplyingHighlights = true;
 
-  const processRow = async (row: HTMLElement) => {
-    row.classList.remove(ROW_CLASS_FAVORITE, ROW_CLASS_BLOCKED);
-    const nameEl = row.querySelector('.toon__name');
-    const raw = nameEl?.textContent?.trim();
-    if (!raw) return;
-    const name = extractToonName(raw);
-    const idAttr = row.getAttribute('toon-id');
+  try {
+    const [favorites, blocked, allNotes] = await Promise.all([
+      getAllFromList('toony_toons'),
+      getAllFromList('stinky_toons'),
+      getAllNotes(),
+    ]);
 
-    // Resolve toon: check in-memory cache first, then DB (supports hash IDs)
-    let data: ToonData | null = idAttr && toons[idAttr] ? toons[idAttr] : null;
-    if (!data && idAttr) {
-      let rec: ToonRecord | undefined;
-      if (idAttr.startsWith('#')) {
-        const afterHash = idAttr.slice(1);
-        rec = /^\d+$/.test(afterHash) ? await getToon(afterHash) : undefined;
-        if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(idAttr);
+    const processRow = async (row: HTMLElement, index: number) => {
+      row.classList.remove(ROW_CLASS_FAVORITE, ROW_CLASS_BLOCKED);
+      const nameEl = row.querySelector('.toon__name');
+      const raw = nameEl?.textContent?.trim();
+      if (!raw) return;
+      const name = extractToonName(raw);
+      const idAttr = row.getAttribute('toon-id');
+
+      // Resolve toon: check in-memory cache first, then DB (supports hash IDs)
+      let data: ToonData | null = idAttr && toons[idAttr] ? toons[idAttr] : null;
+      if (!data && idAttr) {
+        let rec: ToonRecord | undefined;
+        if (idAttr.startsWith('#')) {
+          const afterHash = idAttr.slice(1);
+          rec = /^\d+$/.test(afterHash) ? await getToon(afterHash) : undefined;
+          if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(idAttr);
+        } else {
+          rec = await getToon(idAttr);
+        }
+        if (rec) {
+          toons[idAttr] = rec as ToonData;
+          data = rec as ToonData;
+        }
+      }
+
+      const favIds = new Set(favorites);
+      const blkIds = new Set(blocked);
+      const resolvedId = data?.id ?? idAttr ?? null;
+
+      if (resolvedId != null && favIds.has(resolvedId)) row.classList.add(ROW_CLASS_FAVORITE);
+      else if (resolvedId != null && blkIds.has(resolvedId)) row.classList.add(ROW_CLASS_BLOCKED);
+
+      // Hide buttons for owned toons
+      const isOwnToon = idAttr && activeToons[String(idAttr)];
+      if (isOwnToon) {
+        const existingContainer = row.querySelector('.toonhq-plus-buttons');
+        if (existingContainer) existingContainer.remove();
       } else {
-        rec = await getToon(idAttr);
+        updateRowButtons(row, name, data);
       }
-      if (rec) {
-        toons[idAttr] = rec as ToonData;
-        data = rec as ToonData;
+
+      const container = row.querySelector('.toonhq-plus-buttons');
+      if (container) {
+        const [upBtn, downBtn] = Array.from(
+          container.querySelectorAll('button'),
+        ) as HTMLButtonElement[];
+
+        const isFav = resolvedId != null && favIds.has(resolvedId);
+        const isBlk = resolvedId != null && blkIds.has(resolvedId);
+
+        if (isFav) {
+          upBtn.style.opacity = '1';
+          upBtn.title = `Remove from Toony Toons`;
+          downBtn.style.opacity = '0.4';
+          downBtn.title = `Add to Stinky Toons`;
+        } else if (isBlk) {
+          upBtn.style.opacity = '0.4';
+          upBtn.title = `Add to Toony Toons`;
+          downBtn.style.opacity = '1';
+          downBtn.title = `Remove from Stinky Toons`;
+        } else {
+          upBtn.style.opacity = '0.5';
+          upBtn.title = `Add to Toony Toons`;
+          downBtn.style.opacity = '0.5';
+          downBtn.title = `Add to Stinky Toons`;
+        }
       }
-    }
 
-    const favIds = new Set(favorites);
-    const blkIds = new Set(blocked);
-    const resolvedId = data?.id ?? idAttr ?? null;
-
-    if (resolvedId != null && favIds.has(resolvedId)) row.classList.add(ROW_CLASS_FAVORITE);
-    else if (resolvedId != null && blkIds.has(resolvedId)) row.classList.add(ROW_CLASS_BLOCKED);
-
-    // Hide buttons for owned toons
-    const isOwnToon = idAttr && activeToons[String(idAttr)];
-    if (isOwnToon) {
-      const existingContainer = row.querySelector('.toonhq-plus-buttons');
-      if (existingContainer) existingContainer.remove();
-    } else {
-      updateRowButtons(row, name, data);
-    }
-
-    const container = row.querySelector('.toonhq-plus-buttons');
-    if (container) {
-      const [upBtn, downBtn] = Array.from(
-        container.querySelectorAll('button'),
-      ) as HTMLButtonElement[];
-
-      const isFav = resolvedId != null && favIds.has(resolvedId);
-      const isBlk = resolvedId != null && blkIds.has(resolvedId);
-
-      if (isFav) {
-        upBtn.style.opacity = '1';
-        upBtn.title = `Remove from Toony Toons`;
-        downBtn.style.opacity = '0.4';
-        downBtn.title = `Add to Stinky Toons`;
-      } else if (isBlk) {
-        upBtn.style.opacity = '0.4';
-        upBtn.title = `Add to Toony Toons`;
-        downBtn.style.opacity = '1';
-        downBtn.title = `Remove from Stinky Toons`;
-      } else {
-        upBtn.style.opacity = '0.5';
-        upBtn.title = `Add to Toony Toons`;
-        downBtn.style.opacity = '0.5';
-        downBtn.title = `Add to Stinky Toons`;
+      // Attach hover listeners for sidebar highlight sync
+      if (!row.dataset.toonhqHoverAttached) {
+        row.dataset.toonhqHoverAttached = 'true';
+        row.addEventListener('mouseenter', () => {
+          window.dispatchEvent(
+            new CustomEvent('toonhq-plus-toon-hover', { detail: { id: idAttr, name } })
+          );
+        });
+        row.addEventListener('mouseleave', () => {
+          window.dispatchEvent(new CustomEvent('toonhq-plus-toon-unhover'));
+        });
       }
-    }
 
-    // Attach hover listeners for sidebar highlight sync
-    if (!row.dataset.toonhqHoverAttached) {
-      row.dataset.toonhqHoverAttached = 'true';
-      row.addEventListener('mouseenter', () => {
-        window.dispatchEvent(
-          new CustomEvent('toonhq-plus-toon-hover', { detail: { id: idAttr, name } })
-        );
-      });
-      row.addEventListener('mouseleave', () => {
-        window.dispatchEvent(new CustomEvent('toonhq-plus-toon-unhover'));
-      });
-    }
-  };
+      // Add Note Bubble
+      if (notesEnabled && (resolvedId != null || index === 0)) {
+        const noteText = resolvedId ? allNotes[resolvedId] : '';
+        let displayNote = noteText || '';
 
-  const rows = Array.from(document.querySelectorAll('.group-member-row')) as HTMLElement[];
-  await Promise.all(rows.map(r => processRow(r)));
+        if (displayNote.length > 75) {
+          displayNote = displayNote.substring(0, 75) + '...';
+        }
+
+        const btnContainer = row.querySelector('.toonhq-plus-buttons') as HTMLElement;
+        const favClass = row.classList.contains(ROW_CLASS_FAVORITE) ? ROW_CLASS_FAVORITE : '';
+        const blkClass = row.classList.contains(ROW_CLASS_BLOCKED) ? ROW_CLASS_BLOCKED : '';
+        const combinedClasses = `toonhq-plus-note ${favClass} ${blkClass}`.trim();
+
+        if (btnContainer) {
+          if (displayNote) {
+            let bubble = btnContainer.querySelector('.note-bubble') as HTMLElement;
+            if (!bubble) {
+              bubble = document.createElement('div');
+              bubble.className = 'note-bubble';
+              btnContainer.appendChild(bubble);
+            }
+            if (bubble.innerHTML !== displayNote) {
+              bubble.innerHTML = displayNote;
+            }
+
+            const [upBtn, downBtn] = Array.from(btnContainer.querySelectorAll('button')) as HTMLButtonElement[];
+            const targetBtn = favClass ? upBtn : (blkClass ? downBtn : upBtn);
+
+            if (targetBtn) {
+              const btnLeft = targetBtn.offsetLeft;
+              const btnWidth = targetBtn.offsetWidth;
+              bubble.style.left = `${btnLeft + (btnWidth / 2)}px`;
+              bubble.style.transform = 'translateX(-50%)';
+              bubble.style.marginTop = '1.5em';
+            }
+          } else {
+            const bubble = btnContainer.querySelector('.note-bubble');
+            if (bubble) bubble.remove();
+          }
+        }
+
+        // Robust spacer row cleanup logic
+        let next = row.nextElementSibling as HTMLElement | null;
+        let existingSpacers: HTMLElement[] = [];
+        while (next && next.classList.contains('toonhq-plus-note')) {
+          existingSpacers.push(next);
+          next = next.nextElementSibling as HTMLElement | null;
+        }
+
+        if (displayNote) {
+          if (existingSpacers.length === 0) {
+            const spacerRow = document.createElement('tr');
+            spacerRow.className = combinedClasses;
+            const cell = document.createElement('td');
+            cell.colSpan = 5;
+            spacerRow.appendChild(cell);
+            row.after(spacerRow);
+          } else {
+            existingSpacers[0].className = combinedClasses;
+            // Clear any orphaned duplicates
+            for (let i = 1; i < existingSpacers.length; i++) existingSpacers[i].remove();
+          }
+        } else {
+          existingSpacers.forEach(el => el.remove());
+        }
+      }
+    };
+
+    const rows = Array.from(document.querySelectorAll('.group-member-row')) as HTMLElement[];
+    await Promise.all(rows.map((r, i) => processRow(r, i)));
+
+  } finally {
+    isApplyingHighlights = false;
+    if (pendingHighlight) {
+      pendingHighlight = false;
+      applyRowHighlights();
+    }
+  }
 }
 
 const getSuitLevel = (suitString: string) => {
@@ -1314,12 +1512,19 @@ export default defineContentScript({
     getSetting<boolean>('boss-info-enabled').then(enabled => {
       if (enabled !== undefined) bossInfoEnabled = enabled !== false;
     });
+    getSetting<boolean>('notes-enabled').then(enabled => {
+      if (enabled !== undefined) notesEnabled = enabled !== false;
+    });
 
+    let dbHighlightTimeout: ReturnType<typeof setTimeout> | null = null;
     // Listen for DB changes (replaces browser.storage.onChanged)
     window.addEventListener('toonhqplus-db-changed', ((e: CustomEvent) => {
       const { store } = e.detail || {};
-      if (store === 'toony_toons' || store === 'stinky_toons') {
-        applyRowHighlights();
+      if (store === 'toony_toons' || store === 'stinky_toons' || store === 'notes') {
+        if (dbHighlightTimeout) clearTimeout(dbHighlightTimeout);
+        dbHighlightTimeout = setTimeout(() => {
+          applyRowHighlights();
+        }, 50);
       }
       if (store === 'settings') {
         getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(config => {
@@ -1332,6 +1537,13 @@ export default defineContentScript({
               document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
             } else {
               updateBossInfo();
+            }
+          }
+        });
+        getSetting<boolean>('notes-enabled').then(enabled => {
+          if (enabled !== undefined) {
+            if (notesEnabled !== enabled) {
+              window.location.reload();
             }
           }
         });

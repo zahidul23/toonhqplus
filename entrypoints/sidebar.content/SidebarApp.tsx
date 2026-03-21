@@ -13,6 +13,7 @@ import {
   getAllNotes,
   getNote,
   setNote,
+  clearNotes,
   getSetting,
   setSetting,
   deleteGroup as dbDeleteGroup,
@@ -28,6 +29,7 @@ const STORAGE_KEYS = {
   NAVBAR_CONFIG: 'toonhqplus-navbar-config',
   NOTES: 'toonhqplus-notes',
   BOSS_INFO_ENABLED: 'toonhqplus-boss-info-enabled',
+  NOTES_ENABLED: 'toonhqplus-notes-enabled',
   ACTIVE_TAB: 'toonhqplus-active-tab',
 } as const;
 
@@ -256,7 +258,10 @@ function ToonRow({
                       setIsEditing(true);
                       setNoteDraft(toon.note || note || '');
                     }}
-                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white cursor-pointer"
+                    className={`shrink-0 rounded p-1 cursor-pointer transition-colors ${isBlocked
+                      ? 'text-red-400/70 hover:bg-red-600 hover:text-white dark:text-red-300/60'
+                      : 'text-green-100/50 hover:bg-[#1f8454] hover:text-white'
+                      }`}
                     title="Edit note"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
@@ -271,9 +276,9 @@ function ToonRow({
                     title={listKey === STORAGE_KEYS.FAVORITES ? "Move to Stinky Toons" : "Move to Toony Toons"}
                   >
                     {listKey === STORAGE_KEYS.FAVORITES ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
                     )}
                   </button>
                   <button
@@ -284,7 +289,7 @@ function ToonRow({
                     className="shrink-0 rounded p-1 text-[#cf222e] hover:bg-[#ffebe9] dark:text-[#ff7b72] dark:hover:bg-[#ad130dde] cursor-pointer"
                     title="Remove from list"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                   </button>
                 </>
               ) : (
@@ -297,7 +302,7 @@ function ToonRow({
                     className="rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white cursor-pointer"
                     title="Add to Toony Toons"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
                   </button>
                   <button
                     onClick={(e) => {
@@ -307,7 +312,7 @@ function ToonRow({
                     className="rounded p-1 text-green-100/50 hover:bg-red-600 hover:text-white cursor-pointer"
                     title="Add to Stinky Toons"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
                   </button>
                 </div>
               )}
@@ -317,10 +322,13 @@ function ToonRow({
       </div>
 
       {isEditing ? (
-        <div className="mt-2 flex flex-col gap-2 rounded border border-[#1f8454] bg-black/40 p-2 shadow-inner dark:border-[#1f8454]/40 dark:bg-black/60">
+        <div className={`mt-2 flex flex-col gap-2 rounded border bg-black/40 p-2 shadow-inner dark:bg-black/60 ${isBlocked ? 'border-red-500/60 dark:border-red-500/40' : 'border-[#1f8454] dark:border-[#1f8454]/40'}`}>
           <textarea
             autoFocus
-            className="w-full flex-1 resize-y custom-scrollbar max-h-32 rounded border border-[#1f8454] bg-black/20 px-2 py-1 text-xs text-white placeholder-green-100/30 focus:border-green-400 focus:outline-none"
+            className={`w-full flex-1 resize-y custom-scrollbar max-h-32 rounded border bg-black/20 px-2 py-1 text-xs text-white focus:outline-none transition-colors ${isBlocked
+              ? 'border-red-500/60 placeholder-red-200/40 focus:border-red-400'
+              : 'border-[#1f8454] placeholder-green-100/30 focus:border-green-400'
+              }`}
             placeholder={isBlocked ? "Rude, griefing, bad gags, etc..." : "Nice, helpful, communicative, strategic etc..."}
             style={{ fieldSizing: 'content' } as React.CSSProperties}
             value={noteDraft}
@@ -336,7 +344,7 @@ function ToonRow({
           <div className="flex gap-2 justify-end">
             <button
               onClick={saveNote}
-              className="shrink-0 rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-500 cursor-pointer"
+              className={`shrink-0 rounded px-2 py-1 text-xs text-white cursor-pointer transition-colors ${isBlocked ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
             >
               Save
             </button>
@@ -349,7 +357,7 @@ function ToonRow({
           </div>
         </div>
       ) : note ? (
-        <div className="ml-8 whitespace-pre-wrap text-xs leading-snug text-green-100/80 italic">
+        <div className={`ml-8 whitespace-pre-wrap text-xs leading-snug italic ${isBlocked ? 'text-red-300/80' : 'text-green-100/80'}`}>
           {note}
         </div>
       ) : null}
@@ -555,6 +563,7 @@ function NavbarSettings({
 export function SidebarApp() {
   const [open, setOpen] = useState(true);
   const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
+  const [notesEnabled, setNotesEnabled] = useState(true);
   const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('history');
 
   const [favorites, setFavorites] = useState<ToonId[]>([]);
@@ -625,9 +634,10 @@ export function SidebarApp() {
       getSetting<ToonId[]>('active-toon-ids'),
       getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config'),
       getSetting<boolean>('boss-info-enabled'),
+      getSetting<boolean>('notes-enabled'),
       getSetting<string>('active-tab'),
       getAllGroupMembers(),
-    ]).then(([groups, toonsArr, notesMap, activeIds, navConfig, bossEnabled, activeTabVal, groupMembers]) => {
+    ]).then(([groups, toonsArr, notesMap, activeIds, navConfig, bossEnabled, notesEnabledVal, activeTabVal, groupMembers]) => {
       // Build historyGroups from groups + group_members won't be done here — we use a flat record
       // Convert groups array into the shape the UI already expects
       const groupsMap: Record<number, any> = {};
@@ -636,11 +646,11 @@ export function SidebarApp() {
 
 
       const historyGroupMembersMap: Record<number, any> = {};
-      groupMembers.forEach(m => { 
+      groupMembers.forEach(m => {
         if (historyGroupMembersMap[m.groupId]) {
-          historyGroupMembersMap[m.groupId].toons.push({toonId: m.toonId, left: m.left});
+          historyGroupMembersMap[m.groupId].toons.push({ toonId: m.toonId, left: m.left });
         } else {
-          historyGroupMembersMap[m.groupId] = { toons: [{toonId: m.toonId, left: m.left}] };
+          historyGroupMembersMap[m.groupId] = { toons: [{ toonId: m.toonId, left: m.left }] };
         }
       });
       setHistoryGroupMembers(historyGroupMembersMap);
@@ -653,6 +663,7 @@ export function SidebarApp() {
       if (activeIds) setActiveToonIds(activeIds);
       if (navConfig) setNavbarConfig(navConfig);
       if (bossEnabled !== undefined) setBossInfoEnabled(bossEnabled !== false);
+      if (notesEnabledVal !== undefined) setNotesEnabled(notesEnabledVal !== false);
       if (activeTabVal) setActiveTab(activeTabVal as any);
     });
   }, []);
@@ -691,7 +702,7 @@ export function SidebarApp() {
       setOpen(true);
       setSetting('sidebar-open', true).catch(console.error);
     }
-  }, [favorites, blocked, open]);
+  }, [favorites, blocked, open, notes]);
 
   useEffect(() => {
     const handleHover = (e: Event) => {
@@ -740,11 +751,11 @@ export function SidebarApp() {
         });
         getAllGroupMembers().then(groupMembers => {
           const historyGroupMembersMap: Record<number, any> = {};
-          groupMembers.forEach(m => { 
+          groupMembers.forEach(m => {
             if (historyGroupMembersMap[m.groupId]) {
-              historyGroupMembersMap[m.groupId].toons.push({toonId: m.toonId, left: m.left});
+              historyGroupMembersMap[m.groupId].toons.push({ toonId: m.toonId, left: m.left });
             } else {
-              historyGroupMembersMap[m.groupId] = { toons: [{toonId: m.toonId, left: m.left}] };
+              historyGroupMembersMap[m.groupId] = { toons: [{ toonId: m.toonId, left: m.left }] };
             }
           });
           setHistoryGroupMembers(historyGroupMembersMap);
@@ -763,6 +774,7 @@ export function SidebarApp() {
       if (store === 'settings') {
         getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(c => { if (c) setNavbarConfig(c); });
         getSetting<boolean>('boss-info-enabled').then(v => { if (v !== undefined) setBossInfoEnabled(v !== false); });
+        getSetting<boolean>('notes-enabled').then(v => { if (v !== undefined) setNotesEnabled(v !== false); });
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
         getSetting<string[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
@@ -941,7 +953,7 @@ export function SidebarApp() {
                         const userLeftIds: ToonId[] = [];
                         const otherLeftIds: ToonId[] = [];
 
-                        (toons).forEach((toon : {toonId: ToonId, left: boolean}) => {
+                        (toons).forEach((toon: { toonId: ToonId, left: boolean }) => {
                           const isUserToon = activeToonIds.includes(toon.toonId);
                           const hasLeft = toon.left;
 
@@ -1003,16 +1015,19 @@ export function SidebarApp() {
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Customization</h4>
                     <NavbarSettings
-                       config={navbarConfig}
-                       onUpdate={(newConfig) => {
-                         setNavbarConfig(newConfig);
-                         setSetting('navbar-config', newConfig).catch(console.error);
-                       }}
-                     />
+                      config={navbarConfig}
+                      onUpdate={(newConfig) => {
+                        setNavbarConfig(newConfig);
+                        setSetting('navbar-config', newConfig).catch(console.error);
+                      }}
+                    />
 
                     <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm font-bold text-white">Show CEO/CJ Tier</div>
+                      <div className="flex flex-col flex-1 mr-4">
+                        <div className="text-sm font-bold text-white">Show Group Tiers</div>
+                        <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                          Shows Fires for CEOs, Lawyers for CJs, and estimated Merits, Cogbucks, Jury Notices, and Stock Options from facilities.
+                        </div>
                       </div>
                       <button
                         onClick={() => {
@@ -1024,6 +1039,26 @@ export function SidebarApp() {
                         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                       >
                         <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${bossInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                      <div className="flex flex-col flex-1 mr-4">
+                        <div className="text-sm font-bold text-white">Show Toon Notes</div>
+                        <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                          Shows notes for saved Toony and Stinky Toons directly in the group members list.
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const next = !notesEnabled;
+                          setNotesEnabled(next);
+                          setSetting('notes-enabled', next).catch(console.error);
+                          window.location.replace(window.location.href);
+                        }}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${notesEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${notesEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                       </button>
                     </div>
                   </div>
@@ -1166,6 +1201,7 @@ export function SidebarApp() {
                       Promise.all([
                         clearList('toony_toons'),
                         clearList('stinky_toons'),
+                        clearNotes(),
                       ]).then(() => {
                         setFavorites([]);
                         setBlocked([]);
