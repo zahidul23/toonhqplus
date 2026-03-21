@@ -1026,7 +1026,6 @@ export default defineContentScript({
       ws.addEventListener('message', (event) => {
         if (typeof event.data === 'string') {
           const str = event.data;
-          console.log(str)
 
           // Handle Socket.io Ping (2)
           if (str === '2') {
