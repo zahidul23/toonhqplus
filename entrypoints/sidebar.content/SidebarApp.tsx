@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { groupTypes } from './groupTypes';
+import { gags as gagsConfig } from './gags';
+import { cogs as cogsConfig } from './cogs';
 import {
   getAllFromList,
   addToList,
@@ -36,7 +38,25 @@ const STORAGE_KEYS = {
 interface ToonData {
   id: ToonId;
   name: string;
+  species?: number;
+  color?: string;
+  laff?: number;
+  level?: number;
   photo?: string;
+  photo_bg?: string;
+  ring?: string | null;
+  toonup?: number;
+  trap?: number;
+  lure?: number;
+  sound?: number;
+  throw?: number;
+  squirt?: number;
+  drop?: number;
+  prestiges?: string[];
+  sellbot?: string | number;
+  cashbot?: string | number;
+  lawbot?: string | number;
+  bossbot?: string | number;
   note?: string;
   [key: string]: any;
 }
@@ -94,10 +114,7 @@ function RelativeTime({ date }: { date: string }) {
   const [display, setDisplay] = useState(() => formatRelativeTime(date));
 
   useEffect(() => {
-    // Initial check
     setDisplay(formatRelativeTime(date));
-
-    // Dynamic interval: 30s for items < 1h, 5m for items < 24h, 1h otherwise
     const getDelay = () => {
       const diff = Date.now() - new Date(date).getTime();
       if (diff < 3600000) return 30000;
@@ -118,14 +135,6 @@ function RelativeTime({ date }: { date: string }) {
   return <span>{display}</span>;
 }
 
-
-function loadLists(): Promise<{ favorites: ToonId[]; blocked: ToonId[] }> {
-  return Promise.all([
-    getAllFromList('toony_toons'),
-    getAllFromList('stinky_toons'),
-  ]).then(([favorites, blocked]) => ({ favorites, blocked }));
-}
-
 async function updateToonList(
   type: 'add' | 'move' | 'remove',
   listKey: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS],
@@ -141,18 +150,30 @@ async function updateToonList(
   if (type === 'remove') {
     await removeFromList(toonStore, toonId);
   } else {
-    // add or move: ensure in target list and out of other list
     await addToList(toonStore, toonId);
     await removeFromList(otherStore, toonId);
-
-    // Upsert toon into DB
     await putToon({
       id: toonId,
       name: toon.name || '',
-      photo: toon.photo,
       species: toon.species,
+      color: toon.color,
       laff: toon.laff,
       level: toon.level,
+      photo: toon.photo,
+      photo_bg: toon.photo_bg,
+      ring: toon.ring,
+      toonup: toon.toonup,
+      trap: toon.trap,
+      lure: toon.lure,
+      sound: toon.sound,
+      throw: toon.throw,
+      squirt: toon.squirt,
+      drop: toon.drop,
+      prestiges: toon.prestiges,
+      sellbot: toon.sellbot,
+      cashbot: toon.cashbot,
+      lawbot: toon.lawbot,
+      bossbot: toon.bossbot,
       lastSeen: new Date().toISOString(),
     });
 
@@ -160,6 +181,167 @@ async function updateToonList(
       await setNote(toonId, note);
     }
   }
+}
+
+// GAG_TRACKS is replaced by gagsConfig from gags.ts
+
+const SUIT_TRACKS = [
+  { name: 'Sellbot', key: 'sellbot', color: '#7b00ae' },
+  { name: 'Cashbot', key: 'cashbot', color: '#108000' },
+  { name: 'Lawbot', key: 'lawbot', color: '#004aef' },
+  { name: 'Bossbot', key: 'bossbot', color: '#800000' },
+];
+
+const decodeSuit = (trackId: string, suitCode: string | number | undefined) => {
+  if (suitCode == null) return null;
+  const s = String(suitCode).padStart(4, '0');
+
+  const cogHex = s[0];
+  const versionDigit = s[1];
+  const levelHex = s.substring(2);
+
+  const cogIndex = parseInt(cogHex, 16) - 1;
+  const isVersion2 = versionDigit === '2';
+  const level = parseInt(levelHex, 16);
+
+  if (cogIndex < 0 || level === 0) return null;
+
+  const track = cogsConfig.find((t) => t.id === trackId);
+  const rank = track?.ranks[cogIndex];
+
+  if (!rank) return null;
+
+  return {
+    name: rank.name,
+    image: rank ? `https://toonhq.org/static/assets/cogs/${rank.image}` : null,
+    level,
+    isVersion2,
+  };
+};
+
+function ToonTooltip({ toon }: { toon: ToonData }) {
+  if (!toon) return null;
+
+  return (
+    <div className="w-[19rem] bg-[#064e3b]/95 backdrop-blur-md border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in zoom-in duration-200">
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full" />
+          {(() => {
+            const photo = getToonPhoto(toon);
+            return photo ? (
+              <img
+                src={photo}
+                alt={toon.name}
+                className="relative h-14 w-14 rounded-full border-2 border-white/20 bg-black/40 object-cover shadow-lg"
+              />
+            ) : (
+              <div className="relative h-14 w-14 rounded-full border-2 border-white/20 bg-black/40 flex items-center justify-center text-white/20 shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+              </div>
+            );
+          })()}
+        </div>
+        <div className="flex flex-col">
+          <h4 className="font-bold text-lg leading-tight flex items-baseline gap-2">
+            {toon.name}
+            {toon.laff != null && (
+              <span className="text-emerald-400 font-black text-sm tabular-nums">({toon.laff})</span>
+            )}
+          </h4>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1 justify-center px-1">
+        {gagsConfig.map((track) => {
+          const level = (toon[track.id] as number) || 0;
+          const gag = level > 0 ? track.gags[level - 1] : track.gags[0];
+          const isMissing = level === 0;
+          const title = isMissing ? `${track.name}less` : gag.name;
+          const isPrestiged = toon.prestiges?.includes(track.id);
+
+          return (
+            <div
+              key={track.id}
+              className={`w-8 h-8 rounded p-1 flex items-center justify-center relative shadow-sm border ${isMissing ? 'grayscale opacity-40 border-white/5' : 'border-white/10'}`}
+              style={{
+                background: `${track.color}cc`,
+              }}
+              title={title}
+            >
+              <img
+                src={`https://toonhq.org/static/assets/gags/${gag.image}`}
+                alt={title}
+                draggable="false"
+                className="w-full h-full object-contain"
+              />
+              {isPrestiged && (
+                <div className="absolute -bottom-1.5 -right-1.5 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-3.5 h-3.5 fill-emerald-400"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,11 8,9 17,8Z" />
+                  </svg>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 px-1">
+        {SUIT_TRACKS.map((suit) => {
+          const suitData = decodeSuit(suit.key, toon[suit.key]);
+          return (
+            <div key={suit.name} className="flex flex-col gap-1 rounded-lg bg-black/20 p-2 border border-white/5 relative overflow-hidden group/suit">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold uppercase tracking-tighter text-white/30 truncate max-w-[90px]">
+                  {suit.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {suitData?.image ? (
+                  <img src={suitData.image} alt={suitData.name} className="w-5 h-5 object-contain" />
+                ) : (
+                  <svg className="w-5 h-5 text-white/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                  </svg>
+                )}
+                <div className="flex flex-col">
+                  {suitData ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs font-bold tabular-nums" style={{ color: suit.color }}>
+                          {`Lvl ${suitData.level}`}
+                        </span>
+                        {suitData.isVersion2 && (
+                          <span className="text-[8px] font-black text-emerald-400 uppercase tracking-tighter self-end mb-0.5">V2.0</span>
+                        )}
+                      </div>
+                      <span className="text-[8px] font-medium text-white/40 leading-tight truncate max-w-[80px]" title={suitData.name}>
+                        {suitData.name}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+function loadLists(): Promise<{ favorites: ToonId[]; blocked: ToonId[] }> {
+  return Promise.all([
+    getAllFromList('toony_toons'),
+    getAllFromList('stinky_toons'),
+  ]).then(([favorites, blocked]) => ({ favorites, blocked }));
 }
 
 function ToonRow({
@@ -171,7 +353,9 @@ function ToonRow({
   refresh,
   isHovered,
   isJustAdded,
-  onRequestDialog
+  onRequestDialog,
+  onMouseEnter,
+  onMouseLeave
 }: {
   toon: ToonData;
   favorites: ToonId[];
@@ -182,6 +366,8 @@ function ToonRow({
   isHovered: boolean;
   isJustAdded?: boolean;
   onRequestDialog: (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => void;
+  onMouseEnter?: (e: React.MouseEvent) => void;
+  onMouseLeave?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState(note || '');
@@ -195,7 +381,6 @@ function ToonRow({
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
   const isOwnToon = activeToonIds.includes(toon.id);
 
-  // Determine row background color
   const defaultHoverClass = isBlocked ? 'bg-red-600/90 shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
   let bgColorClass = isHovered ? defaultHoverClass : 'hover:bg-[#10462d]/60';
   let textColorClass = 'text-white';
@@ -232,6 +417,8 @@ function ToonRow({
   return (
     <li
       ref={rowRef}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-1000 ${bgColorClass} ${textColorClass}`}
     >
       <div className="flex items-center gap-1">
@@ -272,7 +459,7 @@ function ToonRow({
                       const targetKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
                       onRequestDialog('move', targetKey, toon, 'sidebar');
                     }}
-                    className="shrink-0 rounded p-1 text-green-100/50 hover:bg-black/20 hover:text-white cursor-pointer"
+                    className={`shrink-0 rounded p-1 text-green-100/50 hover:text-white cursor-pointer transition-colors ${isBlocked ? 'hover:bg-red-600' : 'hover:bg-emerald-600'}`}
                     title={listKey === STORAGE_KEYS.FAVORITES ? "Move to Stinky Toons" : "Move to Toony Toons"}
                   >
                     {listKey === STORAGE_KEYS.FAVORITES ? (
@@ -387,11 +574,9 @@ function NavbarSettings({
 
   const moveItem = (id: string, from: 'pinned' | 'dropdown', to: 'pinned' | 'dropdown', atIndex?: number) => {
     const newConfig = { ...config };
-    // Remove from source
     const items = [...newConfig[from]].filter(itemId => itemId !== id);
     newConfig[from] = items;
 
-    // Add to target
     const targetItems = [...newConfig[to]];
     const insertAt = atIndex !== undefined ? atIndex : targetItems.length;
     targetItems.splice(insertAt, 0, id);
@@ -420,7 +605,6 @@ function NavbarSettings({
     const items = config[list];
     const index = items.indexOf(id);
 
-    // Choose the index before or after the row based on cursor position
     const targetIndex = e.clientY < midY ? index : index + 1;
     setDragOverInfo({ list, index: targetIndex });
   };
@@ -432,8 +616,6 @@ function NavbarSettings({
     if (!id) return;
 
     const sourceList = config.pinned.includes(id) ? 'pinned' : 'dropdown';
-
-    // If targetIndex isn't provided (e.g. drop on empty container), append to end
     let finalIndex = targetIndex !== undefined ? targetIndex : config[targetList].length;
 
     if (sourceList === targetList) {
@@ -441,7 +623,6 @@ function NavbarSettings({
       const oldIndex = items.indexOf(id);
       if (oldIndex !== -1) {
         items.splice(oldIndex, 1);
-        // Adjust index if we moved an item from before the target to after it
         const adjustedIndex = finalIndex > oldIndex ? finalIndex - 1 : finalIndex;
         items.splice(adjustedIndex, 0, id);
         onUpdate({ ...config, [targetList]: items });
@@ -455,7 +636,6 @@ function NavbarSettings({
 
   const renderDropZone = (list: 'pinned' | 'dropdown', index: number) => {
     const isActive = dragOverInfo?.list === list && dragOverInfo?.index === index;
-    // Don't show drop zone immediately before or after the item being dragged in the same list
     if (draggedId) {
       const isSourceList = config[list].includes(draggedId);
       if (isSourceList) {
@@ -486,7 +666,6 @@ function NavbarSettings({
         onDragStart={(e) => onDragStart(e, id)}
         onDragOver={(e) => onDragOverRow(e, listType, id)}
         onDrop={(e) => {
-          // Calculate the nearest index again on drop
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const midY = rect.top + rect.height / 2;
           const index = config[listType].indexOf(id);
@@ -561,158 +740,131 @@ function NavbarSettings({
 }
 
 export function SidebarApp() {
-  const [open, setOpen] = useState(true);
-  const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
-  const [notesEnabled, setNotesEnabled] = useState(true);
-  const [activeTab, setActiveTab] = useState<'toons' | 'history' | 'settings'>('history');
-
+  const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'history' | 'toons' | 'settings'>('history');
   const [favorites, setFavorites] = useState<ToonId[]>([]);
   const [blocked, setBlocked] = useState<ToonId[]>([]);
+  const [historyToons, setHistoryToons] = useState<Record<ToonId, ToonData>>({});
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
   const [historyGroupMembers, setHistoryGroupMembers] = useState<Record<number, any>>({});
-  const [historyToons, setHistoryToons] = useState<Record<ToonId, any>>({});
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [navbarConfig, setNavbarConfig] = useState<{ pinned: string[]; dropdown: string[] }>({
+    pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+    dropdown: ['field-offices', 'gardening', 'doodles'],
+  });
+  const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
+  const [notesEnabled, setNotesEnabled] = useState(true);
+  const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
+  const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
-  const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
 
-  const [navbarConfig, setNavbarConfig] = useState<{ pinned: string[], dropdown: string[] }>({
-    pinned: ['invasions', 'groups', 'fishing', 'ccg'],
-    dropdown: ['field-offices', 'gardening', 'doodles']
-  });
-
+  // Tooltip tracking state
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
   const [hoveredToonName, setHoveredToonName] = useState<string | null>(null);
+  const [hoverSource, setHoverSource] = useState<'sidebar' | 'main' | null>(null);
+  const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; height: number } | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  const handleClearHistory = useCallback(async () => {
-    setDialog({
-      isOpen: true,
-      type: 'clear_history',
-      source: 'sidebar'
-    });
-  }, []);
-
-  const handleClearToons = useCallback(async () => {
-    setDialog({
-      isOpen: true,
-      type: 'clear_toons',
-      source: 'sidebar'
-    });
-  }, []);
-
-  const handleResetNavbar = useCallback(async () => {
-    setDialog({
-      isOpen: true,
-      type: 'reset_navigation',
-      source: 'sidebar'
-    });
-  }, []);
-
-  const handleDeleteGroup = useCallback(async (e: React.MouseEvent, groupId: number) => {
-    e.stopPropagation();
-    setDialog({
-      isOpen: true,
-      type: 'delete_group',
-      groupId,
-      source: 'sidebar'
-    });
-  }, []);
-
-  const refresh = useCallback(() => {
-    loadLists().then(({ favorites: f, blocked: b }) => {
-      setFavorites(f);
-      setBlocked(b);
-    });
-
-    // Load all data from IndexedDB in parallel
-    Promise.all([
-      getAllGroups(),
+  const refresh = useCallback(async () => {
+    const [{ favorites: f, blocked: b }, toonsArr, groups, groupMembers, allNotes, ids] = await Promise.all([
+      loadLists(),
       getAllToons(),
-      getAllNotes(),
-      getSetting<ToonId[]>('active-toon-ids'),
-      getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config'),
-      getSetting<boolean>('boss-info-enabled'),
-      getSetting<boolean>('notes-enabled'),
-      getSetting<string>('active-tab'),
+      getAllGroups(),
       getAllGroupMembers(),
-    ]).then(([groups, toonsArr, notesMap, activeIds, navConfig, bossEnabled, notesEnabledVal, activeTabVal, groupMembers]) => {
-      // Build historyGroups from groups + group_members won't be done here — we use a flat record
-      // Convert groups array into the shape the UI already expects
-      const groupsMap: Record<number, any> = {};
-      for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
-      setHistoryGroups(groupsMap);
+      getAllNotes(),
+      getSetting<string[]>('active-toon-ids'),
+    ]);
 
+    setFavorites(f);
+    setBlocked(b);
+    setNotes(allNotes);
+    if (ids) setActiveToonIds(ids);
 
-      const historyGroupMembersMap: Record<number, any> = {};
-      groupMembers.forEach(m => {
-        if (historyGroupMembersMap[m.groupId]) {
-          historyGroupMembersMap[m.groupId].toons.push({ toonId: m.toonId, left: m.left });
-        } else {
-          historyGroupMembersMap[m.groupId] = { toons: [{ toonId: m.toonId, left: m.left }] };
-        }
-      });
-      setHistoryGroupMembers(historyGroupMembersMap);
+    const toonsMap: Record<ToonId, ToonData> = {};
+    for (const t of toonsArr) toonsMap[t.id] = t;
+    setHistoryToons(toonsMap);
 
-      const toonsMap: Record<ToonId, any> = {};
-      for (const t of toonsArr) toonsMap[t.id] = t;
-      setHistoryToons(toonsMap);
+    const groupsMap: Record<number, any> = {};
+    for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
+    setHistoryGroups(groupsMap);
 
-      setNotes(notesMap);
-      if (activeIds) setActiveToonIds(activeIds);
-      if (navConfig) setNavbarConfig(navConfig);
-      if (bossEnabled !== undefined) setBossInfoEnabled(bossEnabled !== false);
-      if (notesEnabledVal !== undefined) setNotesEnabled(notesEnabledVal !== false);
-      if (activeTabVal) setActiveTab(activeTabVal as any);
+    const historyGroupMembersMap: Record<number, any> = {};
+    groupMembers.forEach((m) => {
+      if (historyGroupMembersMap[m.groupId]) {
+        historyGroupMembersMap[m.groupId].toons.push({ toonId: m.toonId, left: m.left });
+      } else {
+        historyGroupMembersMap[m.groupId] = { toons: [{ toonId: m.toonId, left: m.left }] };
+      }
     });
+    setHistoryGroupMembers(historyGroupMembersMap);
   }, []);
 
-  const handleRequestDialog = useCallback((type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'main' | 'sidebar' = 'sidebar') => {
-    const listName = listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons';
-    const otherKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
-    const otherListName = otherKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons';
+  const handleClearHistory = useCallback(() => {
+    setDialog({ isOpen: true, type: 'clear_history', source: 'sidebar' });
+  }, []);
 
-    // Auto-detect if it's a "move" (it exists in the other list)
-    let actualType = type;
-    const isFavorited = favorites.includes(toon.id);
-    const isBlocked = blocked.includes(toon.id);
+  const handleClearToons = useCallback(() => {
+    setDialog({ isOpen: true, type: 'clear_toons', source: 'sidebar' });
+  }, []);
 
-    if (type === 'add') {
-      if ((listKey === STORAGE_KEYS.FAVORITES && isBlocked) || (listKey === STORAGE_KEYS.BLOCKED && isFavorited)) {
-        actualType = 'move';
+  const handleResetNavbar = useCallback(() => {
+    setDialog({ isOpen: true, type: 'reset_navigation', source: 'sidebar' });
+  }, []);
+
+  const handleDeleteGroup = useCallback((e: React.MouseEvent, groupId: number) => {
+    e.stopPropagation();
+    setDialog({ isOpen: true, type: 'delete_group', groupId, source: 'sidebar' });
+  }, []);
+
+  const handleRequestDialog = useCallback(
+    (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => {
+      const isFavorited = favorites.includes(toon.id);
+      const isBlocked = blocked.includes(toon.id);
+      const otherListName = listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons';
+
+      let actualType = type;
+      if (type === 'add') {
+        if ((listKey === STORAGE_KEYS.FAVORITES && isBlocked) || (listKey === STORAGE_KEYS.BLOCKED && isFavorited)) {
+          actualType = 'move';
+        }
       }
-    }
 
-    setDialog({
-      isOpen: true,
-      type: actualType,
-      listKey,
-      toon,
-      source,
-      otherListName
-    });
-    setDialogNote(notes[String(toon.id)] || '');
-    if (source === 'main') {
-      setOpen(true);
-      setActiveTab('toons');
-      setSetting('sidebar-open', true).catch(console.error);
-      setSetting('active-tab', 'toons').catch(console.error);
-    } else if (!open) {
-      setOpen(true);
-      setSetting('sidebar-open', true).catch(console.error);
-    }
-  }, [favorites, blocked, open, notes]);
+      setDialog({
+        isOpen: true,
+        type: actualType,
+        listKey,
+        toon,
+        source,
+        otherListName,
+      });
+      setDialogNote(notes[String(toon.id)] || '');
+
+      if (source === 'main') {
+        setOpen(true);
+        setActiveTab('toons');
+        setSetting('sidebar-open', true).catch(console.error);
+        setSetting('active-tab', 'toons').catch(console.error);
+      } else if (!open) {
+        setOpen(true);
+        setSetting('sidebar-open', true).catch(console.error);
+      }
+    },
+    [favorites, blocked, open, notes]
+  );
 
   useEffect(() => {
     const handleHover = (e: Event) => {
       const customEvent = e as CustomEvent;
       setHoveredToonId(customEvent.detail?.id?.toString() || null);
       setHoveredToonName(customEvent.detail?.name || null);
+      setHoverSource(customEvent.detail?.source || 'main');
     };
     const handleUnhover = () => {
       setHoveredToonId(null);
       setHoveredToonName(null);
+      setHoverSource(null);
     };
 
     window.addEventListener('toonhq-plus-toon-hover', handleHover);
@@ -724,10 +876,16 @@ export function SidebarApp() {
     };
     window.addEventListener('toonhqplus-request-dialog', handleRemoteRequest);
 
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+
     return () => {
       window.removeEventListener('toonhq-plus-toon-hover', handleHover);
       window.removeEventListener('toonhq-plus-toon-unhover', handleUnhover);
       window.removeEventListener('toonhqplus-request-dialog', handleRemoteRequest);
+      window.removeEventListener('mousemove', handleMouseMove);
     };
   }, [handleRequestDialog]);
 
@@ -787,485 +945,570 @@ export function SidebarApp() {
   }, [refresh]);
 
   return (
-    <div
-      className="fixed top-4 right-4 z-[2147483647] flex max-h-[calc(100vh-2rem)] flex-col gap-2 font-sans"
-    >
-      <div className="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            const next = !open;
-            setOpen(next);
-            setSetting('sidebar-open', next).catch(console.error);
-          }}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 cursor-pointer transition-all active:scale-95"
-        >
-          {open ? 'Close' : 'HQ+'}
-        </button>
-      </div>
-      {open && (
-        <aside className="w-80 flex-1 flex flex-col min-h-0 rounded-lg border border-[#10462d] bg-[#1f8454] shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d] overflow-hidden">
+    <>
 
-          <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
-            <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-              onClick={() => {
-                setActiveTab('history');
-                setSelectedHistoryGroup(null);
-                setSetting('active-tab', 'history').catch(console.error);
-              }}
-            >
-              History
-            </button>
-            <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-              onClick={() => {
-                setActiveTab('toons');
-                setSetting('active-tab', 'toons').catch(console.error);
-              }}
-            >
-              Toons
-            </button>
-            <button
-              className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-              onClick={() => {
-                setActiveTab('settings');
-                setSetting('active-tab', 'settings').catch(console.error);
-              }}
-            >
-              Settings
-            </button>
-          </div>
 
-          <div className="flex-1 flex flex-col min-h-0 p-3">
-            {activeTab === 'toons' && (
-              <>
-                <section className="mb-3 flex-1 flex flex-col min-h-0">
-                  <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">
-                    Toony Toons
-                  </h3>
-                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                    {favorites.length === 0 ? (
-                      <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
-                    ) : (
-                      [...favorites].reverse().map((id) => {
-                        const toon = historyToons[id];
-                        if (!toon) return null;
-                        const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[String(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === toon.id} onRequestDialog={handleRequestDialog} />;
-                      })
-                    )}
-                  </ul>
-                </section>
+      <div className="fixed top-0 right-0 z-[2147483647] flex h-screen max-h-screen flex-col items-end p-4 pointer-events-none overflow-hidden">
+        <div className="mb-2 pointer-events-auto">
+          <button
+            onClick={() => {
+              const next = !open;
+              setOpen(next);
+              setSetting('sidebar-open', next).catch(console.error);
+            }}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 cursor-pointer transition-all active:scale-95"
+          >
+            {open ? 'Close' : 'HQ+'}
+          </button>
+        </div>
 
-                <section className="flex-1 flex flex-col min-h-0">
-                  <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">
-                    Stinky Toons
-                  </h3>
-                  <ul className="flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                    {blocked.length === 0 ? (
-                      <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
-                    ) : (
-                      [...blocked].reverse().map((id) => {
-                        const toon = historyToons[id];
-                        if (!toon) return null;
-                        const isHovered = (hoveredToonId && toon.id?.toString() === hoveredToonId) || (hoveredToonName === toon.name);
-                        return <ToonRow key={toon.id} toon={toon} favorites={favorites} blocked={blocked} activeToonIds={activeToonIds} note={notes[String(toon.id)]} refresh={refresh} isHovered={!!isHovered} isJustAdded={justAddedId === toon.id} onRequestDialog={handleRequestDialog} />;
-                      })
-                    )}
-                  </ul>
-                </section>
-              </>
-            )}
+        {open && (
+          <aside className="w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#10462d] bg-[#1f8454] shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d] overflow-hidden pointer-events-auto shrink-0">
+            <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
+              <button
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                onClick={() => {
+                  setActiveTab('history');
+                  setSelectedHistoryGroup(null);
+                  setSetting('active-tab', 'history').catch(console.error);
+                }}
+              >
+                History
+              </button>
+              <button
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                onClick={() => {
+                  setActiveTab('toons');
+                  setSetting('active-tab', 'toons').catch(console.error);
+                }}
+              >
+                Toons
+              </button>
+              <button
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                onClick={() => {
+                  setActiveTab('settings');
+                  setSetting('active-tab', 'settings').catch(console.error);
+                }}
+              >
+                Settings
+              </button>
+            </div>
 
-            {activeTab === 'history' && (
-              <section className="flex-1 flex flex-col min-h-0">
-                {selectedHistoryGroup === null ? (
-                  <>
-                    <div className="mb-2 shrink-0 flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-green-50">
-                        Recent Groups
-                      </h3>
-                    </div>
-                    <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar p-1.5 min-h-0">
-                      {Object.values(historyGroups).length === 0 ? (
-                        <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
+            <div className="flex-1 flex flex-col min-h-0 p-3">
+              {activeTab === 'toons' && (
+                <>
+                  <section className="mb-3 flex-[1_1_auto] flex flex-col min-h-0">
+                    <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Toony Toons</h3>
+                    <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                      {favorites.length === 0 ? (
+                        <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
                       ) : (
-                        Object.values(historyGroups)
-                          .sort((a: any, b: any) => {
-                            const timeA = new Date(a.userJoinedAt || a.created).getTime();
-                            const timeB = new Date(b.userJoinedAt || b.created).getTime();
-                            return timeB - timeA;
-                          })
-                          .map((group) => {
-                            const typeData = groupTypes.find((t) => t.id === group.type);
-                            const groupName = typeData ? typeData.name : `Group #${group.id}`;
-                            const groupMembers = historyGroupMembers[group.id];
-                            return (
-                              <div key={group.id} className="group relative">
-                                <button
-                                  onClick={() => setSelectedHistoryGroup(group.id)}
-                                  className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center cursor-pointer"
-                                >
-                                  <div className="flex-1 min-w-0">
-                                    <span className="block text-sm font-bold text-white truncate">{groupName}</span>
-                                    <span className="block text-xs text-green-200 mt-1">
-                                      <RelativeTime date={group.userJoinedAt || group.created} />
-                                    </span>
-                                  </div>
-                                  <div className="text-sm font-medium text-emerald-300 shrink-0">
-                                    {groupMembers?.toons?.length} toon{groupMembers?.toons?.length === 1 ? '' : 's'}
-                                  </div>
-                                </button>
-                                <button
-                                  onClick={(e) => handleDeleteGroup(e, group.id)}
-                                  className="absolute -right-1 -top-1 p-1 bg-[#10462d] border border-red-500/30 text-red-400 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 rounded-full hover:bg-red-500 hover:text-white hover:border-red-500 z-10 cursor-pointer"
-                                  title="Delete from history"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                                </button>
-                              </div>
-                            );
-                          })
+                        [...favorites].reverse().map((id) => {
+                          const toon = historyToons[id];
+                          if (!toon) return null;
+                          const isHovered =
+                            (hoveredToonId && String(toon.id) === hoveredToonId) ||
+                            (hoveredToonName && toon.name === hoveredToonName);
+                          return (
+                            <ToonRow
+                              key={toon.id}
+                              toon={toon}
+                              favorites={favorites}
+                              blocked={blocked}
+                              activeToonIds={activeToonIds}
+                              note={notes[String(toon.id)]}
+                              refresh={refresh}
+                              isHovered={!!isHovered}
+                              isJustAdded={justAddedId === toon.id}
+                              onRequestDialog={handleRequestDialog}
+                              onMouseEnter={(e) => {
+                                setHoveredToonId(String(toon.id));
+                                setHoveredToonName(toon.name);
+                                setHoverSource('sidebar');
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredToonId(null);
+                                setHoveredToonName(null);
+                                setHoverSource(null);
+                                setHoveredRect(null);
+                              }}
+                            />
+                          );
+                        })
                       )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center gap-2 mb-3 shrink-0">
-                      <button
-                        onClick={() => setSelectedHistoryGroup(null)}
-                        className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white cursor-pointer"
-                      >
-                        ← Back
-                      </button>
-                      <h3 className="text-sm font-bold text-green-50 truncate">
-                        {groupTypes.find((t) => t.id === historyGroups[selectedHistoryGroup]?.type)?.name || `Group #${historyGroups[selectedHistoryGroup]?.id}`}
-                      </h3>
-                    </div>
-                    <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
-                      {(() => {
-                        const group = historyGroups[selectedHistoryGroup];
-                        const toons = historyGroupMembers[group.id]?.toons;
+                    </ul>
+                  </section>
 
-                        const userActiveIds: ToonId[] = [];
-                        const otherActiveIds: ToonId[] = [];
-                        const userLeftIds: ToonId[] = [];
-                        const otherLeftIds: ToonId[] = [];
+                  <section className="flex-[1_1_auto] flex flex-col min-h-0">
+                    <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Stinky Toons</h3>
+                    <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                      {blocked.length === 0 ? (
+                        <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
+                      ) : (
+                        [...blocked].reverse().map((id) => {
+                          const toon = historyToons[id];
+                          if (!toon) return null;
+                          const isHovered =
+                            (hoveredToonId && String(toon.id) === hoveredToonId) ||
+                            (hoveredToonName && toon.name === hoveredToonName);
+                          return (
+                            <ToonRow
+                              key={toon.id}
+                              toon={toon}
+                              favorites={favorites}
+                              blocked={blocked}
+                              activeToonIds={activeToonIds}
+                              note={notes[String(toon.id)]}
+                              refresh={refresh}
+                              isHovered={!!isHovered}
+                              isJustAdded={justAddedId === toon.id}
+                              onRequestDialog={handleRequestDialog}
+                              onMouseEnter={(e) => {
+                                setHoveredToonId(String(toon.id));
+                                setHoveredToonName(toon.name);
+                                setHoverSource('sidebar');
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredToonId(null);
+                                setHoveredToonName(null);
+                                setHoverSource(null);
+                                setHoveredRect(null);
+                              }}
+                            />
+                          );
+                        })
+                      )}
+                    </ul>
+                  </section>
+                </>
+              )}
 
-                        (toons).forEach((toon: { toonId: ToonId, left: boolean }) => {
-                          const isUserToon = activeToonIds.includes(toon.toonId);
-                          const hasLeft = toon.left;
+              {activeTab === 'history' && (
+                <section className="flex-1 flex flex-col min-h-0">
+                  {selectedHistoryGroup === null ? (
+                    <>
+                      <div className="mb-2 shrink-0 flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
+                      </div>
+                      <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar p-1.5 min-h-0">
+                        {Object.values(historyGroups).length === 0 ? (
+                          <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
+                        ) : (
+                          Object.values(historyGroups)
+                            .sort((a: any, b: any) => {
+                              const timeA = new Date(a.userJoinedAt || a.created).getTime();
+                              const timeB = new Date(b.userJoinedAt || b.created).getTime();
+                              return timeB - timeA;
+                            })
+                            .map((group) => {
+                              const typeData = groupTypes.find((t) => t.id === group.type);
+                              const groupName = typeData ? typeData.name : `Group #${group.id}`;
+                              const groupMembers = historyGroupMembers[group.id];
+                              return (
+                                <div key={group.id} className="group relative">
+                                  <button
+                                    onClick={() => setSelectedHistoryGroup(group.id)}
+                                    className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center cursor-pointer"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <span className="block text-sm font-bold text-white truncate">{groupName}</span>
+                                      <span className="block text-xs text-green-200 mt-1">
+                                        <RelativeTime date={group.userJoinedAt || group.created} />
+                                      </span>
+                                    </div>
+                                    <div className="text-sm font-medium text-emerald-300 shrink-0">
+                                      {groupMembers?.toons?.length} toon{groupMembers?.toons?.length === 1 ? '' : 's'}
+                                    </div>
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleDeleteGroup(e, group.id)}
+                                    className="absolute -right-1 -top-1 p-1 bg-[#10462d] border border-red-500/30 text-red-400 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 rounded-full hover:bg-red-500 hover:text-white hover:border-red-500 z-10 cursor-pointer"
+                                    title="Delete from history"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                                  </button>
+                                </div>
+                              );
+                            })
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col min-h-0">
+                      <div className="flex items-center gap-2 mb-3 shrink-0">
+                        <button
+                          onClick={() => setSelectedHistoryGroup(null)}
+                          className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white cursor-pointer"
+                        >
+                          ← Back
+                        </button>
+                        <h3 className="text-sm font-bold text-green-50 truncate">
+                          {groupTypes.find((t) => t.id === historyGroups[selectedHistoryGroup]?.type)?.name || `Group #${historyGroups[selectedHistoryGroup]?.id}`}
+                        </h3>
+                      </div>
+                      <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
+                        {(() => {
+                          const group = historyGroups[selectedHistoryGroup];
+                          const toons = historyGroupMembers[group.id]?.toons;
 
-                          if (isUserToon) {
-                            if (hasLeft) userLeftIds.push(toon.toonId);
-                            else userActiveIds.push(toon.toonId);
-                          } else {
-                            if (hasLeft) otherLeftIds.push(toon.toonId);
-                            else otherActiveIds.push(toon.toonId);
-                          }
-                        });
+                          const userActiveIds: ToonId[] = [];
+                          const otherActiveIds: ToonId[] = [];
+                          const userLeftIds: ToonId[] = [];
+                          const otherLeftIds: ToonId[] = [];
 
-                        const renderRows = (targetIds: ToonId[]) =>
-                          targetIds.map((id: ToonId) => {
-                            const toonData = historyToons[id];
-                            if (!toonData) return null;
-                            return (
-                              <ToonRow
-                                key={id}
-                                toon={toonData}
-                                favorites={favorites}
-                                blocked={blocked}
-                                activeToonIds={activeToonIds}
-                                note={notes[String(id)]}
-                                refresh={refresh}
-                                isHovered={false}
-                                isJustAdded={justAddedId === toonData.id}
-                                onRequestDialog={handleRequestDialog}
-                              />
-                            );
+                          (toons).forEach((toon: { toonId: ToonId, left: boolean }) => {
+                            const isUserToon = activeToonIds.includes(toon.toonId);
+                            const hasLeft = toon.left;
+
+                            if (isUserToon) {
+                              if (hasLeft) userLeftIds.push(toon.toonId);
+                              else userActiveIds.push(toon.toonId);
+                            } else {
+                              if (hasLeft) otherLeftIds.push(toon.toonId);
+                              else otherActiveIds.push(toon.toonId);
+                            }
                           });
 
-                        return (
-                          <>
-                            {renderRows([...userActiveIds, ...otherActiveIds])}
-                            {(userLeftIds.length > 0 || otherLeftIds.length > 0) && (
-                              <li key="left-header" className="pt-2">
-                                <div className="flex items-center gap-2 px-1 mb-1">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-300/40">Left</span>
-                                  <div className="h-px flex-1 bg-green-500/10" />
-                                </div>
-                                <ul className="space-y-1 opacity-60 grayscale-[0.2]">
-                                  {renderRows([...userLeftIds, ...otherLeftIds])}
-                                </ul>
-                              </li>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </ul>
-                  </div>
-                )}
-              </section>
-            )}
+                          const renderRows = (targetIds: ToonId[]) =>
+                            targetIds.map((id: ToonId) => {
+                              const toonData = historyToons[id];
+                              if (!toonData) return null;
+                              const isHovered =
+                                (hoveredToonId && String(toonData.id) === hoveredToonId) ||
+                                (hoveredToonName && toonData.name === hoveredToonName);
+                              return (
+                                <ToonRow
+                                  key={toonData.id}
+                                  toon={toonData}
+                                  favorites={favorites}
+                                  blocked={blocked}
+                                  activeToonIds={activeToonIds}
+                                  note={notes[String(toonData.id)]}
+                                  refresh={refresh}
+                                  isHovered={!!isHovered}
+                                  isJustAdded={justAddedId === toonData.id}
+                                  onRequestDialog={handleRequestDialog}
+                                  onMouseEnter={(e) => {
+                                    setHoveredToonId(String(toonData.id));
+                                    setHoveredToonName(toonData.name);
+                                    setHoverSource('sidebar');
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                                  }}
+                                  onMouseLeave={() => {
+                                    setHoveredToonId(null);
+                                    setHoveredToonName(null);
+                                    setHoverSource(null);
+                                    setHoveredRect(null);
+                                  }}
+                                />
+                              );
+                            });
+                          return (
+                            <>
+                              {userActiveIds.length > 0 && (
+                                <>
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1">Your Toons</div>
+                                  {renderRows(userActiveIds)}
+                                </>
+                              )}
+                              {otherActiveIds.length > 0 && (
+                                <>
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2">Group Members</div>
+                                  {renderRows(otherActiveIds)}
+                                </>
+                              )}
+                              {(userLeftIds.length > 0 || otherLeftIds.length > 0) && (
+                                <>
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2 opacity-50">Toons that left</div>
+                                  <div className="opacity-60">{renderRows([...userLeftIds, ...otherLeftIds])}</div>
+                                </>
+                              )}
+                            </>
+                          )
 
-            {activeTab === 'settings' && (
-              <section className="flex-1 flex flex-col min-h-0">
-                <div className="flex-1 flex flex-col gap-3 p-1 overflow-y-auto custom-scrollbar min-h-0">
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Customization</h4>
-                    <NavbarSettings
-                      config={navbarConfig}
-                      onUpdate={(newConfig) => {
-                        setNavbarConfig(newConfig);
-                        setSetting('navbar-config', newConfig).catch(console.error);
-                      }}
-                    />
+                        })()}
+                      </ul>
+                    </div>
+                  )}
+                </section>
+              )}
 
-                    <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
-                      <div className="flex flex-col flex-1 mr-4">
-                        <div className="text-sm font-bold text-white">Show Group Tiers</div>
-                        <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
-                          Shows Fires for CEOs, Lawyers for CJs, and estimated Merits, Cogbucks, Jury Notices, and Stock Options from facilities.
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const next = !bossInfoEnabled;
-                          setBossInfoEnabled(next);
-                          setSetting('boss-info-enabled', next).catch(console.error);
-                          window.location.replace(window.location.href);
+              {activeTab === 'settings' && (
+                <section className="flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 flex flex-col gap-3 p-1 overflow-y-auto custom-scrollbar min-h-0">
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Customization</h4>
+                      <NavbarSettings
+                        config={navbarConfig}
+                        onUpdate={(newConfig) => {
+                          setNavbarConfig(newConfig);
+                          setSetting('navbar-config', newConfig).catch(console.error);
                         }}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
-                      >
-                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${bossInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      </button>
-                    </div>
+                      />
 
-                    <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
-                      <div className="flex flex-col flex-1 mr-4">
-                        <div className="text-sm font-bold text-white">Show Toon Notes</div>
-                        <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
-                          Shows notes for saved Toony and Stinky Toons directly in the group members list.
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">Show Group Tiers</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Shows Fires for CEOs, Lawyers for CJs, and estimated Merits, Cogbucks, Jury Notices, and Stock Options from facilities.
+                          </div>
                         </div>
+                        <button
+                          onClick={() => {
+                            const next = !bossInfoEnabled;
+                            setBossInfoEnabled(next);
+                            setSetting('boss-info-enabled', next).catch(console.error);
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${bossInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => {
-                          const next = !notesEnabled;
-                          setNotesEnabled(next);
-                          setSetting('notes-enabled', next).catch(console.error);
-                          window.location.replace(window.location.href);
-                        }}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${notesEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
-                      >
-                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${notesEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      </button>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">Show Toon Notes</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Shows notes for saved Toony and Stinky Toons directly in the group members list.
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const next = !notesEnabled;
+                            setNotesEnabled(next);
+                            setSetting('notes-enabled', next).catch(console.error);
+                            window.location.replace(window.location.href);
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${notesEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${notesEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-3 border-t border-white/5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Maintenance</h4>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        <button
+                          onClick={handleClearHistory}
+                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
+                        >
+                          <div className="h-7 w-7 rounded bg-red-500/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                          </div>
+                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Group History</div>
+                        </button>
+
+                        <button
+                          onClick={handleClearToons}
+                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
+                        >
+                          <div className="h-7 w-7 rounded bg-red-400/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m22 19-3-3 3-3" /></svg>
+                          </div>
+                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Toons List</div>
+                        </button>
+
+                        <button
+                          onClick={handleResetNavbar}
+                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-emerald-500/10 group transition-all cursor-pointer border border-white/5"
+                        >
+                          <div className="h-7 w-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                          </div>
+                          <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">Reset Navigation</div>
+                        </button>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="space-y-3 pt-3 border-t border-white/5">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-green-300/80">Maintenance</h4>
-
-                    <div className="grid grid-cols-1 gap-2">
-                      <button
-                        onClick={handleClearHistory}
-                        className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
-                      >
-                        <div className="h-7 w-7 rounded bg-red-500/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                        </div>
-                        <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Group History</div>
-                      </button>
-
-                      <button
-                        onClick={handleClearToons}
-                        className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
-                      >
-                        <div className="h-7 w-7 rounded bg-red-400/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m22 19-3-3 3-3" /></svg>
-                        </div>
-                        <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Toons List</div>
-                      </button>
-
-                      <button
-                        onClick={handleResetNavbar}
-                        className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-emerald-500/10 group transition-all cursor-pointer border border-white/5"
-                      >
-                        <div className="h-7 w-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
-                        </div>
-                        <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">Reset Navigation</div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-          </div>
-        </aside>
-      )
-      }
-
-      {
-        dialog && dialog.isOpen && (
+                </section>
+              )}
+            </div>
+          </aside>
+        )}
+      </div>
+      {dialog && dialog.isOpen && (
+        <div
+          className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'}`}
+          onClick={() => setDialog(null)}
+        >
           <div
-            className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'
-              }`}
-            onClick={() => setDialog(null)}
+            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'} ${dialog.source === 'main' ? '' : 'mr-4'}`}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'
-                } ${dialog.source === 'main' ? '' : 'mr-4'}`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation' ? (
-                <div className="mb-4 flex flex-col items-center gap-3 text-center">
-                  <div className={`h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 ${dialog.type === 'reset_navigation' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                    {dialog.type === 'reset_navigation' ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-bold text-white leading-tight">
-                      {dialog.type === 'delete_group' ? 'Delete Group' :
-                        dialog.type === 'clear_history' ? 'Clear History' :
-                          dialog.type === 'clear_toons' ? 'Clear Toons List' : 'Reset Navigation'}
-                    </h4>
-                    <p className="mt-1 text-sm text-red-100 opacity-90">
-                      {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
-                        dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
-                          dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toons? This cannot be undone.' :
-                            'Are you sure you want to reset your navigation bar to its default settings?'}
-                    </p>
-                  </div>
+            {(dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation') ? (
+              <div className="mb-4 flex flex-col items-center gap-3 text-center">
+                <div className={`h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 ${dialog.type === 'reset_navigation' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                  {dialog.type === 'reset_navigation' ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                  )}
                 </div>
-              ) : dialog.toon && (
-                <div className="mb-4 flex flex-col items-center gap-3 text-center">
-                  {(() => {
-                    const photo = getToonPhoto(dialog.toon!);
-                    return photo ? (
-                      <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
-                    ) : null;
-                  })()}
-                  <div>
-                    <h4 className="text-lg font-bold text-white leading-tight">
-                      {dialog.toon.name}
-                      {dialog.toon.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon.laff})</span>}
-                    </h4>
-                    <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
-                      {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                        dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
-                          `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
-                    </p>
-                  </div>
+                <div>
+                  <h4 className="text-lg font-bold text-white leading-tight">
+                    {dialog.type === 'delete_group' ? 'Delete Group' :
+                      dialog.type === 'clear_history' ? 'Clear History' :
+                        dialog.type === 'clear_toons' ? 'Clear Toons List' : 'Reset Navigation'}
+                  </h4>
+                  <p className="mt-1 text-sm text-red-100 opacity-90">
+                    {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
+                      dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
+                        dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toons? This cannot be undone.' :
+                          'Are you sure you want to reset your navigation bar to its default settings?'}
+                  </p>
                 </div>
-              )}
+              </div>
+            ) : dialog.toon ? (
+              <div className="mb-4 flex flex-col items-center gap-3 text-center">
+                {(() => {
+                  const photo = getToonPhoto(dialog.toon);
+                  return photo ? (
+                    <img src={photo} className={`h-16 w-16 rounded-full border-2 shadow-md bg-black/10 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'border-red-400' : 'border-emerald-400'}`} alt="" />
+                  ) : null;
+                })()}
+                <div>
+                  <h4 className="text-lg font-bold text-white leading-tight">
+                    {dialog.toon!.name}
+                    {dialog.toon!.laff != null && <span className="ml-1.5 opacity-60">({dialog.toon!.laff})</span>}
+                  </h4>
+                  <p className={`text-sm opacity-90 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-100' : 'text-green-200'}`}>
+                    {dialog.type === 'remove' ? `Remove from ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                      dialog.type === 'move' ? `Move to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?` :
+                        `Add to ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony Toons' : 'Stinky Toons'}?`}
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
-              {(dialog.type === 'add' || dialog.type === 'move') && (
-                <div className="mb-5">
-                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-green-300 opacity-80">
-                    Private Note
-                  </label>
-                  <textarea
-                    autoFocus
-                    className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner custom-scrollbar resize-y min-h-[5rem] max-h-32 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'
-                      }`}
-                    placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, bad gags, etc..." : "Nice, helpful, communicative, strategic etc..."}
-                    style={{ fieldSizing: 'content' } as React.CSSProperties}
-                    value={dialogNote}
-                    onChange={(e) => setDialogNote(e.target.value)}
-                  />
-                </div>
-              )}
+            {(dialog.type === 'add' || dialog.type === 'move') && (
+              <div className="mb-5">
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-green-300 opacity-80">
+                  Private Note
+                </label>
+                <textarea
+                  autoFocus
+                  className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner custom-scrollbar resize-y min-h-[5rem] max-h-32 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'}`}
+                  placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, bad gags, etc..." : "Nice, helpful, communicative, strategic etc..."}
+                  style={{ fieldSizing: 'content' } as React.CSSProperties}
+                  value={dialogNote}
+                  onChange={(e) => setDialogNote(e.target.value)}
+                />
+              </div>
+            )}
 
-              <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  if (dialog.type === 'delete_group' && dialog.groupId) {
+                    dbDeleteGroup(dialog.groupId).then(() => {
+                      getAllGroups().then(groups => {
+                        const groupsMap: Record<number, any> = {};
+                        for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
+                        setHistoryGroups(groupsMap);
+                        setDialog(null);
+                      });
+                    });
+                  } else if (dialog.type === 'clear_history') {
+                    clearAllGroups().then(() => {
+                      setHistoryGroups({});
+                      setDialog(null);
+                    });
+                  } else if (dialog.type === 'clear_toons') {
+                    Promise.all([
+                      clearList('toony_toons'),
+                      clearList('stinky_toons'),
+                      clearNotes(),
+                    ]).then(() => {
+                      setFavorites([]);
+                      setBlocked([]);
+                      setNotes({});
+                      setDialog(null);
+                    });
+                  } else if (dialog.type === 'reset_navigation') {
+                    const defaultConfig = {
+                      pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+                      dropdown: ['field-offices', 'gardening', 'doodles']
+                    };
+                    setSetting('navbar-config', defaultConfig).then(() => {
+                      setNavbarConfig(defaultConfig);
+                      setDialog(null);
+                    });
+                  } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
+                    updateToonList(dialog.type, dialog.listKey!, dialog.toon, dialogNote).then(() => {
+                      if (dialog.type === 'add' || dialog.type === 'move') {
+                        setJustAddedId(dialog.toon!.id);
+                        setTimeout(() => setJustAddedId(null), 500);
+                      }
+                      refresh();
+                      setDialog(null);
+                    });
+                  }
+                }}
+                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.listKey === STORAGE_KEYS.BLOCKED)
+                  ? 'bg-red-600 hover:bg-red-700 ring-red-400/50'
+                  : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
+                  } focus:outline-none focus:ring-2`}
+              >
+                {dialog.type === 'remove' ? 'Remove Toon' :
+                  dialog.type === 'delete_group' ? 'Delete Group' :
+                    dialog.type === 'clear_history' ? 'Clear History' :
+                      dialog.type === 'clear_toons' ? 'Clear Toons' :
+                        dialog.type === 'reset_navigation' ? 'Reset Navigation' :
+                          dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
+              </button>
+              {dialog.type === 'remove' && dialog.listKey && (
                 <button
                   onClick={() => {
-                    if (dialog.type === 'delete_group' && dialog.groupId) {
-                      dbDeleteGroup(dialog.groupId).then(() => {
-                        getAllGroups().then(groups => {
-                          const groupsMap: Record<number, any> = {};
-                          for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
-                          setHistoryGroups(groupsMap);
-                          setDialog(null);
-                        });
-                      });
-                    } else if (dialog.type === 'clear_history') {
-                      clearAllGroups().then(() => {
-                        setHistoryGroups({});
-                        setDialog(null);
-                      });
-                    } else if (dialog.type === 'clear_toons') {
-                      Promise.all([
-                        clearList('toony_toons'),
-                        clearList('stinky_toons'),
-                        clearNotes(),
-                      ]).then(() => {
-                        setFavorites([]);
-                        setBlocked([]);
-                        setNotes({});
-                        setDialog(null);
-                      });
-                    } else if (dialog.type === 'reset_navigation') {
-                      const defaultConfig = {
-                        pinned: ['invasions', 'groups', 'fishing', 'ccg'],
-                        dropdown: ['field-offices', 'gardening', 'doodles']
-                      };
-                      setSetting('navbar-config', defaultConfig).then(() => {
-                        setNavbarConfig(defaultConfig);
-                        setDialog(null);
-                      });
-                    } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
-                      updateToonList(dialog.type, dialog.listKey, dialog.toon, dialogNote).then(() => {
-                        if (dialog.type === 'add' || dialog.type === 'move') {
-                          setJustAddedId(dialog.toon!.id);
-                          setTimeout(() => setJustAddedId(null), 500);
-                        }
-                        refresh();
-                        setDialog(null);
-                      });
-                    }
+                    const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+                    setDialog({
+                      ...dialog,
+                      type: 'move',
+                      listKey: otherKey
+                    });
                   }}
-                  className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.listKey === STORAGE_KEYS.BLOCKED)
-                    ? 'bg-red-600 hover:bg-red-700 ring-red-400/50'
-                    : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
-                    } focus:outline-none focus:ring-2`}
+                  className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer"
                 >
-                  {dialog.type === 'remove' ? 'Remove Toon' :
-                    dialog.type === 'delete_group' ? 'Delete Group' :
-                      dialog.type === 'clear_history' ? 'Clear History' :
-                        dialog.type === 'clear_toons' ? 'Clear Toons' :
-                          dialog.type === 'reset_navigation' ? 'Reset Navigation' :
-                            dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
+                  Move to {dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons'}
                 </button>
-                {dialog.type === 'remove' && dialog.listKey && (
-                  <button
-                    onClick={() => {
-                      const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
-                      setDialog({
-                        ...dialog,
-                        type: 'move',
-                        listKey: otherKey
-                      });
-                    }}
-                    className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer"
-                  >
-                    Move to {dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Stinky Toons' : 'Toony Toons'}
-                  </button>
-                )}
-                <button
-                  onClick={() => setDialog(null)}
-                  className={`w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer`}
-                >
-                  Cancel
-                </button>
-              </div>
+              )}
+              <button
+                onClick={() => setDialog(null)}
+                className="w-full rounded-lg bg-black/20 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all active:scale-95 cursor-pointer"
+              >
+                Cancel
+              </button>
             </div>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+      {(() => {
+        const hoveredToon = hoveredToonId
+          ? historyToons[String(hoveredToonId)]
+          : hoveredToonName
+            ? Object.values(historyToons).find((t) => t.name === hoveredToonName)
+            : null;
+        if (!hoveredToon || hoverSource !== 'sidebar' || !hoveredRect) return null;
+
+        return (
+          <div
+            className="fixed z-[2147483648] pointer-events-none transition-all duration-150"
+            style={{
+              top: Math.max(16, Math.min(window.innerHeight - 350, hoveredRect.top + (hoveredRect.height / 2) - 175)), // Vertical center, clamped
+              right: window.innerWidth - hoveredRect.left + 12, // Offset back to 12px
+            }}
+          >
+            <ToonTooltip toon={hoveredToon} />
+          </div>
+        );
+      })()}
+    </>
   );
 }

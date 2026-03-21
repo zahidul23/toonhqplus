@@ -530,7 +530,7 @@ async function applyRowHighlights() {
         row.dataset.toonhqHoverAttached = 'true';
         row.addEventListener('mouseenter', () => {
           window.dispatchEvent(
-            new CustomEvent('toonhq-plus-toon-hover', { detail: { id: idAttr, name } })
+            new CustomEvent('toonhq-plus-toon-hover', { detail: { id: idAttr, name, source: 'main' } })
           );
         });
         row.addEventListener('mouseleave', () => {
@@ -796,7 +796,9 @@ const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, boss
   `;
 };
 
-const updateBossInfo = () => {
+const updateBossInfo = async () => {
+  const enabledSetting = await getSetting<boolean>('boss-info-enabled');
+  bossInfoEnabled = enabledSetting !== false;
   if (bossInfoEnabled === false) {
     const dialog = document.querySelector('.group-details-dialog');
     const thisBossInfo = dialog?.querySelector(".boss-info");
@@ -818,7 +820,7 @@ const updateBossInfo = () => {
   const rows = dialog.querySelectorAll('.group-member-row');
   let suitValues: number[] = [];
   for (const row of rows) {
-    const suitImg = row.querySelector('.toon__track--suit img');
+    const suitImg = row.querySelector('.toon__track--suit');
     if (suitImg instanceof HTMLElement && (suitImg.title || suitImg.dataset.originalTitle)) {
       suitValues.push(getCogValueFromName(suitImg.title || suitImg.dataset.originalTitle || ''));
     }
@@ -1084,10 +1086,25 @@ export default defineContentScript({
           return {
             id,
             name: toon.name || '',
-            photo: toon.photo,
             species: toon.species,
+            color: toon.color,
             laff: toon.laff,
             level: toon.level,
+            photo: toon.photo,
+            photo_bg: toon.photo_bg,
+            ring: toon.ring,
+            toonup: toon.toonup,
+            trap: toon.trap,
+            lure: toon.lure,
+            sound: toon.sound,
+            throw: toon.throw,
+            squirt: toon.squirt,
+            drop: toon.drop,
+            prestiges: toon.prestiges,
+            sellbot: toon.sellbot,
+            cashbot: toon.cashbot,
+            lawbot: toon.lawbot,
+            bossbot: toon.bossbot,
             lastSeen: new Date().toISOString(),
           } as ToonRecord;
         });
@@ -1128,10 +1145,25 @@ export default defineContentScript({
         const rec: ToonRecord = {
           id,
           name: incoming.name || '',
-          photo: incoming.photo,
           species: incoming.species,
+          color: incoming.color,
           laff: incoming.laff,
           level: incoming.level,
+          photo: incoming.photo,
+          photo_bg: incoming.photo_bg,
+          ring: incoming.ring,
+          toonup: incoming.toonup,
+          trap: incoming.trap,
+          lure: incoming.lure,
+          sound: incoming.sound,
+          throw: incoming.throw,
+          squirt: incoming.squirt,
+          drop: incoming.drop,
+          prestiges: incoming.prestiges,
+          sellbot: incoming.sellbot,
+          cashbot: incoming.cashbot,
+          lawbot: incoming.lawbot,
+          bossbot: incoming.bossbot,
           lastSeen: new Date().toISOString(),
           hashId,
         };
@@ -1327,6 +1359,7 @@ export default defineContentScript({
       let rewardAmount = "";
       if (title.includes('factory')) {
         rewardType = "Merits";
+        rewardAmount = "350 - 1630";
         if (title.includes('scrap')) {
           rewardAmount = "350 - 638";
           if (title.includes('short')) {
@@ -1348,6 +1381,7 @@ export default defineContentScript({
       }
       if (title.includes('mint')) {
         rewardType = "Cogbucks";
+        rewardAmount = "702 - 1850";
         if (title.includes('coin')) {
           rewardAmount = "702 - 807";
         }
@@ -1357,6 +1391,7 @@ export default defineContentScript({
       }
       if (title.includes('da office')) {
         rewardType = "Jury Notices";
+        rewardAmount = "781 - 2082";
         if (title.includes('junior')) {
           rewardAmount = "781 - 889";
         }
@@ -1366,6 +1401,7 @@ export default defineContentScript({
       }
       if (title.includes('cog golf')) {
         rewardType = "Stock Options";
+        rewardAmount = "882 - 2305";
         if (title.includes('fairway')) {
           rewardAmount = "882 - 975";
         }
@@ -1402,11 +1438,25 @@ export default defineContentScript({
 
     injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 980px width inline
-    const fixDialog = (d: HTMLElement) => {
-      getSetting("boss-info-enabled").then(get => {
-        bossInfoEnabled = get !== false;
-      });
-      if (bossInfoEnabled === false) return;
+    const fixDialog = async (d: HTMLElement) => {
+      const enabledSetting = await getSetting<boolean>('boss-info-enabled');
+      bossInfoEnabled = enabledSetting !== false;
+
+      if (!bossInfoEnabled) {
+        // If disabled, remove any existing injected info and unwrap titles
+        const wrapper = d.querySelector('.boss-title-wrapper');
+        if (wrapper) {
+          const originalH4 = wrapper.querySelector('h4');
+          if (originalH4 && wrapper.parentElement) {
+            wrapper.parentElement.insertBefore(originalH4, wrapper);
+            originalH4.classList.remove('text-center', 'mt-2', 'mb-3');
+          }
+          wrapper.remove();
+        }
+        d.querySelectorAll('.boss-info').forEach((el) => el.remove());
+        return;
+      }
+
       if (bossValuesExist()) return;
       insertFacilityRewards(d);
 
@@ -1457,7 +1507,7 @@ export default defineContentScript({
         }, 100);
       }
     };
-    document.querySelectorAll('.group-details-dialog').forEach(el => {
+    document.querySelectorAll('.group-details-dialog').forEach((el) => {
       fixDialog(el as HTMLElement);
     });
     const dialogObserver = new MutationObserver((mutations) => {
@@ -1493,9 +1543,9 @@ export default defineContentScript({
       }
 
       if (checkAll) {
-        document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
+        document.querySelectorAll('.group-details-dialog').forEach((el) => fixDialog(el as HTMLElement));
       } else {
-        dialogs.forEach(d => fixDialog(d));
+        dialogs.forEach((d) => fixDialog(d));
       }
     });
     dialogObserver.observe(document.body, { childList: true, subtree: true });

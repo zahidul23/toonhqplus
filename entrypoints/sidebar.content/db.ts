@@ -22,10 +22,25 @@ export interface ToonRecord {
   /** Toon id from API (stringified number) or generated hash (e.g. "#abc12") when API provides no id. */
   id: string;
   name: string;
-  photo?: string;
   species?: number;
+  color?: string;
   laff?: number;
   level?: number;
+  photo?: string;
+  photo_bg?: string;
+  ring?: string | null;
+  toonup?: number;
+  trap?: number;
+  lure?: number;
+  sound?: number;
+  throw?: number;
+  squirt?: number;
+  drop?: number;
+  prestiges?: string[];
+  sellbot?: string | number;
+  cashbot?: string | number;
+  lawbot?: string | number;
+  bossbot?: string | number;
   lastSeen?: string;
   hashId?: string;
   [key: string]: any;
@@ -545,10 +560,25 @@ export async function migrateFromLocalStorage(): Promise<void> {
       .map((t: any) => ({
         id: normalizeToonId(t.id) ?? '',
         name: t.name || '',
-        photo: t.photo,
         species: t.species,
+        color: t.color,
         laff: t.laff,
         level: t.level,
+        photo: t.photo,
+        photo_bg: t.photo_bg,
+        ring: t.ring,
+        toonup: t.toonup,
+        trap: t.trap,
+        lure: t.lure,
+        sound: t.sound,
+        throw: t.throw,
+        squirt: t.squirt,
+        drop: t.drop,
+        prestiges: t.prestiges,
+        sellbot: t.sellbot,
+        cashbot: t.cashbot,
+        lawbot: t.lawbot,
+        bossbot: t.bossbot,
         lastSeen: t.lastSeen,
         hashId: t.hashId,
       }))
