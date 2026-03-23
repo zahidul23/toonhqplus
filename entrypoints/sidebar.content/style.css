@@ -61,3 +61,23 @@
 .favoritedToon {
   background-color: var(--favoritedToon);
 }
+
+.toon-tooltip {
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out, display 0.3s allow-discrete;
+
+  opacity: 1;
+  transform: scale(1);
+  display: flex;
+  gap: 0.5em;
+
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  &.is-hidden {
+    opacity: 0;
+    transform: scale(0.9);
+    display: none;
+  }
+}

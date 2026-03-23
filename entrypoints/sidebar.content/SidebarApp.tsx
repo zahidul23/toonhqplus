@@ -262,7 +262,7 @@ function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, i
       </div>
 
       {note && (
-        <p className="text-xs italic text-white/80 break-words">{note}</p>
+        <p className="text-xs italic text-white/80 break-words pl-2 pr-2">{note}</p>
       )}
       <div className="flex flex-col rounded-lg border border-white/10 bg-black/40 shadow-inner overflow-hidden">
         {gagsConfig.map((track) => {
@@ -1059,7 +1059,7 @@ export function SidebarApp() {
             <div className="flex-1 flex flex-col min-h-0 p-3">
               {activeTab === 'toons' && (
                 <>
-                  <section className="mb-3 flex-[1_1_auto] flex flex-col min-h-0">
+                  <section className="mb-3 flex-[1_1_auto] flex flex-col min-h-2">
                     <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Toony Toons</h3>
                     <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
                       {favorites.length === 0 ? (
@@ -1103,7 +1103,7 @@ export function SidebarApp() {
                     </ul>
                   </section>
 
-                  <section className="flex-[1_1_auto] flex flex-col min-h-0">
+                  <section className="flex-[1_1_auto] flex flex-col min-h-2">
                     <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Stinky Toons</h3>
                     <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
                       {blocked.length === 0 ? (
@@ -1212,7 +1212,7 @@ export function SidebarApp() {
                           {groupTypes.find((t) => t.id === historyGroups[selectedHistoryGroup]?.type)?.name || `Group #${historyGroups[selectedHistoryGroup]?.id}`}
                         </h3>
                       </div>
-                      <ul className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
+                      <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
                         {(() => {
                           const group = historyGroups[selectedHistoryGroup];
                           const toons = historyGroupMembers[group.id]?.toons;
