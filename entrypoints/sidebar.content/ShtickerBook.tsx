@@ -128,7 +128,7 @@ const FIELD_OFFICE_INFO = {
   ],
 } as const;
 
-export function InfoBook() {
+export function ShtickerBook() {
   const CLOSE_ANIMATION_MS = 260;
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
