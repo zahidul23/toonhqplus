@@ -222,17 +222,14 @@ const decodeSuit = (trackId: string, suitCode: string | number | undefined) => {
   };
 };
 
-function ToonTooltip({ toon, favorites, blocked, notes }: { toon: ToonData, favorites: ToonId[], blocked: ToonId[], notes: Record<string, string> }) {
+function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, isFavorited: boolean, isBlocked: boolean, note?: string }) {
   if (!toon) return null;
-  const favoritedToon = favorites?.includes(toon.id);
-  const blockedToon = blocked?.includes(toon.id);
   let toonClass = 'myToon';
-  if (favoritedToon) {
+  if (isFavorited) {
     toonClass = 'favoritedToon';
-  } else if (blockedToon) {
+  } else if (isBlocked) {
     toonClass = 'blockedToon';
   }
-  const note = notes[toon.id];
 
   return (
     <div className={`w-[19rem] ${toonClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
@@ -376,9 +373,9 @@ function loadLists(): Promise<{ favorites: ToonId[]; blocked: ToonId[] }> {
 
 function ToonRow({
   toon,
-  favorites,
-  blocked,
-  activeToonIds,
+  isFavorited,
+  isBlocked,
+  isOwnToon,
   note,
   refresh,
   isHovered,
@@ -388,9 +385,9 @@ function ToonRow({
   onMouseLeave
 }: {
   toon: ToonData;
-  favorites: ToonId[];
-  blocked: ToonId[];
-  activeToonIds: ToonId[];
+  isFavorited: boolean;
+  isBlocked: boolean;
+  isOwnToon: boolean;
   note?: string;
   refresh: () => void;
   isHovered: boolean;
@@ -406,10 +403,7 @@ function ToonRow({
     setNoteDraft(note || '');
   }, [note]);
 
-  const isFavorited = favorites.includes(toon.id);
-  const isBlocked = blocked.includes(toon.id);
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
-  const isOwnToon = activeToonIds.includes(toon.id);
 
   const defaultHoverClass = isBlocked ? 'blockedToon shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
   let bgColorClass = isHovered ? defaultHoverClass : 'hover:bg-[#10462d]/60';
@@ -1081,9 +1075,9 @@ export function SidebarApp() {
                             <ToonRow
                               key={toon.id}
                               toon={toon}
-                              favorites={favorites}
-                              blocked={blocked}
-                              activeToonIds={activeToonIds}
+                              isFavorited={favorites.includes(toon.id)}
+                              isBlocked={blocked.includes(toon.id)}
+                              isOwnToon={activeToonIds.includes(toon.id)}
                               note={notes[String(toon.id)]}
                               refresh={refresh}
                               isHovered={!!isHovered}
@@ -1125,9 +1119,9 @@ export function SidebarApp() {
                             <ToonRow
                               key={toon.id}
                               toon={toon}
-                              favorites={favorites}
-                              blocked={blocked}
-                              activeToonIds={activeToonIds}
+                              isFavorited={favorites.includes(toon.id)}
+                              isBlocked={blocked.includes(toon.id)}
+                              isOwnToon={activeToonIds.includes(toon.id)}
                               note={notes[String(toon.id)]}
                               refresh={refresh}
                               isHovered={!!isHovered}
@@ -1252,9 +1246,9 @@ export function SidebarApp() {
                                 <ToonRow
                                   key={toonData.id}
                                   toon={toonData}
-                                  favorites={favorites}
-                                  blocked={blocked}
-                                  activeToonIds={activeToonIds}
+                                  isFavorited={favorites.includes(toonData.id)}
+                                  isBlocked={blocked.includes(toonData.id)}
+                                  isOwnToon={activeToonIds.includes(toonData.id)}
                                   note={notes[String(toonData.id)]}
                                   refresh={refresh}
                                   isHovered={!!isHovered}
@@ -1566,7 +1560,12 @@ export function SidebarApp() {
         if (!hoveredToon || !hoveredRect) return null;
         return (
           <TooltipAnchor anchorRect={hoveredRect}>
-            <ToonTooltip toon={hoveredToon} favorites={favorites} blocked={blocked} notes={notes} />
+            <ToonTooltip
+              toon={hoveredToon}
+              isFavorited={favorites.includes(hoveredToon.id)}
+              isBlocked={blocked.includes(hoveredToon.id)}
+              note={notes[String(hoveredToon.id)]}
+            />
           </TooltipAnchor>
         );
       })()}
