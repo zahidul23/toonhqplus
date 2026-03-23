@@ -90,6 +90,17 @@ function injectHighlightStyles() {
       }
     }
 
+    // .group-member-row:not(.toonhq-plus-favorite):not(.toonhq-plus-blocked) .toonhq-plus-buttons {
+    //   visibility: hidden;
+    //   opacity: 0;
+    // }
+
+    // .group-member-row:hover:not(.toonhq-plus-favorite):not(.toonhq-plus-blocked) .toonhq-plus-buttons {
+    //   transition: opacity 0.3s ease-in-out;
+    //   visibility: visible;
+    //   opacity: 1;
+    // }
+
     /* tooltip for boss info */
     .boss-info {
       position: relative;
@@ -863,6 +874,9 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   const navbarUl = document.querySelector('ul.navbar-nav.ml-auto');
   if (!navbarUl) return;
 
+  const signInButton = Array.from(navbarUl.querySelectorAll('li')).find(li => li.textContent?.includes('Sign In'));
+  const signUpButton = Array.from(navbarUl.querySelectorAll('li')).find(li => li.textContent?.includes('Sign Up'));
+
   // Force synchronize active state in case Vue Router detached elements
   navbarUl.querySelectorAll('a').forEach(a => {
     const href = a.getAttribute('href');
@@ -1016,6 +1030,13 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   }
   fragment.appendChild(moreLi);
 
+  if (signInButton) {
+    fragment.appendChild(signInButton);
+  }
+  if (signUpButton) {
+    fragment.appendChild(signUpButton);
+  }
+
   navbarUl.innerHTML = '';
   navbarUl.appendChild(fragment);
 }
@@ -1117,6 +1138,7 @@ export default defineContentScript({
             squirt: toon.squirt,
             drop: toon.drop,
             prestiges: toon.prestiges,
+            organic_level: toon.organic_level,
             sellbot: toon.sellbot,
             cashbot: toon.cashbot,
             lawbot: toon.lawbot,
@@ -1176,6 +1198,7 @@ export default defineContentScript({
           squirt: incoming.squirt,
           drop: incoming.drop,
           prestiges: incoming.prestiges,
+          organic_level: incoming.organic_level,
           sellbot: incoming.sellbot,
           cashbot: incoming.cashbot,
           lawbot: incoming.lawbot,

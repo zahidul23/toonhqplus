@@ -54,6 +54,7 @@ interface ToonData {
   squirt?: number;
   drop?: number;
   prestiges?: string[];
+  organic_level?: number | null;
   sellbot?: string | number;
   cashbot?: string | number;
   lawbot?: string | number;
@@ -171,6 +172,7 @@ async function updateToonList(
       squirt: toon.squirt,
       drop: toon.drop,
       prestiges: toon.prestiges,
+      organic_level: toon.organic_level,
       sellbot: toon.sellbot,
       cashbot: toon.cashbot,
       lawbot: toon.lawbot,
@@ -220,11 +222,27 @@ const decodeSuit = (trackId: string, suitCode: string | number | undefined) => {
   };
 };
 
-function ToonTooltip({ toon }: { toon: ToonData }) {
+function ToonTooltip({ toon, favorites, blocked }: { toon: ToonData, favorites: ToonId[], blocked: ToonId[] }) {
   if (!toon) return null;
+  const favoritedToon = favorites?.includes(toon.id);
+  const blockedToon = blocked?.includes(toon.id);
+  let bgColor = '#064e3b';
+  let textColorClass = 'text-white';
+  if (toon.isOwnToon) {
+    bgColor = '#064e3b';
+    textColorClass = 'text-[#cae9fc]';
+  } else if (favoritedToon) {
+    bgColor = '#064e3b';
+    textColorClass = 'text-[#e6ffed]';
+  } else if (blockedToon) {
+    bgColor = '#ad130d';
+    textColorClass = 'text-[#ffebe9]';
+  }
+
+  const bgColorClass = `bg-[${bgColor}]`
 
   return (
-    <div className="w-[19rem] bg-[#064e3b] border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200">
+    <div className={`w-[19rem] ${bgColorClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
       <div className="flex items-center gap-3">
         <div className="relative">
           <div className="absolute inset-0 bg-emerald-500/20 rounded-full" />
@@ -258,6 +276,7 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
           const level = (toon[track.id] as number) || 0;
           const isPrestiged = toon.prestiges?.includes(track.id);
           const isMissing = level === 0;
+          const organicLvl = isPrestiged ? toon.organic_level || 0 : 0;
 
           return (
             <div
@@ -271,9 +290,9 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
                 return (
                   <div
                     key={gag.name}
-                    className={`flex-1 h-full flex items-center justify-center relative transition-all duration-300 rounded-sm ${isUnlocked ? 'opacity-100 scale-100 shadow-lg' : 'opacity-5 scale-90 grayscale'}`}
+                    className={`flex-1 h-full flex items-center justify-center relative transition-all duration-300 rounded-sm ${isUnlocked ? 'opacity-100 scale-100 shadow-lg' : 'opacity-10 scale-90 grayscale-10'}`}
                     style={{
-                      backgroundColor: isUnlocked ? track.color : 'transparent',
+                      backgroundColor: track.color,
                     }}
                     title={`${gagLvl}: ${gag.name}`}
                   >
@@ -283,12 +302,12 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
                       draggable="false"
                       className="w-6 h-6 object-contain drop-shadow-md"
                     />
-                    {isPrestiged && isUnlocked && (
+                    {isPrestiged && isUnlocked && organicLvl >= gagLvl && (
                       <div className="absolute -bottom-1 -right-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
                         <img
                           src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
                           alt="Organic"
-                          className="w-3.5 h-3.5 object-contain"
+                          className="w-5 h-5 object-contain"
                         />
                       </div>
                     )}
@@ -347,7 +366,7 @@ function ToonTooltip({ toon }: { toon: ToonData }) {
           );
         })}
       </div>
-    </div>
+    </div >
   );
 }
 
@@ -404,14 +423,14 @@ function ToonRow({
     bgColorClass = isBlocked ? 'bg-red-500/60 ring-2 ring-red-400' : 'bg-emerald-500/60 ring-2 ring-emerald-400';
   } else if (!isHovered) {
     if (isOwnToon) {
-      bgColorClass = 'bg-[#cae9fc] dark:bg-[#cae9fcbd]';
-      textColorClass = 'text-[#004a77] dark:text-[#cae9fc]';
+      bgColorClass = 'bg-[#cae9fcbd]';
+      textColorClass = 'text-[#cae9fc]';
     } else if (isFavorited) {
-      bgColorClass = 'bg-[#e6ffed] dark:bg-[#e6ffed]/20';
-      textColorClass = 'text-[#1a7f37] dark:text-[#e6ffed]';
+      bgColorClass = 'bg-[#e6ffed]/20';
+      textColorClass = 'text-[#e6ffed]';
     } else if (isBlocked) {
-      bgColorClass = 'bg-[#ffebe9] dark:bg-[#ad130dde]';
-      textColorClass = 'text-[#cf222e] dark:text-[#ffebe9]';
+      bgColorClass = 'bg-[#ad130dde]';
+      textColorClass = 'text-[#ffebe9]';
     }
   }
 
@@ -461,7 +480,7 @@ function ToonRow({
                       setNoteDraft(toon.note || note || '');
                     }}
                     className={`shrink-0 rounded p-1 cursor-pointer transition-colors ${isBlocked
-                      ? 'text-red-400/70 hover:bg-red-600 hover:text-white dark:text-red-300/60'
+                      ? 'text-red-400/70 hover:bg-red-600 text-red-300/60'
                       : 'text-green-100/50 hover:bg-[#1f8454] hover:text-white'
                       }`}
                     title="Edit note"
@@ -488,7 +507,7 @@ function ToonRow({
                     onClick={() => {
                       if (listKey) onRequestDialog('remove', listKey, toon, 'sidebar');
                     }}
-                    className="shrink-0 rounded p-1 text-[#cf222e] hover:bg-[#ffebe9] dark:text-[#ff7b72] dark:hover:bg-[#ad130dde] cursor-pointer"
+                    className="shrink-0 rounded p-1 text-[#cf222e] text-[#ff7b72] hover:bg-[#ad130dde] cursor-pointer"
                     title="Remove from list"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
@@ -1355,7 +1374,7 @@ export function SidebarApp() {
           onClick={() => setDialog(null)}
         >
           <div
-            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-red-900/95 dark:bg-[#450a0a]' : 'bg-[#165e3b] dark:bg-[#0c3622]'} ${dialog.source === 'main' ? '' : 'mr-4'}`}
+            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-[#450a0a]' : 'bg-[#0c3622]'} ${dialog.source === 'main' ? '' : 'mr-4'}`}
             onClick={(e) => e.stopPropagation()}
           >
             {(dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation') ? (
@@ -1520,7 +1539,7 @@ export function SidebarApp() {
               right: window.innerWidth - hoveredRect.left + 12, // Offset back to 12px
             }}
           >
-            <ToonTooltip toon={hoveredToon} />
+            <ToonTooltip toon={hoveredToon} favorites={favorites} blocked={blocked} />
           </div>
         );
       })()}

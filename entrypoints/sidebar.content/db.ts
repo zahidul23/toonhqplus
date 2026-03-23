@@ -37,6 +37,7 @@ export interface ToonRecord {
   squirt?: number;
   drop?: number;
   prestiges?: string[];
+  organic_level?: number | null;
   sellbot?: string | number;
   cashbot?: string | number;
   lawbot?: string | number;
@@ -575,6 +576,7 @@ export async function migrateFromLocalStorage(): Promise<void> {
         squirt: t.squirt,
         drop: t.drop,
         prestiges: t.prestiges,
+        organic_level: t.organic_level,
         sellbot: t.sellbot,
         cashbot: t.cashbot,
         lawbot: t.lawbot,
