@@ -12,7 +12,7 @@ export default defineConfig({
 
     web_accessible_resources: [
       {
-        resources: ['vue-logger.js'],
+        resources: ['vue-logger.js', 'images/*.webp'],
         matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
       },
     ],
@@ -24,11 +24,5 @@ export default defineConfig({
       "48": "icon/logo-48.png",
       "128": "icon/logo-128.png"
     },
-  },
-  runner: {
-    // For Chrome-based browsers
-    chromiumArgs: ['https://toonhq.org/groups'],
-    // For Firefox
-    firefoxArgs: ['https://toonhq.org/groups'],
   },
 });

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from
 import { groupTypes } from './groupTypes';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
+import { InfoBook } from './InfoBook.tsx';
 import {
   getAllFromList,
   addToList,
@@ -1007,6 +1008,7 @@ export function SidebarApp() {
 
   return (
     <>
+      <InfoBook />
 
 
       <div className="fixed top-0 right-0 z-[2147483647] flex h-screen max-h-screen flex-col items-end p-4 pointer-events-none overflow-hidden">
