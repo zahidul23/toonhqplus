@@ -232,7 +232,7 @@ function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, i
   }
 
   return (
-    <div className={`w-[19rem] ${toonClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
+    <div className={`toon-tooltip w-[19rem] ${toonClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
       <div className="flex items-center gap-3">
         <div className="relative">
           <div className="absolute inset-0 bg-emerald-500/20 rounded-full" />
@@ -242,10 +242,10 @@ function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, i
               <img
                 src={photo}
                 alt={toon.name}
-                className="relative h-14 w-14 rounded-full border-2 border-white/20 bg-black/40 object-cover shadow-lg"
+                className="relative h-16 w-auto max-w-none rounded-full border-2 border-white/20 bg-black/40 object-cover shadow-lg"
               />
             ) : (
-              <div className="relative h-14 w-14 rounded-full border-2 border-white/20 bg-black/40 flex items-center justify-center text-white/20 shadow-lg">
+              <div className="relative h-16 w-auto max-w-none rounded-full border-2 border-white/20 bg-black/40 flex items-center justify-center text-white/20 shadow-lg">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
               </div>
             );
