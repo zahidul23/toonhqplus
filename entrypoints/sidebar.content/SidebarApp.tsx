@@ -222,27 +222,20 @@ const decodeSuit = (trackId: string, suitCode: string | number | undefined) => {
   };
 };
 
-function ToonTooltip({ toon, favorites, blocked }: { toon: ToonData, favorites: ToonId[], blocked: ToonId[] }) {
+function ToonTooltip({ toon, favorites, blocked, notes }: { toon: ToonData, favorites: ToonId[], blocked: ToonId[], notes: Record<string, string> }) {
   if (!toon) return null;
   const favoritedToon = favorites?.includes(toon.id);
   const blockedToon = blocked?.includes(toon.id);
-  let bgColor = '#064e3b';
-  let textColorClass = 'text-white';
-  if (toon.isOwnToon) {
-    bgColor = '#064e3b';
-    textColorClass = 'text-[#cae9fc]';
-  } else if (favoritedToon) {
-    bgColor = '#064e3b';
-    textColorClass = 'text-[#e6ffed]';
+  let toonClass = 'myToon';
+  if (favoritedToon) {
+    toonClass = 'favoritedToon';
   } else if (blockedToon) {
-    bgColor = '#ad130d';
-    textColorClass = 'text-[#ffebe9]';
+    toonClass = 'blockedToon';
   }
-
-  const bgColorClass = `bg-[${bgColor}]`
+  const note = notes[toon.id];
 
   return (
-    <div className={`w-[19rem] ${bgColorClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
+    <div className={`w-[19rem] ${toonClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
       <div className="flex items-center gap-3">
         <div className="relative">
           <div className="absolute inset-0 bg-emerald-500/20 rounded-full" />
@@ -271,6 +264,9 @@ function ToonTooltip({ toon, favorites, blocked }: { toon: ToonData, favorites: 
         </div>
       </div>
 
+      {note && (
+        <p className="text-xs italic text-white/80 break-words">{note}</p>
+      )}
       <div className="flex flex-col rounded-lg border border-white/10 bg-black/40 shadow-inner overflow-hidden">
         {gagsConfig.map((track) => {
           const level = (toon[track.id] as number) || 0;
@@ -415,12 +411,12 @@ function ToonRow({
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
   const isOwnToon = activeToonIds.includes(toon.id);
 
-  const defaultHoverClass = isBlocked ? 'bg-red-600/90 shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
+  const defaultHoverClass = isBlocked ? 'blockedToon shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
   let bgColorClass = isHovered ? defaultHoverClass : 'hover:bg-[#10462d]/60';
   let textColorClass = 'text-white';
 
   if (isJustAdded) {
-    bgColorClass = isBlocked ? 'bg-red-500/60 ring-2 ring-red-400' : 'bg-emerald-500/60 ring-2 ring-emerald-400';
+    bgColorClass = isBlocked ? 'blockedToon ring-2 ring-red-400' : 'bg-emerald-500/60 ring-2 ring-emerald-400';
   } else if (!isHovered) {
     if (isOwnToon) {
       bgColorClass = 'bg-[#cae9fcbd]';
@@ -453,7 +449,7 @@ function ToonRow({
       ref={rowRef}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-1000 ${bgColorClass} ${textColorClass}`}
+      className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-250 ${bgColorClass} ${textColorClass}`}
     >
       <div className="flex items-center gap-1">
         <div className="flex flex-1 items-center gap-2 overflow-hidden">
@@ -543,7 +539,7 @@ function ToonRow({
       </div>
 
       {isEditing ? (
-        <div className={`mt-2 flex flex-col gap-2 rounded border bg-black/40 p-2 shadow-inner dark:bg-black/60 ${isBlocked ? 'border-red-500/60 dark:border-red-500/40' : 'border-[#1f8454] dark:border-[#1f8454]/40'}`}>
+        <div className={`mt-2 flex flex-col gap-2 rounded border bg-black/60 p-2 shadow-inner ${isBlocked ? 'border-red-500/40' : 'border-[#1f8454]/40'}`}>
           <textarea
             autoFocus
             className={`w-full flex-1 resize-y custom-scrollbar max-h-32 rounded border bg-black/20 px-2 py-1 text-xs text-white focus:outline-none transition-colors ${isBlocked
@@ -996,10 +992,10 @@ export function SidebarApp() {
         </div>
 
         {open && (
-          <aside className="w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#10462d] bg-[#1f8454] shadow-xl dark:border-[#0a2e1d] dark:bg-[#10462d] overflow-hidden pointer-events-auto shrink-0">
-            <div className="flex border-b border-[#10462d] dark:border-[#0a2e1d]/80 bg-[#165e3b] dark:bg-[#0c3622]">
+          <aside className="w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0">
+            <div className="flex border-b border-[#0a2e1d]/80 bg-[#0c3622]">
               <button
-                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
                 onClick={() => {
                   setActiveTab('history');
                   setSelectedHistoryGroup(null);
@@ -1009,7 +1005,7 @@ export function SidebarApp() {
                 History
               </button>
               <button
-                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
                 onClick={() => {
                   setActiveTab('toons');
                   setSetting('active-tab', 'toons').catch(console.error);
@@ -1018,7 +1014,7 @@ export function SidebarApp() {
                 Toons
               </button>
               <button
-                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#1f8454] dark:bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'settings' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
                 onClick={() => {
                   setActiveTab('settings');
                   setSetting('active-tab', 'settings').catch(console.error);
@@ -1146,7 +1142,7 @@ export function SidebarApp() {
                                 <div key={group.id} className="group relative">
                                   <button
                                     onClick={() => setSelectedHistoryGroup(group.id)}
-                                    className="w-full text-left rounded border border-[#10462d] bg-[#10462d]/40 hover:bg-[#10462d]/60 p-3 shadow-sm transition-colors dark:border-black/50 dark:bg-black/40 flex justify-between items-center cursor-pointer"
+                                    className="w-full text-left rounded border border-black/50 bg-black/40 hover:bg-black/60 p-3 shadow-sm transition-colors flex justify-between items-center cursor-pointer"
                                   >
                                     <div className="flex-1 min-w-0">
                                       <span className="block text-sm font-bold text-white truncate">{groupName}</span>
@@ -1539,7 +1535,7 @@ export function SidebarApp() {
               right: window.innerWidth - hoveredRect.left + 12, // Offset back to 12px
             }}
           >
-            <ToonTooltip toon={hoveredToon} favorites={favorites} blocked={blocked} />
+            <ToonTooltip toon={hoveredToon} favorites={favorites} blocked={blocked} notes={notes} />
           </div>
         );
       })()}

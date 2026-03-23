@@ -43,3 +43,21 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.25);
 }
+
+:root {
+  --myToon: #064e3b;
+  --favoritedToon: #064e3b;
+  --blockedToon: #5f0f0a;
+}
+
+.myToon {
+  background-color: var(--myToon);
+}
+
+.blockedToon {
+  background-color: var(--blockedToon);
+}
+
+.favoritedToon {
+  background-color: var(--favoritedToon);
+}
