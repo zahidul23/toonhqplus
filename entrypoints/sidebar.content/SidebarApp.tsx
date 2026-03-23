@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { groupTypes } from './groupTypes';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
@@ -769,6 +769,44 @@ function NavbarSettings({
   );
 }
 
+const TOOLTIP_GAP = 24; // px gap between tooltip and the anchor row
+
+function TooltipAnchor({
+  anchorRect,
+  children,
+}: {
+  anchorRect: { top: number; left: number; height: number };
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({ visibility: 'hidden', position: 'fixed' });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const el = ref.current;
+    const tooltipHeight = el.offsetHeight;
+    const tooltipWidth = el.offsetWidth;
+    const vh = window.innerHeight;
+    const PADDING = 8; // min distance from viewport edge
+
+    // Vertical: centre on the anchor row, clamped within viewport
+    const idealTop = anchorRect.top + anchorRect.height / 2 - tooltipHeight / 2;
+    const top = Math.max(PADDING, Math.min(vh - tooltipHeight - PADDING, idealTop));
+
+    // Horizontal: place tooltip to the left of the anchor, clamped within viewport
+    const idealLeft = anchorRect.left - tooltipWidth - TOOLTIP_GAP;
+    const left = Math.max(PADDING, idealLeft);
+
+    setStyle({ position: 'fixed', top, left, visibility: 'visible' });
+  }, [anchorRect]);
+
+  return (
+    <div ref={ref} style={style} className="z-[2147483648] pointer-events-none">
+      {children}
+    </div>
+  );
+}
+
 export function SidebarApp() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'history' | 'toons' | 'settings'>('history');
@@ -1526,17 +1564,10 @@ export function SidebarApp() {
             ? Object.values(historyToons).find((t) => t.name === hoveredToonName)
             : null;
         if (!hoveredToon || !hoveredRect) return null;
-
         return (
-          <div
-            className="fixed z-[2147483648] pointer-events-none transition-all duration-150"
-            style={{
-              top: Math.max(16, Math.min(window.innerHeight - 560, hoveredRect.top + (hoveredRect.height / 2) - 280)), // Vertical center, clamped
-              right: window.innerWidth - hoveredRect.left + 12, // Offset back to 12px
-            }}
-          >
+          <TooltipAnchor anchorRect={hoveredRect}>
             <ToonTooltip toon={hoveredToon} favorites={favorites} blocked={blocked} notes={notes} />
-          </div>
+          </TooltipAnchor>
         );
       })()}
     </>
