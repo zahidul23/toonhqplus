@@ -12,13 +12,17 @@ type SelectedGagCell = { trackId: AllowedGagTrackId; gagIndex: number; variant: 
 
 type FacilitySubtype = {
   name: string;
-  rewardText: string;
+  minReward: number;
+  maxReward: number;
   bossHealth: number;
+  shortName: string;
 };
 
 type FacilityInfo = {
+  id: string;
   title: string;
   rewardLabel: string;
+  maxSkips: number;
   image: string;
   bossImage: string;
   cardBg: string;
@@ -28,6 +32,70 @@ type FacilityInfo = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const SELLBOT_DATA = {
+  attacks: [
+    { name: 'Tremor', scrap: '6 (+2)', steel: '15 (+8)', note: 'Base (+Overtime)' },
+    { name: 'Hot Air', scrap: '7 (+2)', steel: '19 (+10)', note: 'Base (+Overtime)' },
+    { name: 'Red Tape', scrap: '4 (+1)', steel: '15 (+8)', note: 'Base (+Overtime)' },
+    { name: 'Finger Wag', scrap: '9 (+3)', steel: '22 (+11)', note: 'Base (+Overtime)' },
+  ],
+  specialMoves: [
+    { name: 'Overtime', effect: 'Dmg Up / Time Down', note: '25-50% Dmg boost. Timer reduced by 25-32s.' },
+    { name: 'Burnout', effect: 'DoT', note: '8 dmg per round (Steel only).' },
+    { name: 'Field Promotion', effect: 'Fired Up', note: '+25-50% Dmg, -50% Defense for 1 round.' },
+  ]
+};
+
+const CASHBOT_DATA = {
+  attacks: [
+    { name: 'Audit', coin: '6 (13)', bullion: '11 (23)', note: 'Base (Bull Market)' },
+    { name: 'Synergy', coin: '7 (14)', bullion: '12 (24)', note: 'Base (Bull Market)' },
+    { name: 'Market Crash', coin: '8 (16)', bullion: '13 (26)', note: 'Base (Bull Market)' },
+    { name: 'Power Tie', coin: '5 (11)', bullion: '9 (19)', note: 'Base (Bull Market)' },
+  ],
+  specialMoves: [
+    { name: 'Bear Market', effect: 'Gag Tax', note: 'Gags cost 2x. Toon Defense +50%.' },
+    { name: 'Bull Market', effect: 'Dmg Up', note: '25-50% Dmg boost for Toons & Cogs.' },
+    { name: 'Promoted', effect: 'Level Up', note: 'Cogs gain +1-2 levels.' },
+    { name: 'Investment', effect: 'Heal / Attentive', note: '+25-50 HP. Reduces Lure to 1 turn.' },
+  ]
+};
+
+const LAWBOT_DATA = {
+  attacks: [
+    { name: 'Rolodex', junior: 8, senior: 24 },
+    { name: 'Restraining Order', junior: 11, senior: 29 },
+    { name: 'Guilt Trip', junior: 10, senior: 27 },
+    { name: 'Legalese', junior: 13, senior: 36 },
+    { name: 'Shh!', junior: '25% Dmg', senior: '50% Dmg', note: 'Silence: Retaliates Sound dmg' },
+  ],
+  specialMoves: [
+    { name: 'Witness Protection', effect: 'Gag Immunity', note: 'Immune to Sound/Throw/Squirt/Drop. Heal +30-50.' },
+    { name: 'Book Smart', effect: 'Dmg Up', note: '+15-30% Dmg. Reduces Lure to 1 turn.' },
+    { name: 'Objection', effect: 'Gag Mandate', note: 'Must use Sound/Throw/Squirt/Drop or take dmg.' },
+    { name: 'Objection Sustained', effect: 'Gag Ordinance', note: '15-25 dmg. Lockout 1 track (3-4 rounds).' },
+  ]
+};
+
+const BOSSBOT_DATA = {
+  attacks: [
+    { name: 'Tee Off', fairway: 18, fringe: 23 },
+    { name: 'Evil Eye', fairway: 19, fringe: 25 },
+    { name: 'Head Shrink', fairway: 21, fringe: 28 },
+    { name: 'Quake', fairway: 16, fringe: 21 },
+    { name: 'Bogey', fairway: 'Special', fringe: 'Special', note: 'Delayed damage hit' },
+    { name: 'Bunker Shot', fairway: '12-17', fringe: '17-22', note: 'Dmg ↑ per Cog defeated' },
+  ],
+  specialMoves: [
+    { name: 'Setting Par', effect: 'Delayed Damage', note: '50/90 dmg (5 rounds). Dmg ↓ per Cog defeated.' },
+    { name: 'Sandtrapped', effect: 'Gag Ordinance', note: 'Lockout last chosen track (1-2 rounds).' },
+    { name: 'Overwork', effect: 'Attentive', note: 'Reduces Lure to 1 turn (1-2 rounds).' },
+    { name: 'Penalty Stroke', effect: 'Defense Down', note: '20% per Cog defeated (up to 60%).' },
+    { name: 'Driving Range', effect: 'Damage Up', note: '25-50% dmg boost during protection.' },
+    { name: 'Swing Oil', effect: 'Heal', note: '+25-50 HP during protection.' },
+  ]
+};
 
 const BOILER_CALC_ROUNDS = 17;
 const BOILER_CALC_GAGS_PER_ROUND = 4;
@@ -45,55 +113,63 @@ const SOS_SOUND_GAGS: Array<{ gagIndex: number; damage: number; image: string; n
 
 const FACILITIES_INFO: FacilityInfo[] = [
   {
+    id: 'sellbot',
     title: 'Sellbot Factory',
     rewardLabel: 'Merits',
+    maxSkips: 6,
     bossName: 'Factory Foreman',
     image: 'https://toonhq.org/static/assets/groups/large/factory.jpg',
     bossImage: '/images/foreman.webp',
     cardBg: '#7b00ae',
     cardBorder: '#9d4edd',
     subtypes: [
-      { name: 'Scrap Factory', rewardText: '350-638', bossHealth: 250 },
-      { name: 'Steel Factory', rewardText: '867-1630', bossHealth: 750 },
+      { name: 'Scrap Factory', minReward: 350, maxReward: 638, bossHealth: 250, shortName: 'Scrap' },
+      { name: 'Steel Factory', minReward: 867, maxReward: 1630, bossHealth: 750, shortName: 'Steel' },
     ],
   },
   {
+    id: 'cashbot',
     title: 'Cashbot Mint',
     rewardLabel: 'Cogbucks',
+    maxSkips: 2,
     bossName: 'Mint Auditor',
     image: 'https://toonhq.org/static/assets/groups/large/mint.jpg',
     bossImage: '/images/auditor.webp',
     cardBg: '#108000',
     cardBorder: '#22c55e',
     subtypes: [
-      { name: 'Coin Mint', rewardText: '702-807', bossHealth: 750 },
-      { name: 'Bullion Mint', rewardText: '1626-1850', bossHealth: 1150 },
+      { name: 'Coin Mint', minReward: 702, maxReward: 807, bossHealth: 750, shortName: 'Coin' },
+      { name: 'Bullion Mint', minReward: 1626, maxReward: 1850, bossHealth: 1150, shortName: 'Bullion' },
     ],
   },
   {
+    id: 'lawbot',
     title: 'Lawbot DA Office',
     rewardLabel: 'Jury Notices',
+    maxSkips: 2,
     bossName: 'Office Clerk',
     image: 'https://toonhq.org/static/assets/groups/large/da.jpg',
     bossImage: '/images/clerk.webp',
     cardBg: '#2e5db1',
     cardBorder: '#60a5fa',
     subtypes: [
-      { name: 'Junior Wing', rewardText: '781-889', bossHealth: 1100 },
-      { name: 'Senior Wing', rewardText: '1854-2082', bossHealth: 1500 },
+      { name: 'Junior Wing', minReward: 781, maxReward: 889, bossHealth: 1100, shortName: 'Junior' },
+      { name: 'Senior Wing', minReward: 1854, maxReward: 2082, bossHealth: 1500, shortName: 'Senior' },
     ],
   },
   {
+    id: 'bossbot',
     title: 'Bossbot Golf Course',
     rewardLabel: 'Stock Options',
+    maxSkips: 2,
     bossName: 'Club President',
     image: 'https://toonhq.org/static/assets/groups/large/golf.jpg',
     bossImage: '/images/president.webp',
     cardBg: '#8c5d3d',
     cardBorder: '#ca8a04',
     subtypes: [
-      { name: 'The First Fairway', rewardText: '882-975', bossHealth: 1200 },
-      { name: 'The Final Fringe', rewardText: '2097-2305', bossHealth: 1750 },
+      { name: 'The First Fairway', minReward: 882, maxReward: 975, bossHealth: 1200, shortName: 'Fairway' },
+      { name: 'The Final Fringe', minReward: 2097, maxReward: 2305, bossHealth: 1750, shortName: 'Fringe' },
     ],
   },
 ];
@@ -1173,11 +1249,13 @@ function BoilerCalculator() {
 function FacilitySubtypeRow({ subtype, rewardLabel }: { subtype: FacilitySubtype; rewardLabel: string }) {
   return (
     <div className='flex gap-2'>
-      <div className="flex flex-1 justify-between gap-2  px-2 py-1.5">
+      <div className="flex flex-1 justify-between gap-2 px-2 py-1.5">
         <p className="text-sm font-bold text-white">{subtype.name}</p>
-        <p className="text-sm font-bold text-white/95">{subtype.rewardText} {rewardLabel}</p>
+        <p className="text-sm font-bold text-white/95">
+          {subtype.minReward}-{subtype.maxReward} {rewardLabel}
+        </p>
       </div>
-      <div className="flex w-[160px] justify-center gap-2  px-2 py-1.5">
+      <div className="flex w-[160px] justify-center gap-2 px-2 py-1.5">
         <p className="text-sm font-bold text-white/95 text-center">{subtype.bossHealth} HP</p>
       </div>
     </div>
@@ -1191,10 +1269,11 @@ function FacilityImages({
   facility: FacilityInfo;
   heightClass: string;
 }) {
+  const widthClass = heightClass.replace('h-', 'w-');
   return (
     <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
       <img src={facility.image} alt={facility.title} className={`${heightClass} w-full rounded-md border border-white/20 object-cover`} />
-      <img src={getExtensionImageUrl(facility.bossImage)} alt={facility.bossName} className={`${heightClass} w-40 rounded-md border border-white/20 bg-black/30 object-cover`} />
+      <img src={getExtensionImageUrl(facility.bossImage)} alt={facility.bossName} className={`${heightClass} ${widthClass} rounded-md border border-white/20 bg-black/30 object-cover`} />
     </div>
   );
 }
@@ -1231,23 +1310,217 @@ function FacilityCard({ facility, idx, onOpen }: { facility: FacilityInfo; idx: 
 function FacilityDetailPage({ facility }: { facility: FacilityInfo }) {
   return (
     <section
-      className="rounded-xl border p-4 text-white justify-self-center"
+      className="mx-auto max-w-6xl rounded-xl border p-6 text-white"
       style={{
         background: `linear-gradient(180deg, ${facility.cardBg}ee 0%, ${facility.cardBg}c8 55%, #0f172abf 100%)`,
         borderColor: facility.cardBorder,
-        width: '60%',
       }}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-lg font-bold">{facility.title}</h4>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h4 className="text-2xl font-black uppercase tracking-tight">{facility.title}</h4>
+        <div className="rounded-md bg-black/40 px-3 py-1 text-sm font-bold text-white/80 border border-white/10">
+          Boss: {facility.bossName}
+        </div>
       </div>
-      <FacilityImages facility={facility} heightClass="h-48" />
-      <div className="mt-2 space-y-1.5">
-        {facility.subtypes.map((subtype) => (
-          <FacilitySubtypeRow key={subtype.name} subtype={subtype} rewardLabel={facility.rewardLabel} />
-        ))}
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-10">
+        {/* Left Column: Images, Attacks & Special Moves */}
+        <div className="lg:col-span-6 space-y-6">
+          <FacilityImages facility={facility} heightClass="h-48" />
+          <BossInfographic facilityId={facility.id} />
+        </div>
+
+        {/* Right Column: Boss HP & Rewards */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Boss HP Section */}
+          <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+            <div className="mb-4 flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              <h5 className="text-sm font-black uppercase tracking-widest text-red-400">Boss HP</h5>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {facility.subtypes.map((subtype) => (
+                <div key={subtype.name} className="rounded-xl border border-white/5 bg-black/40 p-3 text-center">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-white/40">{subtype.shortName}</div>
+                  <div className="text-xl font-black text-white tabular-nums">{subtype.bossHealth} <span className="text-xs text-white/40">HP</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <RewardSkipTable facility={facility} />
+        </div>
       </div>
     </section>
+  );
+}
+
+function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
+  const skipRows = useMemo(() => {
+    const rows = [];
+    for (let i = 0; i <= facility.maxSkips; i++) {
+      const values = facility.subtypes.map(s => {
+        const range = s.maxReward - s.minReward;
+        const step = range / facility.maxSkips;
+        return Math.round(s.maxReward - (i * step));
+      });
+      rows.push({ skips: i, values });
+    }
+    return rows;
+  }, [facility]);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-blue-500" />
+        <h5 className="text-sm font-black uppercase tracking-widest text-blue-400">{facility.rewardLabel}</h5>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+        <table className="w-full text-left text-[12px]">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+              <th className="px-3 py-2.5"></th>
+              {facility.subtypes.map(s => (
+                <th key={s.name} className="px-3 py-2.5 text-center">{s.shortName}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {skipRows.map((row) => {
+              const isFull = row.skips === 0;
+              const isMinimal = row.skips === facility.maxSkips;
+              let label = `${row.skips} ${row.skips === 1 ? 'Skip' : 'Skips'}`;
+              if (isFull) label = "Full";
+              if (isMinimal) label = "Minimal";
+
+              return (
+                <tr key={row.skips} className={`hover:bg-white/5 transition-colors ${isFull ? 'bg-emerald-500/5' : isMinimal ? 'bg-red-500/5' : ''}`}>
+                  <td className="px-3 py-2.5">
+                    <span className={`font-black uppercase tracking-tight ${isFull ? 'text-emerald-400' : isMinimal ? 'text-red-400' : 'text-white/60'}`}>
+                      {label}
+                    </span>
+                  </td>
+                  {row.values.map((val, idx) => (
+                    <td key={idx} className="px-3 py-2.5 text-center text-lg font-black text-white tabular-nums">
+                      ~{val}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function BossInfographic({ facilityId }: { facilityId: string }) {
+  const config = useMemo(() => {
+    switch (facilityId) {
+      case 'sellbot':
+        return {
+          data: SELLBOT_DATA,
+          labels: ['Scrap', 'Steel'],
+          keys: ['scrap', 'steel'],
+          color: 'text-purple-400',
+          dot: 'bg-purple-500'
+        };
+      case 'cashbot':
+        return {
+          data: CASHBOT_DATA,
+          labels: ['Coin', 'Bullion'],
+          keys: ['coin', 'bullion'],
+          color: 'text-emerald-400',
+          dot: 'bg-emerald-500'
+        };
+      case 'lawbot':
+        return {
+          data: LAWBOT_DATA,
+          labels: ['Junior', 'Senior'],
+          keys: ['junior', 'senior'],
+          color: 'text-blue-400',
+          dot: 'bg-blue-500'
+        };
+      case 'bossbot':
+        return {
+          data: BOSSBOT_DATA,
+          labels: ['Fairway', 'Fringe'],
+          keys: ['fairway', 'fringe'],
+          color: 'text-amber-400',
+          dot: 'bg-amber-500'
+        };
+      default:
+        return null;
+    }
+  }, [facilityId]);
+
+  if (!config) return null;
+
+  return (
+    <>
+      {/* Attacks Table */}
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+        <div className="mb-4 flex items-center gap-2">
+          <div className={`h-2 w-2 rounded-full ${config.dot} animate-pulse`} />
+          <h5 className={`text-sm font-black uppercase tracking-widest ${config.color}`}>Boss Attacks</h5>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+          <table className="w-full text-left text-[12px]">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                <th className="px-3 py-2.5">Attack</th>
+                <th className="px-3 py-2.5 text-center">{config.labels[0]}</th>
+                <th className="px-3 py-2.5 text-center">{config.labels[1]}</th>
+                <th className="px-3 py-2.5">Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {config.data.attacks.map((atk: any) => (
+                <tr key={atk.name} className="hover:bg-white/5 transition-colors">
+                  <td className="px-3 py-2.5 font-bold text-white/90">{atk.name}</td>
+                  <td className="px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums">{atk[config.keys[0]]}</td>
+                  <td className="px-3 py-2.5 text-center font-black text-orange-300 tabular-nums">{atk[config.keys[1]]}</td>
+                  <td className="px-3 py-2.5 text-[10px] leading-tight text-white/40">{atk.note || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Special Moves Table */}
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+        <div className="mb-4 flex items-center gap-2">
+          <div className={`h-2 w-2 rounded-full ${config.dot} animate-pulse`} />
+          <h5 className={`text-sm font-black uppercase tracking-widest ${config.color}`}>Special Moves</h5>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+          <table className="w-full text-left text-[12px]">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                <th className="px-3 py-2.5">Move</th>
+                <th className="px-3 py-2.5">Effect</th>
+                <th className="px-3 py-2.5">Description</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {config.data.specialMoves.map((move: any) => (
+                <tr key={move.name} className="hover:bg-white/5 transition-colors">
+                  <td className="px-3 py-2.5 font-bold text-white/90">{move.name}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`rounded px-1.5 py-0.5 font-black border ${config.color.replace('text', 'bg')}/10 ${config.color} ${config.color.replace('text', 'border')}/20`}>
+                      {move.effect}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-[10px] leading-snug text-white/50">{move.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }
 
