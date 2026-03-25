@@ -357,6 +357,7 @@ function SosSoundPicker({
         <div className='gag-button'></div>
         <div className='gag-button'></div>
         <div className='gag-button'></div>
+        <div className='gag-button'></div>
         {SOS_SOUND_GAGS.map((sos) => {
           const gag = track.gags[sos.gagIndex];
           const roundType = roundStats[activeCell.round]?.roundType;
@@ -381,8 +382,6 @@ function SosSoundPicker({
             />
           );
         })}
-        
-        <div className='gag-button'></div>
       </div>
   );
 }
@@ -498,6 +497,7 @@ function StarSelector({ stars, onSetStars }: { stars: number; onSetStars: (n: 1 
 function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetStars: (n: 1 | 2 | 3 | 4) => void; maxHp: number }) {
   const starIdx = stars - 1;
   const burnDmg = [10, 14, 18, 22][starIdx];
+  const starsText = ['One Star', 'Two Star', 'Three Star', 'Four Star'][starIdx];
   
   const attacks = [
     { name: 'Under Pressure', firedUpMultiplier: 1.5, base: [25, 30, 35, 40][starIdx] },
@@ -509,7 +509,7 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
   return (
     <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
       <div className="mb-4 flex items-center justify-between">
-        <h4 className="text-base font-bold text-white">Boiler</h4>
+        <h4 className="text-base font-bold text-white">Boiler - {starsText}</h4>
         <StarSelector stars={stars} onSetStars={onSetStars} />
       </div>
 
@@ -650,6 +650,8 @@ function RoundSlotButton({
   const sosInfo = cell?.variant === 'sos' ? SOS_SOUND_GAGS.find(s => s.gagIndex === cell.gagIndex) : null;
   const imgSrc = sosInfo ? sosInfo.image : (gag ? `https://toonhq.org/static/assets/gags/${gag.image}` : null);
 
+  const name = sosInfo ? sosInfo.name : gag?.name || null;
+
   const handleClick = () => {
     if (cell) {
       onClearSlot(roundIndex, slotIndex);
@@ -666,14 +668,14 @@ function RoundSlotButton({
         isActive ? 'border-emerald-400/70 bg-emerald-500/10' : cell ? 'hover:brightness-75' : 'border-white/10 bg-black/25 hover:bg-black/35'
       }`}
       style={cell && track ? { backgroundColor: track.color, borderColor: track.color } : undefined}
-      title={gag ? `${gag.name} — click to remove` : 'Empty slot'}
+      title={name ? `${name} (${cellDamage}) — click to remove` : 'Click a gag to insert'}
     >
       {/* Fixed-size container so filled and empty slots are identical dimensions */}
       <div className="h-8 w-8 flex items-center justify-center">
         {imgSrc ? (
           <img
             src={imgSrc}
-            alt={gag?.name || 'Gag'}
+            alt={name || 'Gag'}
             draggable="false"
             className="h-8 w-8 rounded-sm object-contain drop-shadow-md"
           />
@@ -733,7 +735,7 @@ function RoundRow({
 
   return (
     <div
-      className={`rounded-lg border border-white/10 bg-black/20 ${isActiveRound ? 'ring-2 ring-emerald-500/60' : ''} ${isMeltdown ? 'border-red-500/40 bg-red-900/30 shadow-[inset_0_0_8px_rgba(239,68,68,0.15)]' : ''}`}
+      className={`rounded-lg border border-white/10 bg-black/20 ${isActiveRound ? 'ring-2 ring-emerald-500/60' : ''} ${isMeltdown ? 'border-red-500/40 bg-red-900 shadow-[inset_0_0_8px_rgba(239,68,68,0.15)]' : ''}`}
       ref={rowRef}
     >
       <div className="flex items-center gap-2 p-2">
@@ -860,7 +862,7 @@ function RoundPhaseGroup({
         rounds={group.firedUp}
         label={isMeltdown ? 'Meltdown' : 'Fired Up'}
         labelColor={isMeltdown ? 'text-red-400' : 'text-red-300/80'}
-        borderColor={isMeltdown ? 'border-red-500/40 bg-black' : 'border-red-500/20 bg-red-900'}
+        borderColor={isMeltdown ? 'border-red-500/40 bg-red-900' : 'border-red-500/20 bg-red-900'}
         grid={grid}
         roundStats={roundStats}
         maxHp={maxHp}
@@ -873,7 +875,7 @@ function RoundPhaseGroup({
       />
       <RoundRowsColumn
         rounds={group.defense}
-        label="Defense"
+        label={isMeltdown ? 'Meltdown' : 'Defense'}
         labelColor="text-sky-300/80"
         borderColor="border-sky-500/20 bg-sky-900"
         grid={grid}
