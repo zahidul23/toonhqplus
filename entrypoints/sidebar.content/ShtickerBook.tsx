@@ -912,7 +912,7 @@ function BoilerCalculator() {
       const round = grid[i];
       let roundType = getBoilerRoundType(i, stars);
 
-      if (i > 0 && maxHp - stats[i - 1].rolling <= redThreshold) {
+      if (stars === 4 && i > 0 && maxHp - stats[i - 1].rolling <= redThreshold) {
         roundType = 'meltdown';
       }
 
