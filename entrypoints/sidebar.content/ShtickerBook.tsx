@@ -37,10 +37,10 @@ const SOS_SID = 'https://rendition.toontownrewritten.com/render/7401010101000b00
 const SOS_BARB = 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp';
 
 const allowedGagTrackIds: AllowedGagTrackId[] = ['throw', 'squirt', 'sound'];
-const SOS_SOUND_GAGS: Array<{ gagIndex: number; damage: number; image: string }> = [
-  { gagIndex: 3, damage: 35, image: SOS_MOE },
-  { gagIndex: 4, damage: 55, image: SOS_SID },
-  { gagIndex: 5, damage: 75, image: SOS_BARB },
+const SOS_SOUND_GAGS: Array<{ gagIndex: number; damage: number; image: string; name: string }> = [
+  { gagIndex: 3, damage: 35, image: SOS_BARB, name: "Barbara Seville" },
+  { gagIndex: 4, damage: 55, image: SOS_SID, name: "Sid Sonata" },
+  { gagIndex: 5, damage: 75, image: SOS_MOE, name: "Moe Zart" },
 ];
 
 const FACILITIES_INFO: FacilityInfo[] = [
@@ -331,33 +331,32 @@ function SosSoundPicker({
   onSelect: (gagIndex: number) => void;
 }) {
   return (
-    <div className="mb-2 rounded-md border border-yellow-400/25 bg-yellow-500/10 p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-yellow-200/90">
-          <SosBadge />
-        </span>
-        <span className="text-[10px] text-green-100/60">One each per round</span>
-      </div>
-      <div className="flex justify-end gap-1.5">
+      <div className="flex justify-end gap-4 px-3 py-2">
         {SOS_SOUND_GAGS.map((sos) => {
           const gag = track.gags[sos.gagIndex];
           const roundType = roundStats[activeCell.round]?.roundType;
-          const disabled = isSosUsedInRound(activeCell.round, sos.gagIndex) || roundType === 'defense';
+          const disabled = isSosUsedInRound(activeCell.round, sos.gagIndex);
           return (
             <GagButton
               key={`sos-${sos.gagIndex}`}
               imageSrc={sos.image}
               imageAlt={gag?.name || 'SOS'}
               color={track.color}
-              title={`${gag?.name || 'Sound'} (SOS ${sos.damage})`}
+              title={`${sos.name} (${sos.damage})`}
               damage={sos.damage}
               disabled={disabled}
               onClick={() => onSelect(sos.gagIndex)}
+              overlayBottomRight={
+                <div className='flex'>
+                  {[...Array(sos.gagIndex)].map((_, i) => (
+                    <StarIcon key={i} className="w-2.5 h-2.5 text-yellow-300" />
+                  ))}
+                </div>
+              }
             />
           );
         })}
       </div>
-    </div>
   );
 }
 
@@ -378,7 +377,6 @@ function GagTrackPicker({
     <div className="rounded-lg border border-white/10 bg-black/20 p-2">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-xs font-black uppercase tracking-widest text-white/80">{track.name}</div>
-        <div className="text-[10px] font-black uppercase tracking-wider text-green-100/60">Base / Organic</div>
       </div>
 
       {track.id === 'sound' && (
@@ -450,8 +448,8 @@ function GagPickerPanel({
 }) {
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-base font-bold text-white">Gag Pickers</h4>
+      <div className="mb-2 flex items-center justify-between gap-2 px-3">
+        <h4 className="text-base font-bold text-white">Gags</h4>
         <div className="text-xs text-green-100/70 tabular-nums">
           Round {activeCell.round + 1} - Gag {activeCell.slot + 1}
         </div>
@@ -573,6 +571,7 @@ function RoundRow({
   round,
   stats,
   remainingHpAfter,
+  rowDamage,
   activeCell,
   gagTracks,
   getCellDamage,
@@ -584,6 +583,7 @@ function RoundRow({
   round: SelectedGagCell[];
   stats: RoundStat;
   remainingHpAfter: number;
+  rowDamage: number;
   activeCell: { round: number; slot: number };
   gagTracks: GagTrack[];
   getCellDamage: (cell: SelectedGagCell) => number;
@@ -626,7 +626,7 @@ function RoundRow({
 
         {/* Remaining HP after this round */}
         <div className="ml-auto shrink-0 text-right">
-          <div className="text-sm font-black tabular-nums text-emerald-300">{remainingHpAfter}</div>
+          <div className="text-sm font-black tabular-nums text-red-300"> {rowDamage!= 0 && `-${rowDamage}`}</div>
         </div>
       </div>
     </div>
@@ -684,6 +684,7 @@ function RoundRowsColumn({
           round={grid[roundIndex]}
           stats={roundStats[roundIndex]}
           remainingHpAfter={clampNumber(maxHp - (roundStats[roundIndex]?.rolling ?? 0), 0, maxHp)}
+          rowDamage={roundStats[roundIndex].total ?? 0}
           activeCell={activeCell}
           gagTracks={gagTracks}
           getCellDamage={getCellDamage}
@@ -721,6 +722,7 @@ function RoundPhaseGroup({
             round={grid[roundIndex]}
             stats={roundStats[roundIndex]}
             remainingHpAfter={clampNumber(maxHp - (roundStats[roundIndex]?.rolling ?? 0), 0, maxHp)}
+            rowDamage={roundStats[roundIndex].total ?? 0}
             activeCell={activeCell}
             gagTracks={gagTracks}
             getCellDamage={getCellDamage}
@@ -1020,11 +1022,11 @@ function BoilerCalculator() {
 function FacilitySubtypeRow({ subtype, rewardLabel }: { subtype: FacilitySubtype; rewardLabel: string }) {
   return (
     <div className='flex gap-2'>
-      <div className="flex flex-1 justify-between gap-2 rounded-md bg-black/25 px-2 py-1.5">
+      <div className="flex flex-1 justify-between gap-2  px-2 py-1.5">
         <p className="text-sm font-semibold text-white">{subtype.name}</p>
         <p className="text-sm font-bold text-white/95">{subtype.rewardText} {rewardLabel}</p>
       </div>
-      <div className="flex w-[160px] justify-center gap-2 rounded-md bg-black/25 px-2 py-1.5">
+      <div className="flex w-[160px] justify-center gap-2  px-2 py-1.5">
         <p className="text-sm font-medium text-white/85 text-center">{subtype.bossHealth} HP</p>
       </div>
     </div>
@@ -1078,10 +1080,11 @@ function FacilityCard({ facility, idx, onOpen }: { facility: FacilityInfo; idx: 
 function FacilityDetailPage({ facility }: { facility: FacilityInfo }) {
   return (
     <section
-      className="rounded-xl border p-4 text-white"
+      className="rounded-xl border p-4 text-white justify-self-center"
       style={{
         background: `linear-gradient(180deg, ${facility.cardBg}ee 0%, ${facility.cardBg}c8 55%, #0f172abf 100%)`,
         borderColor: facility.cardBorder,
+        width: '60%',
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
