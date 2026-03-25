@@ -199,10 +199,10 @@ function MultiLayerBoilerHealthBar({ remaining, max, stars }: { remaining: numbe
 
   return (
     <div className="relative h-[50px] w-[300px] overflow-hidden rounded-md bg-black/40 border border-white/10">
-      <div className="absolute inset-y-0 left-0 bg-red-500 transition-all duration-200" style={{ width: `${redWidth * 100}%` }} />
-      <div className="absolute inset-y-0 left-0 bg-orange-500 transition-all duration-200" style={{ width: `${orangeWidth * 100}%` }} />
-      <div className="absolute inset-y-0 left-0 bg-yellow-400 transition-all duration-200" style={{ width: `${yellowWidth * 100}%` }} />
-      <div className="absolute inset-y-0 left-0 bg-emerald-500 transition-all duration-200" style={{ width: `${greenWidth * 100}%` }} />
+      <div className="absolute inset-y-0 left-0 bg-red-500 transition-all duration-500 ease-in-out" style={{ width: `${redWidth * 100}%` }} />
+      <div className="absolute inset-y-0 left-0 bg-orange-500 transition-all duration-500 ease-in-out" style={{ width: `${orangeWidth * 100}%` }} />
+      <div className="absolute inset-y-0 left-0 bg-yellow-400 transition-all duration-500 ease-in-out" style={{ width: `${yellowWidth * 100}%` }} />
+      <div className="absolute inset-y-0 left-0 bg-emerald-500 transition-all duration-500 ease-in-out" style={{ width: `${greenWidth * 100}%` }} />
     </div>
   );
 }
@@ -403,10 +403,11 @@ function GagTrackPicker({
   isFinished: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
-      <div className="mb-1 flex items-center justify-between">
+    //border border-white/10 bg-black/20 rounded-lg
+    <div className="flex flex-col gap-2 p-2">
+      {/* <div className="mb-1 flex items-center justify-between">
         <div className="text-xs font-black uppercase tracking-widest text-white/80">{track.name}</div>
-      </div>
+      </div> */}
 
       {track.id === 'sound' && (
         <SosSoundPicker
@@ -466,19 +467,28 @@ function GagTrackPicker({
 }
 
 function StarSelector({ stars, onSetStars }: { stars: number; onSetStars: (n: 1 | 2 | 3 | 4) => void }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const displayStars = hovered ?? stars;
+
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1" onMouseLeave={() => setHovered(null)}>
       {([1, 2, 3, 4] as const).map((n) => (
         <button
           key={n}
           type="button"
           onClick={() => onSetStars(n)}
-          className={`rounded-md px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
-            stars === n ? 'bg-emerald-600 text-white shadow-inner' : 'bg-black/25 text-green-100/80 hover:bg-black/40'
-          }`}
+          onMouseEnter={() => setHovered(n)}
+          className="group relative flex items-center justify-center p-0.5 transition-transform active:scale-90 cursor-pointer"
           title={`${n}-star`}
         >
-          {n}
+          <StarIcon
+            size={24}
+            className={`transition-colors duration-200 ${
+              n <= displayStars 
+                ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)]' 
+                : 'text-white/10'
+            }`}
+          />
         </button>
       ))}
     </div>
@@ -486,46 +496,56 @@ function StarSelector({ stars, onSetStars }: { stars: number; onSetStars: (n: 1 
 }
 
 function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetStars: (n: 1 | 2 | 3 | 4) => void; maxHp: number }) {
-  const attackIndex = stars - 1;
+  const starIdx = stars - 1;
+  const burnDmg = [10, 14, 18, 22][starIdx];
+  
   const attacks = [
-    { name: 'Under Pressure', damage: [25, 30, 35, 40][attackIndex] },
-    { name: 'Heated Discussion', damage: [20, 24, 28, 32][attackIndex] },
-    { name: 'Stamp of Disapproval', damage: [50, 70, 80, 90][attackIndex] },
+    { name: 'Under Pressure', firedUpMultiplier: 1.5, base: [25, 30, 35, 40][starIdx] },
+    { name: 'Heated Discussion', firedUpMultiplier: 1.5, base: [20, 24, 28, 32][starIdx] },
+    { name: 'Slow Burn', firedUpMultiplier: 1.5, base: [5, 7, 9, 11][starIdx] },
+    { name: 'Stamp of Disapproval', firedUpMultiplier: 1, base: [50, 70, 80, 90][starIdx] },
   ];
 
   return (
     <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h4 className="text-base font-bold text-white">Boiler</h4>
         <StarSelector stars={stars} onSetStars={onSetStars} />
       </div>
-      
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase tracking-wider text-white/50">Health</span>
-          <span className="text-lg font-black text-emerald-400 tabular-nums">{maxHp} HP</span>
-        </div>
-        <div className="flex flex-col items-end">
-          <span className="text-[10px] font-black uppercase tracking-wider text-white/50">Level</span>
-          <div className="flex gap-0.5 mt-1">
-            {[...Array(stars)].map((_, i) => (
-              <StarIcon key={i} className="w-3 h-3 text-yellow-400" />
-            ))}
-          </div>
-        </div>
-      </div>
 
-      <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
-        <span className="text-[10px] font-black uppercase tracking-wider text-white/50">Attacks</span>
-        <div className="grid grid-cols-1 gap-1.5">
-          {attacks.map((attack) => (
-            <div key={attack.name} className="flex items-center justify-between rounded-md bg-black/30 px-2 py-1.5">
-              <span className="text-xs font-semibold text-white/80">{attack.name}</span>
-              <span className="text-xs font-black text-red-400 tabular-nums">{attack.damage} dmg</span>
-            </div>
-          ))}
-        </div>
+      <div className="overflow-hidden rounded-lg border border-white/5 bg-black/30">
+        <table className="w-full text-left text-[12px]">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/5 font-black uppercase tracking-wider text-white/40">
+              <th className="px-2 py-1.5">Attack</th>
+              <th className="px-2 py-1.5 text-center">Base</th>
+              <th className="px-2 py-1.5 text-center text-orange-400/80">Fired Up</th>
+              <th className="px-2 py-1.5 text-center text-red-400">+ Burn</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {attacks.map((attack) => {
+              const fired = Math.ceil(attack.base * attack.firedUpMultiplier);
+              const firedBurn = fired + burnDmg;
+              const showBase = starIdx !== 3 || attack.name === 'Stamp of Disapproval';
+              const showFired = attack.firedUpMultiplier !== 1;
+              return (
+                <tr key={attack.name} className="hover:bg-white/5 transition-colors">
+                  <td className="px-2 py-1.5 font-semibold text-white/80">{attack.name}</td>
+                  <td className="px-2 py-1.5 text-center font-black text-white/60 tabular-nums">{showBase ? attack.base : ' - '}</td>
+                  <td className="px-2 py-1.5 text-center font-black text-orange-300 tabular-nums">{showFired ? fired : ' - '}</td>
+                  <td className="px-2 py-1.5 text-center font-black text-red-400 tabular-nums"> 
+                    <span className='text-[9px]'>(+{burnDmg}) = </span> {firedBurn}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+      {/* <div className="mt-2 text-[9px] font-medium text-white text-right italic">
+        *Burn damage for {stars}★: {burnDmg}
+      </div> */}
     </div>
   );
 }
@@ -555,13 +575,14 @@ function GagPickerPanel({
     <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0">
       <BoilerInfoSection stars={stars} onSetStars={onSetStars} maxHp={maxHp} />
 
-      <div className="mb-2 flex items-center justify-between gap-2 px-3">
-        <h4 className="text-base font-bold text-white">Gags</h4>
-        <div className="text-xs text-green-100/70 tabular-nums">
-          Round {activeCell.round + 1} - Gag {activeCell.slot + 1}
+      <div className="mb-2 rounded-xl border border-white/10 bg-black/20 flex flex-col p-2">
+        <div className="flex items-center gap-2 items-center justify-between gap-2 p-2">
+          <h4 className="text-base font-bold text-white">Gags</h4>
+          <div className="text-xs text-green-100/70 tabular-nums">
+            Round {activeCell.round + 1} - Gag {activeCell.slot + 1}
+          </div>
         </div>
-      </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3">
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 border border-white/10 bg-black/20 rounded-lg">
         {gagTracks.map((track) => (
           <GagTrackPicker
             key={track.id}
@@ -573,6 +594,8 @@ function GagPickerPanel({
             isFinished={isFinished}
           />
         ))}
+      </div>
+      
       </div>
     </section>
   );
@@ -909,7 +932,7 @@ function RoundsPanel({
       </div>
 
       {/* Phase groups */}
-      <div ref={roundsScrollRef} className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-[48em] border-radius-sm">
+      <div ref={roundsScrollRef} className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-[45em] border-radius-sm">
         {phaseGroups.map((group, idx) => (
           <RoundPhaseGroup
             key={idx}
@@ -934,37 +957,49 @@ function RoundsPanel({
 
 function BoilerCalculator() {
   const [stars, setStars] = useState<1 | 2 | 3 | 4>(4);
-  const [activeCell, setActiveCell] = useState<{ round: number; slot: number }>({ round: 0, slot: 0 });
-  const [grid, setGrid] = useState<SelectedGagCell[][]>(() =>
-    Array.from({ length: BOILER_CALC_ROUNDS }, () =>
+  
+  const getInitialGrid = (s: number) => {
+    const neutralCount = s < 4 ? 2 : 0;
+    const cycleCount = 2 * 6; // 2 sets of 6 rounds
+    const total = neutralCount + cycleCount;
+    return Array.from({ length: total }, () =>
       Array.from({ length: BOILER_CALC_GAGS_PER_ROUND }, () => null)
-    )
-  );
+    );
+  };
+
+  const [activeCell, setActiveCell] = useState<{ round: number; slot: number }>({ round: 0, slot: 0 });
+  const [grid, setGrid] = useState<SelectedGagCell[][]>(() => getInitialGrid(4));
   const [lastAddedRound, setLastAddedRound] = useState<number | null>(null);
   const roundRowRefs = React.useRef<Array<HTMLDivElement | null>>([]);
   const roundsScrollRef = React.useRef<HTMLDivElement | null>(null);
 
+  // Reset grid when stars change
+  const handleSetStars = (n: 1 | 2 | 3 | 4) => {
+    setStars(n);
+    setGrid(getInitialGrid(n));
+    setActiveCell({ round: 0, slot: 0 });
+    setLastAddedRound(null);
+  };
+
   const phaseGroups = useMemo((): PhaseGroup[] => {
     const groups: PhaseGroup[] = [];
+    const totalRounds = grid.length;
     if (stars < 4) {
-      // First two rounds are neutral
       groups.push({ kind: 'neutral', rounds: [0, 1] });
-      // Then cyclic groups of 6: 3 fired_up + 3 defense
-      for (let i = 2; i < BOILER_CALC_ROUNDS; i += 6) {
-        const firedUp = [i, i + 1, i + 2].filter((r) => r < BOILER_CALC_ROUNDS);
-        const defense = [i + 3, i + 4, i + 5].filter((r) => r < BOILER_CALC_ROUNDS);
+      for (let i = 2; i < totalRounds; i += 6) {
+        const firedUp = [i, i + 1, i + 2].filter((r) => r < totalRounds);
+        const defense = [i + 3, i + 4, i + 5].filter((r) => r < totalRounds);
         if (firedUp.length || defense.length) groups.push({ kind: 'cycle', firedUp, defense });
       }
     } else {
-      // All rounds are cyclic from the start
-      for (let i = 0; i < BOILER_CALC_ROUNDS; i += 6) {
-        const firedUp = [i, i + 1, i + 2].filter((r) => r < BOILER_CALC_ROUNDS);
-        const defense = [i + 3, i + 4, i + 5].filter((r) => r < BOILER_CALC_ROUNDS);
+      for (let i = 0; i < totalRounds; i += 6) {
+        const firedUp = [i, i + 1, i + 2].filter((r) => r < totalRounds);
+        const defense = [i + 3, i + 4, i + 5].filter((r) => r < totalRounds);
         if (firedUp.length || defense.length) groups.push({ kind: 'cycle', firedUp, defense });
       }
     }
     return groups;
-  }, [stars]);
+  }, [stars, grid.length]);
 
   const gagTracks = useMemo(() => {
     return (gagsConfig as any[]).filter((t) => allowedGagTrackIds.includes(t.id)) as GagTrack[];
@@ -985,7 +1020,7 @@ function BoilerCalculator() {
   };
 
   const isSosUsedInRound = (roundIndex: number, gagIndex: number) => {
-    return grid[roundIndex].some((cell) => cell?.variant === 'sos' && cell.trackId === 'sound' && cell.gagIndex === gagIndex);
+    return grid[roundIndex]?.some((cell) => cell?.variant === 'sos' && cell.trackId === 'sound' && cell.gagIndex === gagIndex);
   };
 
   const maxHp = useMemo(() => {
@@ -1046,26 +1081,40 @@ function BoilerCalculator() {
     if (variant === 'sos' && trackId === 'sound' && isSosUsedInRound(activeCell.round, gagIndex)) return;
 
     setLastAddedRound(activeCell.round);
+    
     setGrid((prev) => {
-      const next = prev.map((r) => r.slice());
+      let next = prev.map((r) => r.slice());
       next[activeCell.round][activeCell.slot] = { trackId, gagIndex, variant };
+      
+      // If we're in the last 6 rounds, append a new 6-round cycle
+      if (activeCell.round >= next.length - 6) {
+        const newCycle = Array.from({ length: 6 }, () =>
+          Array.from({ length: BOILER_CALC_GAGS_PER_ROUND }, () => null)
+        );
+        next = [...next, ...newCycle];
+      }
+      
       return next;
     });
+
     setActiveCell((prev) => {
       const nextSlot = prev.slot + 1;
       if (nextSlot < BOILER_CALC_GAGS_PER_ROUND) return { round: prev.round, slot: nextSlot };
+      
       let nextRound = prev.round + 1;
+      // Skip defense rounds if the current round wasn't a defense/meltdown round (auto-progression logic)
       if (roundStats[prev.round]?.roundType !== 'defense' && roundStats[prev.round]?.roundType !== 'meltdown') {
-        while (nextRound < BOILER_CALC_ROUNDS && getBoilerRoundType(nextRound, stars) === 'defense') {
+        while (nextRound < grid.length && getBoilerRoundType(nextRound, stars) === 'defense') {
           nextRound++;
         }
       }
-      if (nextRound < BOILER_CALC_ROUNDS) return { round: nextRound, slot: 0 };
-      return prev;
+      // Since we just expanded the grid if needed, nextRound should be safe
+      return { round: nextRound, slot: 0 };
     });
   };
 
   const clearSlot = (roundIndex: number, slotIndex: number) => {
+    setActiveCell({ round: roundIndex, slot: slotIndex });
     setGrid((prev) => {
       const next = prev.map((r) => r.slice());
       next[roundIndex][slotIndex] = null;
@@ -1084,7 +1133,7 @@ function BoilerCalculator() {
     <div className="grid grid-cols-[38%_62%] gap-3 h-full">
       <GagPickerPanel
         stars={stars}
-        onSetStars={setStars}
+        onSetStars={handleSetStars}
         maxHp={maxHp}
         gagTracks={gagTracks}
         activeCell={activeCell}
