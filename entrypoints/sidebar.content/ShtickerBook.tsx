@@ -137,11 +137,20 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function getHealthSegment(remaining: number, max: number): 'green' | 'yellow' | 'orange' | 'red' {
+function getHealthSegment(remaining: number, max: number, stars: number): 'green' | 'yellow' | 'orange' | 'red' {
+  let greenThreshold: number = 0.85;
+  let yellowThreshold: number = 0.65;
+  let orangeThreshold: number = 0.30;
+  if (stars === 4) {
+    greenThreshold = 0.90;
+    yellowThreshold = 0.70;
+    orangeThreshold = 0.45;
+  }
+
   if (max <= 0) return 'red';
-  if (remaining > max * 0.85) return 'green';
-  if (remaining > max * 0.65) return 'yellow';
-  if (remaining > max * 0.3) return 'orange';
+  if (remaining > max * greenThreshold) return 'green';
+  if (remaining > max * yellowThreshold) return 'yellow';
+  if (remaining > max * orangeThreshold) return 'orange';
   return 'red';
 }
 
@@ -155,20 +164,25 @@ function getExtensionImageUrl(path: string): string {
 
 // ─── Shared primitive components ──────────────────────────────────────────────
 
-function MultiLayerBoilerHealthBar({ remaining, max }: { remaining: number; max: number }) {
+function MultiLayerBoilerHealthBar({ remaining, max, stars }: { remaining: number; max: number; stars: number }) {
   const safeMax = Math.max(0, max);
   const safeRemaining = clampNumber(remaining, 0, safeMax);
 
-  const greenMax = safeMax * 0.15;
-  const yellowMax = safeMax * 0.2;
-  const orangeMax = safeMax * 0.35;
-  const redMax = safeMax * 0.3;
+  const greenThreshold = stars === 4 ? 0.10 : 0.15;
+  const yellowThreshold = stars === 4 ? 0.20 : 0.20;
+  const orangeThreshold = stars === 4 ? 0.25 : 0.35;
+  const redThreshold = stars === 4 ? 0.45 : 0.30;
 
-  const greenLower = safeMax * 0.85;
-  const yellowLower = safeMax * 0.65;
-  const orangeLower = safeMax * 0.3;
+  const greenMax = safeMax * greenThreshold;
+  const yellowMax = safeMax * yellowThreshold;
+  const orangeMax = safeMax * orangeThreshold;
+  const redMax = safeMax * redThreshold;
 
-  const segment = getHealthSegment(safeRemaining, safeMax);
+  const greenLower = safeMax * (1 - greenThreshold);
+  const yellowLower = safeMax * (1 - greenThreshold - yellowThreshold);
+  const orangeLower = safeMax * (1 - greenThreshold - yellowThreshold - orangeThreshold);
+
+  const segment = getHealthSegment(safeRemaining, safeMax, stars);
 
   const greenWidth = segment === 'green' ? clampNumber((safeRemaining - greenLower) / (greenMax || 1), 0, 1) : 0;
   const yellowWidth = segment === 'green' ? 1 : segment === 'yellow' ? clampNumber((safeRemaining - yellowLower) / (yellowMax || 1), 0, 1) : 0;
@@ -265,10 +279,11 @@ type GagButtonProps = {
   disabled?: boolean;
   onClick: () => void;
   overlayBottomRight?: React.ReactNode;
+  overlayBottom?: React.ReactNode;
   overlayTopLeft?: React.ReactNode;
 };
 
-function GagButton({ imageSrc, imageAlt, color, title, damage, disabled = false, onClick, overlayBottomRight, overlayTopLeft }: GagButtonProps) {
+function GagButton({ imageSrc, imageAlt, color, title, damage, disabled = false, onClick, overlayBottomRight, overlayBottom, overlayTopLeft }: GagButtonProps) {
   return (
     <button
       type="button"
@@ -293,6 +308,11 @@ function GagButton({ imageSrc, imageAlt, color, title, damage, disabled = false,
       {overlayBottomRight && (
         <div className="absolute -bottom-1 -right-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
           {overlayBottomRight}
+        </div>
+      )}
+      {overlayBottom && (
+        <div className="absolute -bottom-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+          {overlayBottom}
         </div>
       )}
     </button>
@@ -323,19 +343,24 @@ function SosSoundPicker({
   roundStats,
   isSosUsedInRound,
   onSelect,
+  isFinished,
 }: {
   track: GagTrack;
   activeCell: { round: number; slot: number };
   roundStats: Array<{ roundType: BoilerRoundType }>;
   isSosUsedInRound: (round: number, gagIndex: number) => boolean;
   onSelect: (gagIndex: number) => void;
+  isFinished: boolean;
 }) {
   return (
-      <div className="flex justify-end gap-4 px-3 py-2">
+      <div className="flex gap-1">
+        <div className='gag-button'></div>
+        <div className='gag-button'></div>
+        <div className='gag-button'></div>
         {SOS_SOUND_GAGS.map((sos) => {
           const gag = track.gags[sos.gagIndex];
           const roundType = roundStats[activeCell.round]?.roundType;
-          const disabled = isSosUsedInRound(activeCell.round, sos.gagIndex);
+          const disabled = isFinished || isSosUsedInRound(activeCell.round, sos.gagIndex);
           return (
             <GagButton
               key={`sos-${sos.gagIndex}`}
@@ -346,7 +371,7 @@ function SosSoundPicker({
               damage={sos.damage}
               disabled={disabled}
               onClick={() => onSelect(sos.gagIndex)}
-              overlayBottomRight={
+              overlayBottom={
                 <div className='flex'>
                   {[...Array(sos.gagIndex)].map((_, i) => (
                     <StarIcon key={i} className="w-2.5 h-2.5 text-yellow-300" />
@@ -356,6 +381,8 @@ function SosSoundPicker({
             />
           );
         })}
+        
+        <div className='gag-button'></div>
       </div>
   );
 }
@@ -366,16 +393,18 @@ function GagTrackPicker({
   roundStats,
   isSosUsedInRound,
   onSelectGag,
+  isFinished,
 }: {
   track: GagTrack;
   activeCell: { round: number; slot: number };
   roundStats: Array<{ roundType: BoilerRoundType }>;
   isSosUsedInRound: (round: number, gagIndex: number) => boolean;
   onSelectGag: (trackId: AllowedGagTrackId, gagIndex: number, variant: GagVariant) => void;
+  isFinished: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-      <div className="mb-2 flex items-center justify-between">
+    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
+      <div className="mb-1 flex items-center justify-between">
         <div className="text-xs font-black uppercase tracking-widest text-white/80">{track.name}</div>
       </div>
 
@@ -386,11 +415,12 @@ function GagTrackPicker({
           roundStats={roundStats}
           isSosUsedInRound={isSosUsedInRound}
           onSelect={(gagIndex) => onSelectGag('sound', gagIndex, 'sos')}
+          isFinished={isFinished}
         />
       )}
 
       {/* Base gags row */}
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="flex gap-1">
         {track.gags.map((gag, idx) => (
           <GagButton
             key={`${track.id}-${gag.name}`}
@@ -399,13 +429,14 @@ function GagTrackPicker({
             color={track.color}
             title={`${gag.name} (${gag.base})`}
             damage={gag.base}
+            disabled={isFinished}
             onClick={() => onSelectGag(track.id, idx, 'base')}
           />
         ))}
       </div>
 
       {/* Organic gags row */}
-      <div className="mt-2 grid grid-cols-7 gap-1.5">
+      <div className="flex gap-1">
         {track.gags.map((gag, idx) => {
           const organicDamage = gag.organic ?? gag.base;
           return (
@@ -416,6 +447,7 @@ function GagTrackPicker({
               color={track.color}
               title={`${gag.name} (Organic ${organicDamage})`}
               damage={organicDamage}
+              disabled={isFinished}
               onClick={() => onSelectGag(track.id, idx, 'organic')}
               overlayBottomRight={
                 <img
@@ -439,12 +471,14 @@ function GagPickerPanel({
   roundStats,
   isSosUsedInRound,
   onSelectGag,
+  isFinished,
 }: {
   gagTracks: GagTrack[];
   activeCell: { round: number; slot: number };
   roundStats: Array<{ roundType: BoilerRoundType }>;
   isSosUsedInRound: (round: number, gagIndex: number) => boolean;
   onSelectGag: (trackId: AllowedGagTrackId, gagIndex: number, variant: GagVariant) => void;
+  isFinished: boolean;
 }) {
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0">
@@ -463,6 +497,7 @@ function GagPickerPanel({
             roundStats={roundStats}
             isSosUsedInRound={isSosUsedInRound}
             onSelectGag={onSelectGag}
+            isFinished={isFinished}
           />
         ))}
       </div>
@@ -744,7 +779,7 @@ function RoundPhaseGroup({
         rounds={group.firedUp}
         label={isMeltdown ? 'Meltdown' : 'Fired Up'}
         labelColor={isMeltdown ? 'text-red-400' : 'text-red-300/80'}
-        borderColor={isMeltdown ? 'border-red-500/40 bg-red-900/20' : 'border-red-500/20 bg-red-500/5'}
+        borderColor={isMeltdown ? 'border-red-500/40 bg-black' : 'border-red-500/20 bg-red-900'}
         grid={grid}
         roundStats={roundStats}
         maxHp={maxHp}
@@ -759,7 +794,7 @@ function RoundPhaseGroup({
         rounds={group.defense}
         label="Defense"
         labelColor="text-sky-300/80"
-        borderColor="border-sky-500/20 bg-sky-500/5"
+        borderColor="border-sky-500/20 bg-sky-900"
         grid={grid}
         roundStats={roundStats}
         maxHp={maxHp}
@@ -811,7 +846,7 @@ function RoundsPanel({
       <div className="mb-2 flex items-center gap-2">
         <StarSelector stars={stars} onSetStars={onSetStars} />
         <div className="relative flex-1">
-          <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} />
+          <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-xs font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
             {remainingHp} / {maxHp}
           </div>
@@ -906,7 +941,7 @@ function BoilerCalculator() {
   const roundStats = useMemo(() => {
     let rolling = 0;
     const stats: RoundStat[] = [];
-    const redThreshold = maxHp * 0.3;
+    const redThreshold = maxHp * 0.45;
 
     for (let i = 0; i < grid.length; i++) {
       const round = grid[i];
@@ -949,8 +984,10 @@ function BoilerCalculator() {
 
   const totalDamage = roundStats[roundStats.length - 1]?.rolling ?? 0;
   const remainingHp = clampNumber(maxHp - totalDamage, 0, maxHp);
+  const isFinished = remainingHp <= 0;
 
   const selectGag = (trackId: AllowedGagTrackId, gagIndex: number, variant: GagVariant) => {
+    if (isFinished) return;
     if (variant === 'sos' && trackId === 'sound' && isSosUsedInRound(activeCell.round, gagIndex)) return;
 
     setLastAddedRound(activeCell.round);
@@ -989,13 +1026,14 @@ function BoilerCalculator() {
   }, [lastAddedRound]);
 
   return (
-    <div className="grid grid-cols-[40%_60%] gap-3 h-full">
+    <div className="grid grid-cols-[38%_62%] gap-3 h-full">
       <GagPickerPanel
         gagTracks={gagTracks}
         activeCell={activeCell}
         roundStats={roundStats}
         isSosUsedInRound={isSosUsedInRound}
         onSelectGag={selectGag}
+        isFinished={isFinished}
       />
       <RoundsPanel
         stars={stars}
@@ -1023,11 +1061,11 @@ function FacilitySubtypeRow({ subtype, rewardLabel }: { subtype: FacilitySubtype
   return (
     <div className='flex gap-2'>
       <div className="flex flex-1 justify-between gap-2  px-2 py-1.5">
-        <p className="text-sm font-semibold text-white">{subtype.name}</p>
+        <p className="text-sm font-bold text-white">{subtype.name}</p>
         <p className="text-sm font-bold text-white/95">{subtype.rewardText} {rewardLabel}</p>
       </div>
       <div className="flex w-[160px] justify-center gap-2  px-2 py-1.5">
-        <p className="text-sm font-medium text-white/85 text-center">{subtype.bossHealth} HP</p>
+        <p className="text-sm font-bold text-white/95 text-center">{subtype.bossHealth} HP</p>
       </div>
     </div>
   );
