@@ -465,7 +465,75 @@ function GagTrackPicker({
   );
 }
 
+function StarSelector({ stars, onSetStars }: { stars: number; onSetStars: (n: 1 | 2 | 3 | 4) => void }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {([1, 2, 3, 4] as const).map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onSetStars(n)}
+          className={`rounded-md px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
+            stars === n ? 'bg-emerald-600 text-white shadow-inner' : 'bg-black/25 text-green-100/80 hover:bg-black/40'
+          }`}
+          title={`${n}-star`}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetStars: (n: 1 | 2 | 3 | 4) => void; maxHp: number }) {
+  const attackIndex = stars - 1;
+  const attacks = [
+    { name: 'Under Pressure', damage: [25, 30, 35, 40][attackIndex] },
+    { name: 'Heated Discussion', damage: [20, 24, 28, 32][attackIndex] },
+    { name: 'Stamp of Disapproval', damage: [50, 70, 80, 90][attackIndex] },
+  ];
+
+  return (
+    <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="text-base font-bold text-white">Boiler</h4>
+        <StarSelector stars={stars} onSetStars={onSetStars} />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase tracking-wider text-white/50">Health</span>
+          <span className="text-lg font-black text-emerald-400 tabular-nums">{maxHp} HP</span>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] font-black uppercase tracking-wider text-white/50">Level</span>
+          <div className="flex gap-0.5 mt-1">
+            {[...Array(stars)].map((_, i) => (
+              <StarIcon key={i} className="w-3 h-3 text-yellow-400" />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+        <span className="text-[10px] font-black uppercase tracking-wider text-white/50">Attacks</span>
+        <div className="grid grid-cols-1 gap-1.5">
+          {attacks.map((attack) => (
+            <div key={attack.name} className="flex items-center justify-between rounded-md bg-black/30 px-2 py-1.5">
+              <span className="text-xs font-semibold text-white/80">{attack.name}</span>
+              <span className="text-xs font-black text-red-400 tabular-nums">{attack.damage} dmg</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GagPickerPanel({
+  stars,
+  onSetStars,
+  maxHp,
   gagTracks,
   activeCell,
   roundStats,
@@ -473,6 +541,9 @@ function GagPickerPanel({
   onSelectGag,
   isFinished,
 }: {
+  stars: number;
+  onSetStars: (n: 1 | 2 | 3 | 4) => void;
+  maxHp: number;
   gagTracks: GagTrack[];
   activeCell: { round: number; slot: number };
   roundStats: Array<{ roundType: BoilerRoundType }>;
@@ -482,6 +553,8 @@ function GagPickerPanel({
 }) {
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0">
+      <BoilerInfoSection stars={stars} onSetStars={onSetStars} maxHp={maxHp} />
+
       <div className="mb-2 flex items-center justify-between gap-2 px-3">
         <h4 className="text-base font-bold text-white">Gags</h4>
         <div className="text-xs text-green-100/70 tabular-nums">
@@ -668,26 +741,6 @@ function RoundRow({
   );
 }
 
-function StarSelector({ stars, onSetStars }: { stars: number; onSetStars: (n: 1 | 2 | 3 | 4) => void }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      {([1, 2, 3, 4] as const).map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onSetStars(n)}
-          className={`rounded-md px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
-            stars === n ? 'bg-emerald-600 text-white shadow-inner' : 'bg-black/25 text-green-100/80 hover:bg-black/40'
-          }`}
-          title={`${n}-star`}
-        >
-          {n}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 type RoundRowsColumnProps = {
   rounds: number[];
   label: string;
@@ -749,7 +802,7 @@ function RoundPhaseGroup({
 }) {
   if (group.kind === 'neutral') {
     return (
-      <div className="space-y-1.5">
+      <div className="flex flex-col gap-1 m-1 w-[345px]">
         {group.rounds.map((roundIndex) => (
           <RoundRow
             key={roundIndex}
@@ -821,7 +874,6 @@ function RoundsPanel({
   roundRowRefs,
   roundsScrollRef,
   getCellDamage,
-  onSetStars,
   onSetActiveCell,
   onClearSlot,
 }: {
@@ -836,15 +888,13 @@ function RoundsPanel({
   roundRowRefs: React.MutableRefObject<Array<HTMLDivElement | null>>;
   roundsScrollRef: React.MutableRefObject<HTMLDivElement | null>;
   getCellDamage: (cell: SelectedGagCell) => number;
-  onSetStars: (n: 1 | 2 | 3 | 4) => void;
   onSetActiveCell: (cell: { round: number; slot: number }) => void;
   onClearSlot: (round: number, slot: number) => void;
 }) {
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col h-full">
-      {/* Header: star selector + health bar */}
+      {/* Header: health bar */}
       <div className="mb-2 flex items-center gap-2">
-        <StarSelector stars={stars} onSetStars={onSetStars} />
         <div className="relative flex-1">
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-xs font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
@@ -854,7 +904,7 @@ function RoundsPanel({
       </div>
 
       {/* Phase groups */}
-      <div ref={roundsScrollRef} className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
+      <div ref={roundsScrollRef} className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-[48em] border-radius-sm">
         {phaseGroups.map((group, idx) => (
           <RoundPhaseGroup
             key={idx}
@@ -1028,6 +1078,9 @@ function BoilerCalculator() {
   return (
     <div className="grid grid-cols-[38%_62%] gap-3 h-full">
       <GagPickerPanel
+        stars={stars}
+        onSetStars={setStars}
+        maxHp={maxHp}
         gagTracks={gagTracks}
         activeCell={activeCell}
         roundStats={roundStats}
@@ -1047,7 +1100,6 @@ function BoilerCalculator() {
         roundRowRefs={roundRowRefs}
         roundsScrollRef={roundsScrollRef}
         getCellDamage={getCellDamage}
-        onSetStars={setStars}
         onSetActiveCell={setActiveCell}
         onClearSlot={clearSlot}
       />
