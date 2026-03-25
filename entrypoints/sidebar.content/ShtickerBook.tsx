@@ -198,7 +198,7 @@ function MultiLayerBoilerHealthBar({ remaining, max, stars }: { remaining: numbe
       : clampNumber(safeRemaining / (redMax || 1), 0, 1);
 
   return (
-    <div className="relative h-6 w-full overflow-hidden rounded-md bg-black/40 border border-white/10">
+    <div className="relative h-[50px] w-[300px] overflow-hidden rounded-md bg-black/40 border border-white/10">
       <div className="absolute inset-y-0 left-0 bg-red-500 transition-all duration-200" style={{ width: `${redWidth * 100}%` }} />
       <div className="absolute inset-y-0 left-0 bg-orange-500 transition-all duration-200" style={{ width: `${orangeWidth * 100}%` }} />
       <div className="absolute inset-y-0 left-0 bg-yellow-400 transition-all duration-200" style={{ width: `${yellowWidth * 100}%` }} />
@@ -251,9 +251,9 @@ function BookIcon({ width = 16, height = 16, className = '' }: { width?: number;
   );
 }
 
-function StarIcon({ className = '' }: { className?: string }) {
+function StarIcon({ className = '', size = 10 }: { className?: string; size?: number | string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
       <path d="M12 2l2.4 6.9H22l-5.9 4.3 2.3 6.8L12 15.9 5.6 20l2.3-6.8L2 8.9h7.6L12 2z" />
     </svg>
   );
@@ -894,10 +894,15 @@ function RoundsPanel({
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col h-full">
       {/* Header: health bar */}
-      <div className="mb-2 flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="mb-4 flex items-center justify-center h-[50px]">
+        <div className="relative w-[300px]">
+          <div className="absolute right-full mr-4 flex items-center gap-1 h-full">
+            {[...Array(stars)].map((_, i) => (
+              <StarIcon key={i} size={36} className="text-yellow-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
+            ))}
+          </div>
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+          <div className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
             {remainingHp} / {maxHp}
           </div>
         </div>
