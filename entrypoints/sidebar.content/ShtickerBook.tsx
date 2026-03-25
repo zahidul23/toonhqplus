@@ -647,6 +647,9 @@ function RoundSlotButton({
   const gag = cell && track ? track.gags[cell.gagIndex] : null;
   const cellDamage = cell ? getCellDamage(cell) : 0;
 
+  const sosInfo = cell?.variant === 'sos' ? SOS_SOUND_GAGS.find(s => s.gagIndex === cell.gagIndex) : null;
+  const imgSrc = sosInfo ? sosInfo.image : (gag ? `https://toonhq.org/static/assets/gags/${gag.image}` : null);
+
   const handleClick = () => {
     if (cell) {
       onClearSlot(roundIndex, slotIndex);
@@ -667,10 +670,10 @@ function RoundSlotButton({
     >
       {/* Fixed-size container so filled and empty slots are identical dimensions */}
       <div className="h-8 w-8 flex items-center justify-center">
-        {gag ? (
+        {imgSrc ? (
           <img
-            src={`https://toonhq.org/static/assets/gags/${gag.image}`}
-            alt={gag.name}
+            src={imgSrc}
+            alt={gag?.name || 'Gag'}
             draggable="false"
             className="h-8 w-8 rounded-sm object-contain drop-shadow-md"
           />
@@ -689,8 +692,10 @@ function RoundSlotButton({
         </div>
       )}
       {cell?.variant === 'sos' && (
-        <div className="absolute -bottom-1 -right-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)] text-yellow-300">
-          <StarIcon className="w-3.5 h-3.5" />
+        <div className="absolute -bottom-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)] text-yellow-300 flex">
+          {[...Array(sosInfo?.gagIndex ?? 0)].map((_, i) => (
+            <StarIcon key={i} className="w-2.5 h-2.5" />
+          ))}
         </div>
       )}
     </button>
