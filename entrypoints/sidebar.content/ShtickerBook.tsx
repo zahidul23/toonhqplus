@@ -316,15 +316,20 @@ function ShieldIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
-function BookIcon({ width = 16, height = 16, className = '' }: { width?: number; height?: number; className?: string }) {
+function BookIcon({ width = 16, height = 16, className = '', isOpen }: { width?: number; height?: number; className?: string; isOpen?: boolean | null }) {
+  if (isOpen === true) {
+    return (
+      <div className='book-opened' />
+    );
+  }
+  if (isOpen === false) {
+    return (
+      <div className='book-closed' />
+    );
+  }
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5V4.5A2.5 2.5 0 0 1 6.5 2Z" />
-      <path d="M9 7h7" />
-      <path d="M9 11h7" />
-    </svg>
-  );
+    <img src={getExtensionImageUrl('images/Shticker_Book.webp')} alt="Book" width={48} height={48} className={className} />
+  )
 }
 
 function StarIcon({ className = '', size = 10 }: { className?: string; size?: number | string }) {
@@ -1901,11 +1906,11 @@ function OpenBookButton({ onClick }: { onClick: () => void }) {
       <button
         type="button"
         onClick={onClick}
-        className="group inline-flex h-11 w-11 items-center justify-center rounded-lg border border-emerald-500/30 bg-[#0c3622] text-white shadow-lg transition-all hover:bg-[#145837] hover:shadow-emerald-900/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/70 active:scale-95 cursor-pointer"
+        className="group inline-flex  items-center justify-center transition-all cursor-pointer"
         aria-label="Open Shticker Book"
         title="Open Shticker Book"
       >
-        <BookIcon className="text-emerald-300 group-hover:text-emerald-200" />
+        <BookIcon isOpen={false} />
       </button>
     </div>
   );
@@ -1915,7 +1920,7 @@ function BookHeader() {
   return (
     <div className="flex items-center justify-between border-b border-[#0a2e1d]/80 bg-[#10462d] px-4 py-3">
       <div className="flex items-center gap-2 text-white">
-        <BookIcon className="text-emerald-300" />
+        <BookIcon className="text-emerald-300" isOpen={null} />
         <h3 className="text-base font-bold">Shticker Book</h3>
       </div>
     </div>
@@ -1970,7 +1975,7 @@ function BookSidebar({
         onClick={() => { onTabChange('field_office'); onFacilityChange(null); }}
         className={navButtonClass('field_office', 'mb-2')}
       >
-        Field Office
+        Field Offices
       </button>
 
       <button
@@ -1989,11 +1994,12 @@ function CloseBookButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-4 left-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-emerald-500/35 bg-[#0c3622] text-white shadow-lg transition-all hover:bg-[#145837] focus:outline-none focus:ring-2 focus:ring-emerald-500/70 active:scale-95 cursor-pointer"
+      className="absolute bottom-4 left-4 z-20 inline-flex items-center 
+      justify-center shadow-lg transition-all cursor-pointer"
       aria-label="Close Shticker Book"
       title="Close Shticker Book"
     >
-      <BookIcon className="text-emerald-200" />
+      <BookIcon className="text-emerald-200" isOpen={true} />
     </button>
   );
 }

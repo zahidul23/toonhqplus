@@ -159,3 +159,27 @@
 .text-white\/70.column-highlighted {
   color: white;
 }
+
+.book-opened {
+  width: 60px;
+  height: 60px;
+  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_opened.webp');
+  background-size: cover;
+  transition: background-image 0.3s ease; /* Smooths the transition */
+}
+
+.book-opened:hover {
+  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_close.webp');
+}
+
+.book-closed {
+  width: 60px;
+  height: 60px;
+  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_closed.webp');
+  background-size: cover;
+  transition: background-image 0.3s ease; /* Smooths the transition */
+}
+
+.book-closed:hover {
+  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_open.webp');
+}
