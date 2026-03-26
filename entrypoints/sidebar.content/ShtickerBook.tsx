@@ -135,7 +135,7 @@ const FACILITIES_INFO: FacilityInfo[] = [
     bossName: 'Mint Auditor',
     image: 'https://toonhq.org/static/assets/groups/large/mint.jpg',
     bossImage: '/images/auditor.webp',
-    cardBg: '#108000',
+    cardBg: '#238b39',
     cardBorder: '#22c55e',
     subtypes: [
       { name: 'Coin Mint', minReward: 702, maxReward: 807, bossHealth: 750, shortName: 'Coin' },
@@ -1249,13 +1249,13 @@ function BoilerCalculator() {
 function FacilitySubtypeRow({ subtype, rewardLabel }: { subtype: FacilitySubtype; rewardLabel: string }) {
   return (
     <div className='flex gap-2'>
-      <div className="flex flex-1 justify-between gap-2 px-2 py-1.5">
+      <div className="flex flex-1 justify-between gap-2 px-2 py-1.5 rounded-lg bg-black/20 border border-white/5">
         <p className="text-sm font-bold text-white">{subtype.name}</p>
         <p className="text-sm font-bold text-white/95">
           {subtype.minReward}-{subtype.maxReward} {rewardLabel}
         </p>
       </div>
-      <div className="flex w-[160px] justify-center gap-2 px-2 py-1.5">
+      <div className="flex w-[160px] justify-center gap-2 px-2 py-1.5 rounded-lg bg-black/20 border border-white/5">
         <p className="text-sm font-bold text-white/95 text-center">{subtype.bossHealth} HP</p>
       </div>
     </div>
@@ -1298,7 +1298,7 @@ function FacilityCard({ facility, idx, onOpen }: { facility: FacilityInfo; idx: 
       <FacilityImages facility={facility} heightClass="h-40" />
       <div className="mt-2 w-full space-y-1.5">
         {facility.subtypes.map((subtype) => (
-          <div key={subtype.name} className="rounded-lg bg-black/20 border border-white/5">
+          <div key={subtype.name} className="">
             <FacilitySubtypeRow subtype={subtype} rewardLabel={facility.rewardLabel} />
           </div>
         ))}
@@ -1566,19 +1566,21 @@ function FacilitiesTabContent({
 }
 
 function FieldOfficeTabContent() {
+  const [selectedStar, setSelectedStar] = useState(4);
+
   const boilerHp = [
-    { star: '1★', hp: 4000, num: 1 },
-    { star: '2★', hp: 4500, num: 2 },
-    { star: '3★', hp: 5000, num: 3 },
-    { star: '4★', hp: 5500, num: 4 },
+    { star: 1, hp: 4000, label: '1★' },
+    { star: 2, hp: 4500, label: '2★' },
+    { star: 3, hp: 5000, label: '3★' },
+    { star: 4, hp: 5500, label: '4★' },
   ];
 
   const attacks = [
-    { name: 'Under Pressure', s1: '25/38', s2: '30/45', s3: '35/53', s4: '40/60', note: 'Base / Fired Up' },
-    { name: 'Heated Discussion', s1: '20/30', s2: '24/36', s3: '28/42', s4: '32/48', note: 'Base / Fired Up' },
-    { name: 'Slow Burn', s1: '5/8', s2: '7/11', s3: '9/14', s4: '11/17', note: 'Inflicts Burn (DoT)' },
-    { name: 'Burn', s1: '10', s2: '14', s3: '18', s4: '22', note: 'Burn Damage for 3 Rounds' },
-    { name: 'Stamp of Disapproval', s1: '50', s2: '70', s3: '80', s4: '90', note: 'Heavy Hit' },
+    { name: 'Under Pressure', s1: '25/38', s2: '30/45', s3: '35/53', s4: '40/60' },
+    { name: 'Heated Discussion', s1: '20/30', s2: '24/36', s3: '28/42', s4: '32/48' },
+    { name: 'Slow Burn', s1: '5/8', s2: '7/11', s3: '9/14', s4: '11/17' },
+    { name: 'Burn', s1: '10', s2: '14', s3: '18', s4: '22' },
+    { name: 'Stamp of Disapproval', s1: '50', s2: '70', s3: '80', s4: '90' },
   ];
 
   const specialMoves = [
@@ -1587,102 +1589,306 @@ function FieldOfficeTabContent() {
     { name: 'Quality Control', s1: '1 Round', s2: '2 Rounds', s3: '3 Rounds', s4: '4 Rounds', note: 'Gag Lockout' },
   ];
 
+  const jokeData = [
+    { label: 'Restore 1 Track', s1: '25', s2: '35', s3: '45', s4: '50' },
+    { label: 'Restore 2 Tracks', s1: '40', s2: '55', s3: '65', s4: '75' },
+    { label: 'Max Jokes', s1: '55', s2: '65', s3: '80', s4: '90' },
+  ];
+
+  const elevatorFailure = [
+    { name: 'Penalty', s1: '-30 Laff', s2: '-40 Laff', s3: '-50 Laff', s4: '-50 Laff' },
+  ];
+
+  const coldCallerMinigameDmg = [
+    { 
+      name: (
+        <div className="flex flex-col text-[13px] leading-tight">
+          <span>Name Dropper</span>
+          <span>Mover & Shaker</span>
+          <span>Two-Face</span>
+        </div>
+      ), 
+      s1: '-17', s2: '-21', s3: '-25', s4: '-29' 
+    },
+    { name: 'Cold Caller', s1: '-12', s2: '-15', s3: '-18', s4: '-21' },
+  ];
+
+  const megaMoverMinigameDmg = [
+    { name: 'Mega-Mover', s1: '-25', s2: '-30', s3: '-35', s4: '-40' },
+    { 
+      name: (
+        <div className="flex flex-col text-[13px] leading-tight">
+          <span>Cold Caller</span>
+          <span>Glad Hander</span>
+        </div>
+      ), 
+      s1: '-20', s2: '-23', s3: '-26', s4: '-29' 
+    },
+    { 
+      name: (
+        <div className="flex flex-col text-[13px] leading-tight">
+          <span>Telemarketer</span>
+          <span>Name Dropper</span>
+          <span>Two-Face</span>
+        </div>
+      ), 
+      s1: '-10', s2: '-12', s3: '-14', s4: '-16' 
+    },
+    { name: 'Filing Cabinet', s1: '-5', s2: '-5', s3: '-5', s4: '-5' },
+  ];
+
+  const getColClass = (star: number) => selectedStar === star ? 'bg-emerald-500/20 column-highlighted' : '';
+
+  const getFieldOfficeImage = (star: number) => {
+    switch (star) {
+      case 1: return 'https://toonhq.org/static/assets/groups/large/sfo/mm_3.jpg';
+      case 2: return 'https://toonhq.org/static/assets/groups/large/sfo/tb_4.jpg';
+      case 3: return 'https://toonhq.org/static/assets/groups/large/sfo/ddl_2.jpg';
+      case 4: default: return 'https://toonhq.org/static/assets/groups/large/playground_field_office.jpg';
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl h-64">
           <img
-            src="https://toonhq.org/static/assets/groups/large/playground_field_office.jpg"
+            src={getFieldOfficeImage(selectedStar)}
             alt="Field Office"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-all duration-500"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-4 left-4">
-            <h4 className="text-2xl font-black uppercase tracking-tight text-white drop-shadow-md">Sellbot Field Office</h4>
+            <h4 className="text-2xl font-black uppercase tracking-tight text-white drop-shadow-md">
+              Sellbot Field Office
+              <span className="m-2 mb-4">
+                {[...Array(selectedStar)].map((_, i) => (
+                  <span key={i} className="text-yellow-300 text-lg p-1">★</span>
+               ))}
+              </span>
+            </h4>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           {boilerHp.map((item) => (
-            <div key={item.star} className="flex flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-[#10462d]/60 p-4 shadow-xl">
+            <button
+              key={item.star}
+              onClick={() => setSelectedStar(item.star)}
+              className={`flex flex-col items-center justify-center rounded-2xl border transition-all duration-200 p-4 shadow-xl cursor-pointer ${
+                selectedStar === item.star 
+                  ? 'border-emerald-400 bg-emerald-500/30 scale-[1.02] ring-2 ring-emerald-500/50' 
+                  : 'border-emerald-500/20 bg-[#10462d]/60 hover:bg-[#10462d]/80'
+              }`}
+            >
               <div className="mb-1 text-sm font-black text-emerald-400/80 uppercase tracking-widest">{
-                [...Array(item.num)].map((_, i) => (
+                [...Array(item.star)].map((_, i) => (
                   <span key={i} className="text-yellow-300 text-lg">★</span>
                 ))
               } </div>
               <div className="text-3xl font-black text-white tabular-nums">{item.hp} <span className="text-xs text-white/30">HP</span></div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-          <h5 className="text-sm font-black uppercase tracking-widest text-red-400">Boiler Attacks (Base / Fired Up)</h5>
-        </div>
-        <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
-          <table className="w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
-                <th className="px-4 py-3">Attack</th>
-                <th className="px-4 py-3 text-center">1★</th>
-                <th className="px-4 py-3 text-center">2★</th>
-                <th className="px-4 py-3 text-center">3★</th>
-                <th className="px-4 py-3 text-center">4★</th>
-                <th className="px-4 py-3">Note</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {attacks.map((atk) => {
-                const indent = atk.name === 'Burn' ? 'pl-12' : '';
-                return (
-                  <tr key={atk.name} className="hover:bg-white/5 transition-colors">
-                    <td className={`px-4 py-3 font-bold text-white/90 ${indent}`}>{atk.name}</td>
-                    <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s1}</td>
-                    <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s2}</td>
-                  <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s3}</td>
-                  <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s4}</td>
-                  <td className="px-4 py-3 text-[11px] leading-tight text-white/40">{atk.note}</td>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+            <h5 className="text-sm font-black uppercase tracking-widest text-blue-400">Jokes</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5"></th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
                 </tr>
-              )})}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {jokeData.map((row) => (
+                  <tr key={row.label} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5 font-bold text-white/90">{row.label}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+            <h5 className="text-sm font-black uppercase tracking-widest text-rose-400">Failure To Enter Elevator</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-4 py-3"></th>
+                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(1)}`}>1★</th>
+                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(2)}`}>2★</th>
+                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(3)}`}>3★</th>
+                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {elevatorFailure.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3 font-bold text-white/90">{row.name}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <h5 className="text-sm font-black uppercase tracking-widest text-emerald-400">Boiler Special Moves</h5>
-        </div>
-        <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
-          <table className="w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
-                <th className="px-4 py-3">Move</th>
-                <th className="px-4 py-3 text-center">1★</th>
-                <th className="px-4 py-3 text-center">2★</th>
-                <th className="px-4 py-3 text-center">3★</th>
-                <th className="px-4 py-3 text-center">4★</th>
-                <th className="px-4 py-3">Effect</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {specialMoves.map((move) => (
-                <tr key={move.name} className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-bold text-white/90">{move.name}</td>
-                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s1}</td>
-                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s2}</td>
-                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s3}</td>
-                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s4}</td>
-                  <td className="px-4 py-3 text-[11px] leading-tight text-white/40">{move.note}</td>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
+            <h5 className="text-sm font-black uppercase tracking-widest text-cyan-400">Cold Caller Cubicles Damage</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5"></th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {coldCallerMinigameDmg.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5 font-bold text-white/90">{row.name}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+            <h5 className="text-sm font-black uppercase tracking-widest text-orange-400">Mega-Mover Mazes Damage</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5"></th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {megaMoverMinigameDmg.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5 font-bold text-white/90">{row.name}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            <h5 className="text-sm font-black uppercase tracking-widest text-red-400">Boiler Attacks (Base / Fired Up)</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5"></th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {attacks.map((atk, idx) => {
+                  const indent = atk.name === 'Burn' ? 'pl-6' : '';
+                  return (
+                    <tr key={idx} className="hover:bg-white/5 transition-colors">
+                      <td className={`px-3 py-2.5 font-bold text-white/90 ${indent}`}>{atk.name}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(1)}`}>{atk.s1}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(2)}`}>{atk.s2}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(3)}`}>{atk.s3}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(4)}`}>{atk.s4}</td>
+                    </tr>
+                  )})}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <h5 className="text-sm font-black uppercase tracking-widest text-emerald-400">Boiler Special Moves</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5"></th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
+                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {specialMoves.map((move) => (
+                  <tr key={move.name} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <div className="font-bold text-white/90">{move.name}</div>
+                      <div className="text-[9px] text-white/30 leading-tight">{move.note}</div>
+                    </td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(1)}`}>{move.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(2)}`}>{move.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(3)}`}>{move.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(4)}`}>{move.s4}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

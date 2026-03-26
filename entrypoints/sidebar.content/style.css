@@ -154,3 +154,8 @@
 .gag-button {
   width: 3.5em;
 }
+
+.text-white\/40 .column-highlighted,
+.text-white\/70.column-highlighted {
+  color: white;
+}
