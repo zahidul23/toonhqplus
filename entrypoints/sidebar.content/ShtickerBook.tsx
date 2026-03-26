@@ -1280,34 +1280,34 @@ function FacilityImages({
 
 function FacilityCard({ facility, idx, onOpen }: { facility: FacilityInfo; idx: number; onOpen: (idx: number) => void }) {
   return (
-    <section
-      className="rounded-xl border p-3 text-white"
+    <button
+      type="button"
+      onClick={() => onOpen(idx)}
+      className="group relative flex flex-col rounded-xl border p-3 text-white transition-all hover:brightness-110 hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left w-full shadow-lg"
       style={{
         background: `linear-gradient(180deg, ${facility.cardBg}ee 0%, ${facility.cardBg}c8 55%, #0f172abf 100%)`,
         borderColor: facility.cardBorder,
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-sm font-bold text-right">{facility.title}</h4>
-        <button
-          type="button"
-          onClick={() => onOpen(idx)}
-          className="rounded-full bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90 transition-colors hover:bg-black/45 cursor-pointer"
-        >
-          Open Page
-        </button>
+        <h4 className="text-sm font-black uppercase tracking-tight">{facility.title}</h4>
+        <div className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:bg-white/20 group-hover:text-white transition-colors">
+          View Details
+        </div>
       </div>
       <FacilityImages facility={facility} heightClass="h-40" />
-      <div className="mt-2 space-y-1.5">
+      <div className="mt-2 w-full space-y-1.5">
         {facility.subtypes.map((subtype) => (
-          <FacilitySubtypeRow key={subtype.name} subtype={subtype} rewardLabel={facility.rewardLabel} />
+          <div key={subtype.name} className="rounded-lg bg-black/20 border border-white/5">
+            <FacilitySubtypeRow subtype={subtype} rewardLabel={facility.rewardLabel} />
+          </div>
         ))}
       </div>
-    </section>
+    </button>
   );
 }
 
-function FacilityDetailPage({ facility }: { facility: FacilityInfo }) {
+function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBack: () => void }) {
   return (
     <section
       className="mx-auto max-w-6xl rounded-xl border p-6 text-white"
@@ -1316,8 +1316,20 @@ function FacilityDetailPage({ facility }: { facility: FacilityInfo }) {
         borderColor: facility.cardBorder,
       }}
     >
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h4 className="text-2xl font-black uppercase tracking-tight">{facility.title}</h4>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="group flex h-10 w-10 items-center justify-center rounded-full bg-black/30 text-white/70 transition-all hover:bg-black/50 hover:text-white cursor-pointer"
+            title="Back to Overview"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:-translate-x-0.5">
+              <path d="m15 18-6-6 6-6"/>
+            </svg>
+          </button>
+          <h4 className="text-2xl font-black uppercase tracking-tight">{facility.title}</h4>
+        </div>
         <div className="rounded-md bg-black/40 px-3 py-1 text-sm font-bold text-white/80 border border-white/10">
           Boss: {facility.bossName}
         </div>
@@ -1390,8 +1402,12 @@ function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
               const isFull = row.skips === 0;
               const isMinimal = row.skips === facility.maxSkips;
               let label = `${row.skips} ${row.skips === 1 ? 'Skip' : 'Skips'}`;
-              if (isFull) label = "Full";
-              if (isMinimal) label = "Minimal";
+              
+              if (isFull) {
+                label = facility.id === 'sellbot' ? "Long" : "Full";
+              } else if (isMinimal) {
+                label = facility.id === 'sellbot' ? "Short" : "Minimal";
+              }
 
               return (
                 <tr key={row.skips} className={`hover:bg-white/5 transition-colors ${isFull ? 'bg-emerald-500/5' : isMinimal ? 'bg-red-500/5' : ''}`}>
@@ -1532,7 +1548,12 @@ function FacilitiesTabContent({
   setActiveFacility: (idx: number | null) => void;
 }) {
   if (activeFacility !== null) {
-    return <FacilityDetailPage facility={FACILITIES_INFO[activeFacility]} />;
+    return (
+      <FacilityDetailPage
+        facility={FACILITIES_INFO[activeFacility]}
+        onBack={() => setActiveFacility(null)}
+      />
+    );
   }
 
   return (
