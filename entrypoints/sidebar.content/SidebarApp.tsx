@@ -822,6 +822,32 @@ export function SidebarApp() {
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Debounce search term
+  useEffect(() => {
+    if (!searchTerm) {
+      setDebouncedSearchTerm('');
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setIsSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const searchResults = useMemo(() => {
+    if (!debouncedSearchTerm) return [];
+    const lower = debouncedSearchTerm.toLowerCase();
+    return Object.values(historyToons)
+      .filter((t) => t.name.toLowerCase().includes(lower))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [debouncedSearchTerm, historyToons]);
 
   // Tooltip tracking state
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
@@ -1061,93 +1087,159 @@ export function SidebarApp() {
             <div className="flex-1 flex flex-col min-h-0 p-3">
               {activeTab === 'toons' && (
                 <>
-                  <section className="mb-3 flex-[1_1_auto] flex flex-col min-h-2">
-                    <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Toony Toons</h3>
-                    <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                      {favorites.length === 0 ? (
-                        <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
-                      ) : (
-                        [...favorites].reverse().map((id) => {
-                          const toon = historyToons[id];
-                          if (!toon) return null;
-                          const isHovered =
-                            (hoveredToonId && String(toon.id) === hoveredToonId) ||
-                            (hoveredToonName && toon.name === hoveredToonName);
-                          return (
-                            <ToonRow
-                              key={toon.id}
-                              toon={toon}
-                              isFavorited={favorites.includes(toon.id)}
-                              isBlocked={blocked.includes(toon.id)}
-                              isOwnToon={activeToonIds.includes(toon.id)}
-                              note={notes[String(toon.id)]}
-                              refresh={refresh}
-                              isHovered={!!isHovered}
-                              isJustAdded={justAddedId === toon.id}
-                              onRequestDialog={handleRequestDialog}
-                              onMouseEnter={(e) => {
-                                setHoveredToonId(String(toon.id));
-                                setHoveredToonName(toon.name);
-                                setHoverSource('sidebar');
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                              }}
-                              onMouseLeave={() => {
-                                setHoveredToonId(null);
-                                setHoveredToonName(null);
-                                setHoverSource(null);
-                                setHoveredRect(null);
-                              }}
-                            />
-                          );
-                        })
-                      )}
-                    </ul>
-                  </section>
+                  <div className="mb-3 shrink-0 relative">
+                    <input
+                      type="text"
+                      placeholder="Search for a toon..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full rounded border border-[#0a2e1d] bg-black/20 px-3 py-2 pr-8 text-sm text-white focus:border-emerald-500/50 focus:outline-none placeholder:text-green-100/30 transition-all"
+                    />
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-green-100/30 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
 
-                  <section className="flex-[1_1_auto] flex flex-col min-h-2">
-                    <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Stinky Toons</h3>
-                    <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                      {blocked.length === 0 ? (
-                        <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
-                      ) : (
-                        [...blocked].reverse().map((id) => {
-                          const toon = historyToons[id];
-                          if (!toon) return null;
-                          const isHovered =
-                            (hoveredToonId && String(toon.id) === hoveredToonId) ||
-                            (hoveredToonName && toon.name === hoveredToonName);
-                          return (
-                            <ToonRow
-                              key={toon.id}
-                              toon={toon}
-                              isFavorited={favorites.includes(toon.id)}
-                              isBlocked={blocked.includes(toon.id)}
-                              isOwnToon={activeToonIds.includes(toon.id)}
-                              note={notes[String(toon.id)]}
-                              refresh={refresh}
-                              isHovered={!!isHovered}
-                              isJustAdded={justAddedId === toon.id}
-                              onRequestDialog={handleRequestDialog}
-                              onMouseEnter={(e) => {
-                                setHoveredToonId(String(toon.id));
-                                setHoveredToonName(toon.name);
-                                setHoverSource('sidebar');
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                              }}
-                              onMouseLeave={() => {
-                                setHoveredToonId(null);
-                                setHoveredToonName(null);
-                                setHoverSource(null);
-                                setHoveredRect(null);
-                              }}
-                            />
-                          );
-                        })
-                      )}
-                    </ul>
-                  </section>
+                  {searchTerm ? (
+                    <section className="flex-1 flex flex-col min-h-0">
+                      <h3 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1">Search Results</h3>
+                      <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                        {isSearching ? (
+                          <div className="py-8 text-center text-green-200/40 italic">Searching...</div>
+                        ) : searchResults.length === 0 ? (
+                          <div className="py-8 text-center text-green-200/40 italic">No toons found matching "{searchTerm}"</div>
+                        ) : (
+                          searchResults.map((toon) => {
+                            const isHovered =
+                              (hoveredToonId && String(toon.id) === hoveredToonId) ||
+                              (hoveredToonName && toon.name === hoveredToonName);
+                            return (
+                              <ToonRow
+                                key={toon.id}
+                                toon={toon}
+                                isFavorited={favorites.includes(toon.id)}
+                                isBlocked={blocked.includes(toon.id)}
+                                isOwnToon={activeToonIds.includes(toon.id)}
+                                note={notes[String(toon.id)]}
+                                refresh={refresh}
+                                isHovered={!!isHovered}
+                                isJustAdded={justAddedId === toon.id}
+                                onRequestDialog={handleRequestDialog}
+                                onMouseEnter={(e) => {
+                                  setHoveredToonId(String(toon.id));
+                                  setHoveredToonName(toon.name);
+                                  setHoverSource('sidebar');
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                                }}
+                                onMouseLeave={() => {
+                                  setHoveredToonId(null);
+                                  setHoveredToonName(null);
+                                  setHoverSource(null);
+                                  setHoveredRect(null);
+                                }}
+                              />
+                            );
+                          })
+                        )}
+                      </ul>
+                    </section>
+                  ) : (
+                    <>
+                      <section className="mb-3 flex-[1_1_auto] flex flex-col min-h-2">
+                        <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Toony Toons</h3>
+                        <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                          {favorites.length === 0 ? (
+                            <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
+                          ) : (
+                            [...favorites].reverse().map((id) => {
+                              const toon = historyToons[id];
+                              if (!toon) return null;
+                              const isHovered =
+                                (hoveredToonId && String(toon.id) === hoveredToonId) ||
+                                (hoveredToonName && toon.name === hoveredToonName);
+                              return (
+                                <ToonRow
+                                  key={toon.id}
+                                  toon={toon}
+                                  isFavorited={favorites.includes(toon.id)}
+                                  isBlocked={blocked.includes(toon.id)}
+                                  isOwnToon={activeToonIds.includes(toon.id)}
+                                  note={notes[String(toon.id)]}
+                                  refresh={refresh}
+                                  isHovered={!!isHovered}
+                                  isJustAdded={justAddedId === toon.id}
+                                  onRequestDialog={handleRequestDialog}
+                                  onMouseEnter={(e) => {
+                                    setHoveredToonId(String(toon.id));
+                                    setHoveredToonName(toon.name);
+                                    setHoverSource('sidebar');
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                                  }}
+                                  onMouseLeave={() => {
+                                    setHoveredToonId(null);
+                                    setHoveredToonName(null);
+                                    setHoverSource(null);
+                                    setHoveredRect(null);
+                                  }}
+                                />
+                              );
+                            })
+                          )}
+                        </ul>
+                      </section>
+
+                      <section className="flex-[1_1_auto] flex flex-col min-h-2">
+                        <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Stinky Toons</h3>
+                        <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                          {blocked.length === 0 ? (
+                            <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
+                          ) : (
+                            [...blocked].reverse().map((id) => {
+                              const toon = historyToons[id];
+                              if (!toon) return null;
+                              const isHovered =
+                                (hoveredToonId && String(toon.id) === hoveredToonId) ||
+                                (hoveredToonName && toon.name === hoveredToonName);
+                              return (
+                                <ToonRow
+                                  key={toon.id}
+                                  toon={toon}
+                                  isFavorited={favorites.includes(toon.id)}
+                                  isBlocked={blocked.includes(toon.id)}
+                                  isOwnToon={activeToonIds.includes(toon.id)}
+                                  note={notes[String(toon.id)]}
+                                  refresh={refresh}
+                                  isHovered={!!isHovered}
+                                  isJustAdded={justAddedId === toon.id}
+                                  onRequestDialog={handleRequestDialog}
+                                  onMouseEnter={(e) => {
+                                    setHoveredToonId(String(toon.id));
+                                    setHoveredToonName(toon.name);
+                                    setHoverSource('sidebar');
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                                  }}
+                                  onMouseLeave={() => {
+                                    setHoveredToonId(null);
+                                    setHoveredToonName(null);
+                                    setHoverSource(null);
+                                    setHoveredRect(null);
+                                  }}
+                                />
+                              );
+                            })
+                          )}
+                        </ul>
+                      </section>
+                    </>
+                  )}
                 </>
               )}
 
