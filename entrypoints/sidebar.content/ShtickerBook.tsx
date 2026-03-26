@@ -1565,45 +1565,124 @@ function FacilitiesTabContent({
   );
 }
 
-// ─── Field Office tab subcomponents ───────────────────────────────────────────
-
-function BoilerHpTable() {
-  return (
-    <section className="rounded-xl border border-white/10 bg-black/20 p-3">
-      <h4 className="mb-2 text-base font-bold text-white">Boiler HP by Stars</h4>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {FIELD_OFFICE_INFO.boilerHpByStar.map((entry) => (
-          <div key={entry.stars} className="rounded-lg border border-emerald-500/20 bg-[#10462d]/60 p-2 text-center">
-            <div className="text-xs font-bold uppercase tracking-wider text-green-100/80">{entry.stars}</div>
-            <div className="text-xl font-black text-emerald-300 tabular-nums">{entry.hp}</div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MovesAtAGlance() {
-  return (
-    <section className="rounded-xl border border-white/10 bg-black/20 p-3">
-      <h4 className="mb-2 text-base font-bold text-white">Moves at a Glance</h4>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-        {[...FIELD_OFFICE_INFO.keyAttacks, ...FIELD_OFFICE_INFO.keySpecialMoves].map((move) => (
-          <div key={move.name} className="rounded-md bg-black/25 px-2.5 py-2">
-            <p className="text-sm font-semibold text-emerald-300">{move.name}</p>
-            <p className="text-xs text-green-100/75">{move.summary}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function FieldOfficeTabContent() {
+  const boilerHp = [
+    { star: '1★', hp: 4000, num: 1 },
+    { star: '2★', hp: 4500, num: 2 },
+    { star: '3★', hp: 5000, num: 3 },
+    { star: '4★', hp: 5500, num: 4 },
+  ];
+
+  const attacks = [
+    { name: 'Under Pressure', s1: '25/38', s2: '30/45', s3: '35/53', s4: '40/60', note: 'Base / Fired Up' },
+    { name: 'Heated Discussion', s1: '20/30', s2: '24/36', s3: '28/42', s4: '32/48', note: 'Base / Fired Up' },
+    { name: 'Slow Burn', s1: '5/8', s2: '7/11', s3: '9/14', s4: '11/17', note: 'Inflicts Burn (DoT)' },
+    { name: 'Burn', s1: '10', s2: '14', s3: '18', s4: '22', note: 'Burn Damage for 3 Rounds' },
+    { name: 'Stamp of Disapproval', s1: '50', s2: '70', s3: '80', s4: '90', note: 'Heavy Hit' },
+  ];
+
+  const specialMoves = [
+    { name: 'Promoted', s1: '+1 Lvl', s2: '+2 Lvls', s3: '+2 Lvls', s4: '+3 Lvls', note: 'Cogs level up' },
+    { name: 'Pay Raise', s1: '+60 HP', s2: '+80 HP', s3: '+100 HP', s4: '+125 HP', note: 'Cogs heal' },
+    { name: 'Quality Control', s1: '1 Round', s2: '2 Rounds', s3: '3 Rounds', s4: '4 Rounds', note: 'Gag Lockout' },
+  ];
+
   return (
-    <div className="space-y-3">
-      <BoilerHpTable />
-      <MovesAtAGlance />
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl h-64">
+          <img
+            src="https://toonhq.org/static/assets/groups/large/playground_field_office.jpg"
+            alt="Field Office"
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="absolute bottom-4 left-4">
+            <h4 className="text-2xl font-black uppercase tracking-tight text-white drop-shadow-md">Sellbot Field Office</h4>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {boilerHp.map((item) => (
+            <div key={item.star} className="flex flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-[#10462d]/60 p-4 shadow-xl">
+              <div className="mb-1 text-sm font-black text-emerald-400/80 uppercase tracking-widest">{
+                [...Array(item.num)].map((_, i) => (
+                  <span key={i} className="text-yellow-300 text-lg">★</span>
+                ))
+              } </div>
+              <div className="text-3xl font-black text-white tabular-nums">{item.hp} <span className="text-xs text-white/30">HP</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+          <h5 className="text-sm font-black uppercase tracking-widest text-red-400">Boiler Attacks (Base / Fired Up)</h5>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                <th className="px-4 py-3">Attack</th>
+                <th className="px-4 py-3 text-center">1★</th>
+                <th className="px-4 py-3 text-center">2★</th>
+                <th className="px-4 py-3 text-center">3★</th>
+                <th className="px-4 py-3 text-center">4★</th>
+                <th className="px-4 py-3">Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {attacks.map((atk) => {
+                const indent = atk.name === 'Burn' ? 'pl-12' : '';
+                return (
+                  <tr key={atk.name} className="hover:bg-white/5 transition-colors">
+                    <td className={`px-4 py-3 font-bold text-white/90 ${indent}`}>{atk.name}</td>
+                    <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s1}</td>
+                    <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s2}</td>
+                  <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s3}</td>
+                  <td className="px-4 py-3 text-center font-black text-emerald-300 tabular-nums">{atk.s4}</td>
+                  <td className="px-4 py-3 text-[11px] leading-tight text-white/40">{atk.note}</td>
+                </tr>
+              )})}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <h5 className="text-sm font-black uppercase tracking-widest text-emerald-400">Boiler Special Moves</h5>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                <th className="px-4 py-3">Move</th>
+                <th className="px-4 py-3 text-center">1★</th>
+                <th className="px-4 py-3 text-center">2★</th>
+                <th className="px-4 py-3 text-center">3★</th>
+                <th className="px-4 py-3 text-center">4★</th>
+                <th className="px-4 py-3">Effect</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {specialMoves.map((move) => (
+                <tr key={move.name} className="hover:bg-white/5 transition-colors">
+                  <td className="px-4 py-3 font-bold text-white/90">{move.name}</td>
+                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s1}</td>
+                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s2}</td>
+                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s3}</td>
+                  <td className="px-4 py-3 text-center font-black text-white/70 tabular-nums">{move.s4}</td>
+                  <td className="px-4 py-3 text-[11px] leading-tight text-white/40">{move.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1683,7 +1762,7 @@ function BookSidebar({
       <button
         type="button"
         onClick={() => { onTabChange('field_office'); onFacilityChange(null); }}
-        className={navButtonClass('field_office')}
+        className={navButtonClass('field_office', 'mb-2')}
       >
         Field Office
       </button>
@@ -1691,7 +1770,7 @@ function BookSidebar({
       <button
         type="button"
         onClick={() => { onTabChange('boiler_calc'); onFacilityChange(null); }}
-        className={navButtonClass('boiler_calc', 'mt-2')}
+        className={navButtonClass('boiler_calc')}
       >
         Boiler Calculator
       </button>
