@@ -952,8 +952,8 @@ function RoundPhaseGroup({
       <RoundRowsColumn
         rounds={group.defense}
         label={isMeltdown ? 'Meltdown' : 'Defense'}
-        labelColor="text-sky-300/80"
-        borderColor="border-sky-500/20 bg-sky-900"
+        labelColor={isMeltdown ? 'text-red-400' : 'text-sky-300/80'}
+        borderColor={isMeltdown ? 'border-red-500/40 bg-red-900' : 'border-sky-500/20 bg-sky-900'}
         grid={grid}
         roundStats={roundStats}
         maxHp={maxHp}
