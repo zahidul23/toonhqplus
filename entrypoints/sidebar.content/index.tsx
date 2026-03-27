@@ -21,6 +21,7 @@ import {
   getSettings,
   setSetting,
   getAllNotes,
+  cleanupToonCache,
   type ToonRecord,
   type GroupRecord,
   type GroupMemberRecord,
@@ -1212,9 +1213,13 @@ export default defineContentScript({
       if (newToons.length) putToons(newToons).catch(console.error);
     };
 
-    const cleanupToonCache = async () => {
+    const cleanupToonCacheTask = async () => {
       console.log('[ToonHQ+] Running toon cache cleanup...');
-      // (IndexedDB-based; no-op stub — toon records are kept as long as they are in a list/group)
+      try {
+        await cleanupToonCache();
+      } catch (e) {
+        console.error('[ToonHQ+] Cleanup failed:', e);
+      }
     };
 
     const syncGroupHistory = (group: any, leavingToonId?: string) => {
@@ -1271,8 +1276,8 @@ export default defineContentScript({
 
     // 3) Then start websocket to listen for group changes
     // Run cleanup on startup and every 30 minutes
-    cleanupToonCache();
-    setInterval(cleanupToonCache, 30 * 60 * 1000);
+    cleanupToonCacheTask();
+    setInterval(cleanupToonCacheTask, 30 * 60 * 1000);
     let isReconnecting = false;
     const connectWebSocket = () => {
       const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');

@@ -442,6 +442,7 @@ function ToonRow({
   return (
     <li
       ref={rowRef}
+      title={toon.id}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-250 ${bgColorClass} ${textColorClass}`}
@@ -1115,9 +1116,9 @@ export function SidebarApp() {
                           <div className="py-8 text-center text-green-200/40 italic">No toons found matching "{searchTerm}"</div>
                         ) : (
                           searchResults.map((toon) => {
-                            const isHovered =
-                              (hoveredToonId && String(toon.id) === hoveredToonId) ||
-                              (hoveredToonName && toon.name === hoveredToonName);
+                            const isHovered = hoveredToonId
+                              ? String(toon.id) === hoveredToonId
+                              : (hoveredToonName && toon.name === hoveredToonName);
                             return (
                               <ToonRow
                                 key={toon.id}

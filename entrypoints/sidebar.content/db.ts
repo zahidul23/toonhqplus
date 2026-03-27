@@ -527,6 +527,48 @@ export async function getSettings(keys: string[]): Promise<Record<string, any>> 
   return out;
 }
 
+export async function cleanupToonCache(): Promise<void> {
+  const db = await openDB();
+  const stores = ['toons', 'toony_toons', 'stinky_toons', 'notes', 'group_members'];
+  const t = tx(db, stores, 'readwrite');
+
+  const [toony, stinky, notes, members] = await Promise.all([
+    promisifyRequest<any[]>(t.objectStore('toony_toons').getAll()),
+    promisifyRequest<any[]>(t.objectStore('stinky_toons').getAll()),
+    promisifyRequest<any[]>(t.objectStore('notes').getAll()),
+    promisifyRequest<any[]>(t.objectStore('group_members').getAll()),
+  ]);
+
+  const keepIds = new Set<string>();
+  toony.forEach(r => keepIds.add(String(r.toonId)));
+  stinky.forEach(r => keepIds.add(String(r.toonId)));
+  notes.forEach(r => keepIds.add(String(r.toonId)));
+  members.forEach(r => keepIds.add(String(r.toonId)));
+
+  const fiveDaysAgo = new Date();
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+  const toonStore = t.objectStore('toons');
+  const allToons = await promisifyRequest<ToonRecord[]>(toonStore.getAll());
+
+  let deletedCount = 0;
+  for (const toon of allToons) {
+    if (keepIds.has(String(toon.id))) continue;
+
+    const lastSeen = toon.lastSeen ? new Date(toon.lastSeen) : new Date(0);
+    if (lastSeen < fiveDaysAgo) {
+      toonStore.delete(toon.id);
+      deletedCount++;
+    }
+  }
+
+  await promisifyTx(t);
+  if (deletedCount > 0) {
+    console.log(`[ToonHQ+] Cleaned up ${deletedCount} old unused toon records.`);
+    notifyChanged('toons');
+  }
+}
+
 // --- One-time migration from browser.storage.local ---------------------------
 
 export async function migrateFromLocalStorage(): Promise<void> {
