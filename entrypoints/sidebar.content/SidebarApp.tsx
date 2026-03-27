@@ -442,7 +442,6 @@ function ToonRow({
   return (
     <li
       ref={rowRef}
-      title={toon.id}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-250 ${bgColorClass} ${textColorClass}`}
