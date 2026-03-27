@@ -668,30 +668,29 @@ function GagPickerPanel({
   isFinished: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0">
+    <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0 h-full overflow-hidden">
       <BoilerInfoSection stars={stars} onSetStars={onSetStars} maxHp={maxHp} />
 
-      <div className="mb-2 rounded-xl border border-white/10 bg-black/20 flex flex-col p-2">
-        <div className="flex items-center gap-2 items-center justify-between gap-2 p-2">
+      <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-black/20 flex flex-col p-2 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 p-2">
           <h4 className="text-base font-bold text-white">Gags</h4>
           <div className="text-xs text-green-100/70 tabular-nums">
             Round {activeCell.round + 1} - Gag {activeCell.slot + 1}
           </div>
         </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 border border-white/10 bg-black/20 rounded-lg">
-        {gagTracks.map((track) => (
-          <GagTrackPicker
-            key={track.id}
-            track={track}
-            activeCell={activeCell}
-            roundStats={roundStats}
-            isSosUsedInRound={isSosUsedInRound}
-            onSelectGag={onSelectGag}
-            isFinished={isFinished}
-          />
-        ))}
-      </div>
-      
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 border border-white/10 bg-black/20 rounded-lg">
+          {gagTracks.map((track) => (
+            <GagTrackPicker
+              key={track.id}
+              track={track}
+              activeCell={activeCell}
+              roundStats={roundStats}
+              isSosUsedInRound={isSosUsedInRound}
+              onSelectGag={onSelectGag}
+              isFinished={isFinished}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -1022,11 +1021,6 @@ function RoundsPanel({
       {/* Header: health bar */}
       <div className="mb-4 flex items-center justify-center h-[50px]">
         <div className="relative w-[300px]">
-          <div className="absolute right-full mr-4 flex items-center gap-1 h-full">
-            {[...Array(stars)].map((_, i) => (
-              <StarIcon key={i} size={36} className="text-yellow-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
-            ))}
-          </div>
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
             {remainingHp} / {maxHp}
