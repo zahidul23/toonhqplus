@@ -603,8 +603,8 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
   ];
 
   return (
-    <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="mb-4 rounded-xl bg-black/40 p-3">
+      <div className="mb-4 flex items-center justify-between mx-2">
         <h4 className="text-base font-bold text-white">Boiler - {starsText}</h4>
         <StarSelector stars={stars} onSetStars={onSetStars} />
       </div>
@@ -668,17 +668,17 @@ function GagPickerPanel({
   isFinished: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col min-h-0 h-full overflow-hidden">
+    <section className="rounded-xl flex flex-col min-h-0 h-full overflow-hidden">
       <BoilerInfoSection stars={stars} onSetStars={onSetStars} maxHp={maxHp} />
 
-      <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-black/20 flex flex-col p-2 overflow-hidden">
-        <div className="flex items-center justify-between gap-2 p-2">
-          <h4 className="text-base font-bold text-white">Gags</h4>
-          <div className="text-xs text-green-100/70 tabular-nums">
+      <div className="min-h-0 rounded-xl flex flex-col p-2 overflow-hidden bg-black/40" >
+        <div className="flex items-center justify-between gap-2 p-2 mx-2">
+          <div className="text-base font-bold text-white">Gags</div>
+          <div className="text-base font-bold text-white tabular-nums">
             Round {activeCell.round + 1} - Gag {activeCell.slot + 1}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 border border-white/10 bg-black/20 rounded-lg">
+        <div className="overflow-y-auto custom-scrollbar p-2 space-y-3  rounded-lg ">
           {gagTracks.map((track) => (
             <GagTrackPicker
               key={track.id}
@@ -1017,9 +1017,9 @@ function RoundsPanel({
   onClearSlot: (round: number, slot: number) => void;
 }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-black/20 p-2 flex flex-col h-full">
+    <section className="rounded-xl bg-black/40  p-2 flex flex-col h-full">
       {/* Header: health bar */}
-      <div className="mb-4 flex items-center justify-center h-[50px]">
+      <div className="my-4 flex items-center justify-center h-[50px]">
         <div className="relative w-[300px]">
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
@@ -1029,7 +1029,7 @@ function RoundsPanel({
       </div>
 
       {/* Phase groups */}
-      <div ref={roundsScrollRef} className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-[45em] border-radius-sm">
+      <div ref={roundsScrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-2 max-h-[45em] border-radius-sm">
         {phaseGroups.map((group, idx) => (
           <RoundPhaseGroup
             key={idx}
