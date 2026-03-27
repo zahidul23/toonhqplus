@@ -238,6 +238,21 @@ function getExtensionImageUrl(path: string): string {
   return `/${cleanPath}`;
 }
 
+function getFacilityColorConfig(facilityId: string) {
+  switch (facilityId) {
+    case 'sellbot':
+      return { color: 'text-purple-400', dot: 'bg-purple-500' };
+    case 'cashbot':
+      return { color: 'text-emerald-400', dot: 'bg-emerald-500' };
+    case 'lawbot':
+      return { color: 'text-blue-400', dot: 'bg-blue-500' };
+    case 'bossbot':
+      return { color: 'text-amber-400', dot: 'bg-amber-500' };
+    default:
+      return { color: 'text-blue-400', dot: 'bg-blue-500' };
+  }
+}
+
 // ─── Shared primitive components ──────────────────────────────────────────────
 
 function MultiLayerBoilerHealthBar({ remaining, max, stars }: { remaining: number; max: number; stars: number }) {
@@ -1256,7 +1271,7 @@ function FacilitySubtypeRow({ subtype, rewardLabel }: { subtype: FacilitySubtype
     <div className='flex gap-2'>
       <div className="flex flex-1 justify-between gap-2 px-2 py-1.5 rounded-lg bg-black/20 border border-white/5">
         <p className="text-sm font-bold text-white">{subtype.name}</p>
-        <p className="text-sm font-bold text-white/95">
+        <p className="text-sm font-bold text-white/95 text-right">
           {subtype.minReward}-{subtype.maxReward} {rewardLabel}
         </p>
       </div>
@@ -1341,14 +1356,13 @@ function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBa
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-10">
-        {/* Left Column: Images, Attacks & Special Moves */}
-        <div className="lg:col-span-6 space-y-6">
+        {/* 1. Images (Top on mobile, Top-Left on desktop) */}
+        <div className="lg:col-span-6">
           <FacilityImages facility={facility} heightClass="h-48" />
-          <BossInfographic facilityId={facility.id} />
         </div>
 
-        {/* Right Column: Boss HP & Rewards */}
-        <div className="lg:col-span-4 space-y-6">
+        {/* 2. Boss HP & Rewards (Middle on mobile, Right column on desktop) */}
+        <div className="lg:col-span-4 lg:row-span-2 space-y-6">
           {/* Boss HP Section */}
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
             <div className="mb-4 flex items-center gap-2">
@@ -1367,12 +1381,18 @@ function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBa
 
           <RewardSkipTable facility={facility} />
         </div>
+
+        {/* 3. Attacks & Special Moves (Bottom on mobile, Bottom-Left on desktop) */}
+        <div className="lg:col-span-6">
+          <BossInfographic facilityId={facility.id} />
+        </div>
       </div>
     </section>
   );
 }
 
 function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
+  const { color, dot } = getFacilityColorConfig(facility.id);
   const skipRows = useMemo(() => {
     const rows = [];
     for (let i = 0; i <= facility.maxSkips; i++) {
@@ -1389,8 +1409,8 @@ function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
       <div className="mb-4 flex items-center gap-2">
-        <div className="h-2 w-2 rounded-full bg-blue-500" />
-        <h5 className="text-sm font-black uppercase tracking-widest text-blue-400">{facility.rewardLabel}</h5>
+        <div className={`h-2 w-2 rounded-full ${dot}`} />
+        <h5 className={`text-sm font-black uppercase tracking-widest ${color}`}>{facility.rewardLabel}</h5>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
         <table className="w-full text-left text-[12px]">
@@ -1410,8 +1430,9 @@ function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
               
               if (isFull) {
                 label = facility.id === 'sellbot' ? "Long" : "Full";
-              } else if (isMinimal) {
-                label = facility.id === 'sellbot' ? "Short" : "Minimal";
+              } else if (isMinimal && facility.id === 'sellbot') {
+                label = "Short";
+                // label = facility.id === 'sellbot' ? "Short" : "Minimal";
               }
 
               return (
@@ -1437,6 +1458,7 @@ function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
 }
 
 function BossInfographic({ facilityId }: { facilityId: string }) {
+  const { color, dot } = getFacilityColorConfig(facilityId);
   const config = useMemo(() => {
     switch (facilityId) {
       case 'sellbot':
@@ -1444,32 +1466,24 @@ function BossInfographic({ facilityId }: { facilityId: string }) {
           data: SELLBOT_DATA,
           labels: ['Scrap', 'Steel'],
           keys: ['scrap', 'steel'],
-          color: 'text-purple-400',
-          dot: 'bg-purple-500'
         };
       case 'cashbot':
         return {
           data: CASHBOT_DATA,
           labels: ['Coin', 'Bullion'],
           keys: ['coin', 'bullion'],
-          color: 'text-emerald-400',
-          dot: 'bg-emerald-500'
         };
       case 'lawbot':
         return {
           data: LAWBOT_DATA,
           labels: ['Junior', 'Senior'],
           keys: ['junior', 'senior'],
-          color: 'text-blue-400',
-          dot: 'bg-blue-500'
         };
       case 'bossbot':
         return {
           data: BOSSBOT_DATA,
           labels: ['Fairway', 'Fringe'],
           keys: ['fairway', 'fringe'],
-          color: 'text-amber-400',
-          dot: 'bg-amber-500'
         };
       default:
         return null;
@@ -1483,8 +1497,8 @@ function BossInfographic({ facilityId }: { facilityId: string }) {
       {/* Attacks Table */}
       <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${config.dot} animate-pulse`} />
-          <h5 className={`text-sm font-black uppercase tracking-widest ${config.color}`}>Boss Attacks</h5>
+          <div className={`h-2 w-2 rounded-full ${dot} animate-pulse`} />
+          <h5 className={`text-sm font-black uppercase tracking-widest ${color}`}>Boss Attacks</h5>
         </div>
         <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
           <table className="w-full text-left text-[12px]">
@@ -1513,8 +1527,8 @@ function BossInfographic({ facilityId }: { facilityId: string }) {
       {/* Special Moves Table */}
       <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${config.dot} animate-pulse`} />
-          <h5 className={`text-sm font-black uppercase tracking-widest ${config.color}`}>Special Moves</h5>
+          <div className={`h-2 w-2 rounded-full ${dot} animate-pulse`} />
+          <h5 className={`text-sm font-black uppercase tracking-widest ${color}`}>Special Moves</h5>
         </div>
         <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
           <table className="w-full text-left text-[12px]">
@@ -1530,7 +1544,7 @@ function BossInfographic({ facilityId }: { facilityId: string }) {
                 <tr key={move.name} className="hover:bg-white/5 transition-colors">
                   <td className="px-3 py-2.5 font-bold text-white/90">{move.name}</td>
                   <td className="px-3 py-2.5">
-                    <span className={`rounded px-1.5 py-0.5 font-black border ${config.color.replace('text', 'bg')}/10 ${config.color} ${config.color.replace('text', 'border')}/20`}>
+                    <span className={`rounded px-1.5 py-0.5 font-black border ${color.replace('text', 'bg')}/10 ${color} ${color.replace('text', 'border')}/20`}>
                       {move.effect}
                     </span>
                   </td>
@@ -1562,7 +1576,7 @@ function FacilitiesTabContent({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 min-[1200px]:grid-cols-2">
       {FACILITIES_INFO.map((facility, idx) => (
         <FacilityCard key={facility.title} facility={facility} idx={idx} onOpen={setActiveFacility} />
       ))}
@@ -2041,7 +2055,7 @@ export function ShtickerBook() {
           onClick={closeBook}
         >
           <div
-            className={`info-book-panel absolute bottom-4 left-4 h-[95vh] w-[90em] overflow-hidden rounded-2xl border border-[#0a2e1d] bg-[#0c3622] shadow-2xl ${isClosing ? 'is-closing' : ''}`}
+            className={`info-book-panel absolute bottom-4 left-4 overflow-hidden rounded-2xl border border-[#0a2e1d] bg-[#0c3622] shadow-2xl ${isClosing ? 'is-closing' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
             <BookHeader />

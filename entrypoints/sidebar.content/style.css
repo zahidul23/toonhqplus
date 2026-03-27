@@ -48,6 +48,8 @@
   --myToon: #064e3b;
   --favoritedToon: #064e3b;
   --blockedToon: #5f0f0a;
+
+  --book-size: 90px;
 }
 
 .myToon {
@@ -112,6 +114,9 @@
   animation: infoBookOpen 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
   transform-origin: bottom left;
   position: absolute;
+
+  min-width: 875px;
+  max-width: 90em;
 }
 
 .info-book-panel.is-closing {
@@ -161,8 +166,8 @@
 }
 
 .book-opened {
-  width: 60px;
-  height: 60px;
+  width: var(--book-size);
+  height: var(--book-size);
   background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_opened.webp');
   background-size: cover;
   transition: background-image 0.3s ease; /* Smooths the transition */
@@ -173,8 +178,8 @@
 }
 
 .book-closed {
-  width: 60px;
-  height: 60px;
+  width: var(--book-size);
+  height: var(--book-size);
   background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_closed.webp');
   background-size: cover;
   transition: background-image 0.3s ease; /* Smooths the transition */
