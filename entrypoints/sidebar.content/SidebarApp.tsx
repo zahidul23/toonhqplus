@@ -227,6 +227,7 @@ function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, i
   if (!toon) return null;
   let toonClass = 'myToon';
   if (isFavorited) {
+    // toonClass = 'bg-[#1f8454]';
     toonClass = 'favoritedToon';
   } else if (isBlocked) {
     toonClass = 'blockedToon';
@@ -406,8 +407,8 @@ function ToonRow({
 
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
 
-  const defaultHoverClass = isBlocked ? 'blockedToon shadow-md ring-1 ring-red-400' : 'bg-[#1f8454] shadow-md ring-1 ring-emerald-400';
-  let bgColorClass = isHovered ? defaultHoverClass : 'hover:bg-[#10462d]/60';
+  const defaultHoverClass = isBlocked ? 'blockedToon shadow-md ring-1 ring-red-400' : 'bg-[#e6ffed]/20 shadow-md ring-1 ring-emerald-400';
+  let bgColorClass = isHovered ? defaultHoverClass : 'bg-white/5 hover:bg-[#10462d]/60';
   let textColorClass = 'text-white';
 
   if (isJustAdded) {
@@ -417,7 +418,7 @@ function ToonRow({
       bgColorClass = 'bg-[#cae9fcbd]';
       textColorClass = 'text-[#cae9fc]';
     } else if (isFavorited) {
-      bgColorClass = 'bg-[#e6ffed]/20';
+      bgColorClass = 'bg-[#1f8454]';
       textColorClass = 'text-[#e6ffed]';
     } else if (isBlocked) {
       bgColorClass = 'bg-[#ad130dde]';
@@ -426,7 +427,6 @@ function ToonRow({
   }
 
   const saveNote = () => {
-    if (!listKey) return;
     setNote(toon.id, noteDraft).then(refresh);
     setIsEditing(false);
   };
@@ -506,6 +506,17 @@ function ToonRow({
                 </>
               ) : (
                 <div className="flex shrink-0 gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditing(true);
+                      setNoteDraft(toon.note || note || '');
+                    }}
+                    className="rounded p-1 text-green-100/50 hover:bg-[#1f8454] hover:text-white cursor-pointer transition-colors"
+                    title="Add note"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -823,6 +834,17 @@ export function SidebarApp() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [toonyCollapsed, setToonyCollapsed] = useState(false);
+  const [stinkyCollapsed, setStinkyCollapsed] = useState(false);
+  const [neutralCollapsed, setNeutralCollapsed] = useState(false);
+  const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
+  const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
+
+  const startCollapseAnimation = () => {
+    setIsAnimatingCollapse(true);
+    if (collapseTimeoutRef.current) clearTimeout(collapseTimeoutRef.current as number);
+    collapseTimeoutRef.current = setTimeout(() => setIsAnimatingCollapse(false), 300);
+  };
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
@@ -976,11 +998,14 @@ export function SidebarApp() {
 
   useEffect(() => {
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled']).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
       if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
+      if (values['toony-collapsed'] !== undefined) setToonyCollapsed(!!values['toony-collapsed']);
+      if (values['stinky-collapsed'] !== undefined) setStinkyCollapsed(!!values['stinky-collapsed']);
+      if (values['neutral-collapsed'] !== undefined) setNeutralCollapsed(!!values['neutral-collapsed']);
     });
 
     // Listen for DB changes (replaces browser.storage.onChanged)
@@ -1024,6 +1049,9 @@ export function SidebarApp() {
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
         getSetting<string[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
+        getSetting<boolean>('toony-collapsed').then(v => { if (v !== undefined) setToonyCollapsed(!!v); });
+        getSetting<boolean>('stinky-collapsed').then(v => { if (v !== undefined) setStinkyCollapsed(!!v); });
+        getSetting<boolean>('neutral-collapsed').then(v => { if (v !== undefined) setNeutralCollapsed(!!v); });
       }
     };
     window.addEventListener('toonhqplus-db-changed', handleDbChange);
@@ -1151,57 +1179,16 @@ export function SidebarApp() {
                     </section>
                   ) : (
                     <>
-                      <section className="mb-3 flex-[1_1_auto] flex flex-col min-h-2">
-                        <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Toony Toons</h3>
-                        <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                          {favorites.length === 0 ? (
-                            <div className="py-8 text-center text-green-200/40 italic">No toony toons yet.</div>
-                          ) : (
-                            [...favorites].reverse().map((id) => {
-                              const toon = historyToons[id];
-                              if (!toon) return null;
-                              const isHovered =
-                                (hoveredToonId && String(toon.id) === hoveredToonId) ||
-                                (hoveredToonName && toon.name === hoveredToonName);
-                              return (
-                                <ToonRow
-                                  key={toon.id}
-                                  toon={toon}
-                                  isFavorited={favorites.includes(toon.id)}
-                                  isBlocked={blocked.includes(toon.id)}
-                                  isOwnToon={activeToonIds.includes(toon.id)}
-                                  note={notes[String(toon.id)]}
-                                  refresh={refresh}
-                                  isHovered={!!isHovered}
-                                  isJustAdded={justAddedId === toon.id}
-                                  onRequestDialog={handleRequestDialog}
-                                  onMouseEnter={(e) => {
-                                    setHoveredToonId(String(toon.id));
-                                    setHoveredToonName(toon.name);
-                                    setHoverSource('sidebar');
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                                  }}
-                                  onMouseLeave={() => {
-                                    setHoveredToonId(null);
-                                    setHoveredToonName(null);
-                                    setHoverSource(null);
-                                    setHoveredRect(null);
-                                  }}
-                                />
-                              );
-                            })
-                          )}
-                        </ul>
-                      </section>
+                      {favorites.length === 0 && blocked.length === 0 && Object.keys(notes).length === 0 ? (
+                        <div className="py-8 text-center text-green-200/40 italic">No saved toons yet.</div>
+                      ) : (
+                        <div className="flex-1 flex flex-col min-h-0 gap-2">
+                          {(() => {
+                            const toonyToons = [...new Set(favorites)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
+                            const stinkyToons = [...new Set(blocked)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
+                            const neutralToons = [...new Set(Object.keys(notes))].filter(id => !favorites.includes(id) && !blocked.includes(id) && historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
 
-                      <section className="flex-[1_1_auto] flex flex-col min-h-2">
-                        <h3 className="mb-1 shrink-0 text-sm font-medium text-green-50">Stinky Toons</h3>
-                        <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                          {blocked.length === 0 ? (
-                            <div className="py-8 text-center text-green-200/40 italic">No stinky toons yet.</div>
-                          ) : (
-                            [...blocked].reverse().map((id) => {
+                            const renderToonRow = (id: string) => {
                               const toon = historyToons[id];
                               if (!toon) return null;
                               const isHovered =
@@ -1234,10 +1221,78 @@ export function SidebarApp() {
                                   }}
                                 />
                               );
-                            })
-                          )}
-                        </ul>
-                      </section>
+                            };
+
+                            return (
+                              <>
+                                {toonyToons.length > 0 && (
+                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${toonyCollapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`}>
+                                    <button
+                                      onClick={() => {
+                                        startCollapseAnimation();
+                                        const next = !toonyCollapsed;
+                                        setToonyCollapsed(next);
+                                        setSetting('toony-collapsed', next).catch(console.error);
+                                      }}
+                                      className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                    >
+                                      <span>Toony Toons</span>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
+                                    </button>
+                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${toonyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_0%] mb-1'}`}>
+                                      <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                        {toonyToons.map(renderToonRow)}
+                                      </ul>
+                                    </div>
+                                  </section>
+                                )}
+                                {stinkyToons.length > 0 && (
+                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${stinkyCollapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`}>
+                                    <button
+                                      onClick={() => {
+                                        startCollapseAnimation();
+                                        const next = !stinkyCollapsed;
+                                        setStinkyCollapsed(next);
+                                        setSetting('stinky-collapsed', next).catch(console.error);
+                                      }}
+                                      className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                    >
+                                      <span>Stinky Toons</span>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${stinkyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
+                                    </button>
+                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${stinkyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_0%] mb-1'}`}>
+                                      <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                        {stinkyToons.map(renderToonRow)}
+                                      </ul>
+                                    </div>
+                                  </section>
+                                )}
+                                {neutralToons.length > 0 && (
+                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${neutralCollapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`}>
+                                    <button
+                                      onClick={() => {
+                                        startCollapseAnimation();
+                                        const next = !neutralCollapsed;
+                                        setNeutralCollapsed(next);
+                                        setSetting('neutral-collapsed', next).catch(console.error);
+                                      }}
+                                      className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                    >
+                                      <span>Neutral Toons</span>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
+                                    </button>
+                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${neutralCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_0%] mb-1'}`}>
+                                      <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                        {neutralToons.map(renderToonRow)}
+                                      </ul>
+                                    </div>
+                                  </section>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </>
                   )}
                 </>
