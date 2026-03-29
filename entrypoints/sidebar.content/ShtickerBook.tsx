@@ -385,9 +385,8 @@ function GagButton({ imageSrc, imageAlt, color, title, damage, disabled = false,
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`gag-button group relative flex h-10 items-center justify-center rounded-md border transition-colors ${
-        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:brightness-110'
-      }`}
+      className={`gag-button group relative flex h-10 items-center justify-center rounded-md border transition-colors ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:brightness-110'
+        }`}
       style={{ backgroundColor: color, borderColor: color }}
       title={title}
     >
@@ -449,36 +448,36 @@ function SosSoundPicker({
   isFinished: boolean;
 }) {
   return (
-      <div className="flex gap-1">
-        <div className='gag-button'></div>
-        <div className='gag-button'></div>
-        <div className='gag-button'></div>
-        <div className='gag-button'></div>
-        {SOS_SOUND_GAGS.map((sos) => {
-          const gag = track.gags[sos.gagIndex];
-          const roundType = roundStats[activeCell.round]?.roundType;
-          const disabled = isFinished || isSosUsedInRound(activeCell.round, sos.gagIndex);
-          return (
-            <GagButton
-              key={`sos-${sos.gagIndex}`}
-              imageSrc={sos.image}
-              imageAlt={gag?.name || 'SOS'}
-              color={track.color}
-              title={`${sos.name} (${sos.damage})`}
-              damage={sos.damage}
-              disabled={disabled}
-              onClick={() => onSelect(sos.gagIndex)}
-              overlayBottom={
-                <div className='flex'>
-                  {[...Array(sos.gagIndex)].map((_, i) => (
-                    <StarIcon key={i} className="w-2.5 h-2.5 text-yellow-300" />
-                  ))}
-                </div>
-              }
-            />
-          );
-        })}
-      </div>
+    <div className="flex gap-1">
+      <div className='gag-button'></div>
+      <div className='gag-button'></div>
+      <div className='gag-button'></div>
+      <div className='gag-button'></div>
+      {SOS_SOUND_GAGS.map((sos) => {
+        const gag = track.gags[sos.gagIndex];
+        const roundType = roundStats[activeCell.round]?.roundType;
+        const disabled = isFinished || isSosUsedInRound(activeCell.round, sos.gagIndex);
+        return (
+          <GagButton
+            key={`sos-${sos.gagIndex}`}
+            imageSrc={sos.image}
+            imageAlt={gag?.name || 'SOS'}
+            color={track.color}
+            title={`${sos.name} (${sos.damage})`}
+            damage={sos.damage}
+            disabled={disabled}
+            onClick={() => onSelect(sos.gagIndex)}
+            overlayBottom={
+              <div className='flex'>
+                {[...Array(sos.gagIndex)].map((_, i) => (
+                  <StarIcon key={i} className="w-2.5 h-2.5 text-yellow-300" />
+                ))}
+              </div>
+            }
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -578,11 +577,10 @@ function StarSelector({ stars, onSetStars }: { stars: number; onSetStars: (n: 1 
         >
           <StarIcon
             size={24}
-            className={`transition-colors duration-200 ${
-              n <= displayStars 
-                ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)]' 
-                : 'text-white/10'
-            }`}
+            className={`transition-colors duration-200 ${n <= displayStars
+              ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)]'
+              : 'text-white/10'
+              }`}
           />
         </button>
       ))}
@@ -594,7 +592,7 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
   const starIdx = stars - 1;
   const burnDmg = [10, 14, 18, 22][starIdx];
   const starsText = ['One Star', 'Two Star', 'Three Star', 'Four Star'][starIdx];
-  
+
   const attacks = [
     { name: 'Under Pressure', firedUpMultiplier: 1.5, base: [25, 30, 35, 40][starIdx] },
     { name: 'Heated Discussion', firedUpMultiplier: 1.5, base: [20, 24, 28, 32][starIdx] },
@@ -630,7 +628,7 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
                   <td className="px-2 py-1.5 font-semibold text-white/80">{attack.name}</td>
                   <td className="px-2 py-1.5 text-center font-black text-white/60 tabular-nums">{showBase ? attack.base : ' - '}</td>
                   <td className="px-2 py-1.5 text-center font-black text-orange-300 tabular-nums">{showFired ? fired : ' - '}</td>
-                  <td className="px-2 py-1.5 text-center font-black text-red-400 tabular-nums"> 
+                  <td className="px-2 py-1.5 text-center font-black text-red-400 tabular-nums">
                     <span className='text-[9px]'>(+{burnDmg}) = </span> {firedBurn}
                   </td>
                 </tr>
@@ -759,9 +757,8 @@ function RoundSlotButton({
     <button
       type="button"
       onClick={handleClick}
-      className={`gag-button group relative flex h-10 w-10 items-center justify-center rounded-md border transition-colors cursor-pointer ${
-        isActive ? 'border-emerald-400/70 bg-emerald-500/10' : cell ? 'hover:brightness-75' : 'border-white/10 bg-black/25 hover:bg-black/35'
-      }`}
+      className={`gag-button group relative flex h-10 w-10 items-center justify-center rounded-md border transition-colors cursor-pointer ${isActive ? 'border-emerald-400/70 bg-emerald-500/10' : cell ? 'hover:brightness-75' : 'border-white/10 bg-black/25 hover:bg-black/35'
+        }`}
       style={cell && track ? { backgroundColor: track.color, borderColor: track.color } : undefined}
       title={name ? `${name} (${cellDamage}) — click to remove` : 'Click a gag to insert'}
     >
@@ -859,7 +856,7 @@ function RoundRow({
 
         {/* Remaining HP after this round */}
         <div className="ml-auto shrink-0 text-right">
-          <div className="text-sm font-black tabular-nums text-red-300"> {rowDamage!= 0 && `-${rowDamage}`}</div>
+          <div className="text-sm font-black tabular-nums text-red-300"> {rowDamage != 0 && `-${rowDamage}`}</div>
         </div>
       </div>
     </div>
@@ -1001,6 +998,7 @@ function RoundsPanel({
   getCellDamage,
   onSetActiveCell,
   onClearSlot,
+  onClearAll,
 }: {
   stars: number;
   phaseGroups: PhaseGroup[];
@@ -1015,16 +1013,30 @@ function RoundsPanel({
   getCellDamage: (cell: SelectedGagCell) => number;
   onSetActiveCell: (cell: { round: number; slot: number }) => void;
   onClearSlot: (round: number, slot: number) => void;
+  onClearAll: () => void;
 }) {
   return (
-    <section className="rounded-xl bg-black/40  p-2 flex flex-col h-full">
+    <section className="rounded-xl bg-black/40  p-2 flex flex-col h-full relative">
       {/* Header: health bar */}
-      <div className="my-4 flex items-center justify-center h-[50px]">
+      <div className="my-4 flex items-center justify-center h-[50px] relative">
         <div className="relative w-[300px]">
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
             {remainingHp} / {maxHp}
           </div>
+        </div>
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-600 bg-red-500 text-white transition-colors hover:bg-red-600 active:scale-95 cursor-pointer"
+            title="Reset gag choices"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M 4.5 16.5 A 9 9 0 1 0 12 3 a 9.75 9.75 0 0 0 -6.74 2.74 L 3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -1053,8 +1065,14 @@ function RoundsPanel({
 // ─── BoilerCalculator ─────────────────────────────────────────────────────────
 
 function BoilerCalculator() {
-  const [stars, setStars] = useState<1 | 2 | 3 | 4>(4);
-  
+  const [stars, setStars] = useState<1 | 2 | 3 | 4>(() => {
+    try {
+      const stored = localStorage.getItem('toonhqplus_boiler_calc_stars');
+      if (stored) return parseInt(stored, 10) as 1 | 2 | 3 | 4;
+    } catch (e) { }
+    return 4;
+  });
+
   const getInitialGrid = (s: number) => {
     const neutralCount = s < 4 ? 2 : 0;
     const cycleCount = 2 * 6; // 2 sets of 6 rounds
@@ -1064,11 +1082,58 @@ function BoilerCalculator() {
     );
   };
 
-  const [activeCell, setActiveCell] = useState<{ round: number; slot: number }>({ round: 0, slot: 0 });
-  const [grid, setGrid] = useState<SelectedGagCell[][]>(() => getInitialGrid(4));
+  const [activeCell, setActiveCell] = useState<{ round: number; slot: number }>(() => {
+    try {
+      const stored = localStorage.getItem('toonhqplus_boiler_calc_active_cell');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.round === 'number' && typeof parsed.slot === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) { }
+    return { round: 0, slot: 0 };
+  });
+  const [grid, setGrid] = useState<SelectedGagCell[][]>(() => {
+    try {
+      const stored = localStorage.getItem('toonhqplus_boiler_calc_grid');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) { }
+
+    let initStars = 4;
+    try {
+      const storedStars = localStorage.getItem('toonhqplus_boiler_calc_stars');
+      if (storedStars) {
+        const parsed = parseInt(storedStars, 10);
+        if (!isNaN(parsed)) initStars = parsed;
+      }
+    } catch (e) { }
+    return getInitialGrid(initStars);
+  });
   const [lastAddedRound, setLastAddedRound] = useState<number | null>(null);
   const roundRowRefs = React.useRef<Array<HTMLDivElement | null>>([]);
   const roundsScrollRef = React.useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('toonhqplus_boiler_calc_stars', stars.toString());
+    } catch (e) { }
+  }, [stars]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('toonhqplus_boiler_calc_grid', JSON.stringify(grid));
+    } catch (e) { }
+  }, [grid]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('toonhqplus_boiler_calc_active_cell', JSON.stringify(activeCell));
+    } catch (e) { }
+  }, [activeCell]);
 
   // Reset grid when stars change
   const handleSetStars = (n: 1 | 2 | 3 | 4) => {
@@ -1178,11 +1243,11 @@ function BoilerCalculator() {
     if (variant === 'sos' && trackId === 'sound' && isSosUsedInRound(activeCell.round, gagIndex)) return;
 
     setLastAddedRound(activeCell.round);
-    
+
     setGrid((prev) => {
       let next = prev.map((r) => r.slice());
       next[activeCell.round][activeCell.slot] = { trackId, gagIndex, variant };
-      
+
       // If we're in the last 6 rounds, append a new 6-round cycle
       if (activeCell.round >= next.length - 6) {
         const newCycle = Array.from({ length: 6 }, () =>
@@ -1190,14 +1255,14 @@ function BoilerCalculator() {
         );
         next = [...next, ...newCycle];
       }
-      
+
       return next;
     });
 
     setActiveCell((prev) => {
       const nextSlot = prev.slot + 1;
       if (nextSlot < BOILER_CALC_GAGS_PER_ROUND) return { round: prev.round, slot: nextSlot };
-      
+
       let nextRound = prev.round + 1;
       // Skip defense rounds if the current round wasn't a defense/meltdown round (auto-progression logic)
       if (roundStats[prev.round]?.roundType !== 'defense' && roundStats[prev.round]?.roundType !== 'meltdown') {
@@ -1217,6 +1282,12 @@ function BoilerCalculator() {
       next[roundIndex][slotIndex] = null;
       return next;
     });
+  };
+
+  const handleClearAll = () => {
+    setGrid(getInitialGrid(stars));
+    setActiveCell({ round: 0, slot: 0 });
+    setLastAddedRound(null);
   };
 
   useEffect(() => {
@@ -1253,6 +1324,7 @@ function BoilerCalculator() {
         getCellDamage={getCellDamage}
         onSetActiveCell={setActiveCell}
         onClearSlot={clearSlot}
+        onClearAll={handleClearAll}
       />
     </div>
   );
@@ -1339,7 +1411,7 @@ function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBa
             title="Back to Overview"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:-translate-x-0.5">
-              <path d="m15 18-6-6 6-6"/>
+              <path d="m15 18-6-6 6-6" />
             </svg>
           </button>
           <h4 className="text-2xl font-black uppercase tracking-tight">{facility.title}</h4>
@@ -1421,7 +1493,7 @@ function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
               const isFull = row.skips === 0;
               const isMinimal = row.skips === facility.maxSkips;
               let label = `${row.skips} ${row.skips === 1 ? 'Skip' : 'Skips'}`;
-              
+
               if (isFull) {
                 label = facility.id === 'sellbot' ? "Long" : "Full";
               } else if (isMinimal && facility.id === 'sellbot') {
@@ -1613,39 +1685,39 @@ function FieldOfficeTabContent() {
   ];
 
   const coldCallerMinigameDmg = [
-    { 
+    {
       name: (
         <div className="flex flex-col text-[13px] leading-tight">
           <span>Name Dropper</span>
           <span>Mover & Shaker</span>
           <span>Two-Face</span>
         </div>
-      ), 
-      s1: '-17', s2: '-21', s3: '-25', s4: '-29' 
+      ),
+      s1: '-17', s2: '-21', s3: '-25', s4: '-29'
     },
     { name: 'Cold Caller', s1: '-12', s2: '-15', s3: '-18', s4: '-21' },
   ];
 
   const megaMoverMinigameDmg = [
     { name: 'Mega-Mover', s1: '-25', s2: '-30', s3: '-35', s4: '-40' },
-    { 
+    {
       name: (
         <div className="flex flex-col text-[13px] leading-tight">
           <span>Cold Caller</span>
           <span>Glad Hander</span>
         </div>
-      ), 
-      s1: '-20', s2: '-23', s3: '-26', s4: '-29' 
+      ),
+      s1: '-20', s2: '-23', s3: '-26', s4: '-29'
     },
-    { 
+    {
       name: (
         <div className="flex flex-col text-[13px] leading-tight">
           <span>Telemarketer</span>
           <span>Name Dropper</span>
           <span>Two-Face</span>
         </div>
-      ), 
-      s1: '-10', s2: '-12', s3: '-14', s4: '-16' 
+      ),
+      s1: '-10', s2: '-12', s3: '-14', s4: '-16'
     },
     { name: 'Filing Cabinet', s1: '-5', s2: '-5', s3: '-5', s4: '-5' },
   ];
@@ -1677,7 +1749,7 @@ function FieldOfficeTabContent() {
               <span className="m-2 mb-4">
                 {[...Array(selectedStar)].map((_, i) => (
                   <span key={i} className="text-yellow-300 text-lg p-1">★</span>
-               ))}
+                ))}
               </span>
             </h4>
           </div>
@@ -1688,11 +1760,10 @@ function FieldOfficeTabContent() {
             <button
               key={item.star}
               onClick={() => setSelectedStar(item.star)}
-              className={`flex flex-col items-center justify-center rounded-2xl border transition-all duration-200 p-4 shadow-xl cursor-pointer ${
-                selectedStar === item.star 
-                  ? 'border-emerald-400 bg-emerald-500/30 scale-[1.02] ring-2 ring-emerald-500/50' 
-                  : 'border-emerald-500/20 bg-[#10462d]/60 hover:bg-[#10462d]/80'
-              }`}
+              className={`flex flex-col items-center justify-center rounded-2xl border transition-all duration-200 p-4 shadow-xl cursor-pointer ${selectedStar === item.star
+                ? 'border-emerald-400 bg-emerald-500/30 scale-[1.02] ring-2 ring-emerald-500/50'
+                : 'border-emerald-500/20 bg-[#10462d]/60 hover:bg-[#10462d]/80'
+                }`}
             >
               <div className="mb-1 text-sm font-black text-emerald-400/80 uppercase tracking-widest">{
                 [...Array(item.star)].map((_, i) => (
@@ -1861,7 +1932,8 @@ function FieldOfficeTabContent() {
                       <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(3)}`}>{atk.s3}</td>
                       <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(4)}`}>{atk.s4}</td>
                     </tr>
-                  )})}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -1947,8 +2019,7 @@ function BookSidebar({
   onFacilityChange: (idx: number | null) => void;
 }) {
   const navButtonClass = (tab: InfoBookTab, extra = '') =>
-    `w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer ${extra} ${
-      activeTab === tab ? 'bg-[#145837] text-white shadow-inner' : 'text-green-100/80 hover:bg-black/20 hover:text-white'
+    `w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer ${extra} ${activeTab === tab ? 'bg-[#145837] text-white shadow-inner' : 'text-green-100/80 hover:bg-black/20 hover:text-white'
     }`;
 
   return (
@@ -1968,9 +2039,8 @@ function BookSidebar({
               key={facility.title}
               type="button"
               onClick={() => onFacilityChange(idx)}
-              className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${
-                activeFacility === idx ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
-              }`}
+              className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+                }`}
             >
               {facility.title}
             </button>
@@ -2018,8 +2088,22 @@ export function ShtickerBook() {
   const CLOSE_ANIMATION_MS = 260;
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [activeTab, setActiveTab] = useState<InfoBookTab>('facilities');
+  const [activeTab, setActiveTab] = useState<InfoBookTab>(() => {
+    try {
+      const stored = localStorage.getItem('toonhqplus_shtickerbook_active_tab');
+      if (stored === 'facilities' || stored === 'field_office' || stored === 'boiler_calc') {
+        return stored as InfoBookTab;
+      }
+    } catch (e) { }
+    return 'facilities';
+  });
   const [activeFacility, setActiveFacility] = useState<number | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('toonhqplus_shtickerbook_active_tab', activeTab);
+    } catch (e) { }
+  }, [activeTab]);
 
   const closeBook = () => {
     if (isClosing) return;
