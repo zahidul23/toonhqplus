@@ -192,3 +192,10 @@
 .book-closed:hover {
   background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_open.webp');
 }
+
+.round-rows-col {
+  @media (width < 1300px) {
+    flex-direction: column;
+  }
+  /* width: 360px; */
+}
