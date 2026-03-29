@@ -311,14 +311,6 @@ export async function removeFromList(store: ListStore, toonId: ToonId): Promise<
   if (legacy != null) os.delete(legacy);
   await promisifyTx(t);
   notifyChanged(store, id);
-
-  // Clean up notes if toon is completely unlisted
-  const toonyIds = await getAllFromList('toony_toons');
-  const stinkyIds = await getAllFromList('stinky_toons');
-  if (!toonyIds.includes(id) && !stinkyIds.includes(id)) {
-    // Calling setNote with empty text will delete the note and dispatch 'notes' change event
-    await setNote(id, '');
-  }
 }
 
 export async function clearList(store: ListStore): Promise<void> {

@@ -548,6 +548,7 @@ function ToonRow({
         <div className={`mt-2 flex flex-col gap-2 rounded border bg-black/60 p-2 shadow-inner ${isBlocked ? 'border-red-500/40' : 'border-[#1f8454]/40'}`}>
           <textarea
             autoFocus
+            onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
             className={`w-full flex-1 resize-y custom-scrollbar max-h-32 rounded border bg-black/20 px-2 py-1 text-xs text-white focus:outline-none transition-colors ${isBlocked
               ? 'border-red-500/60 placeholder-red-200/40 focus:border-red-400'
               : 'border-[#1f8454] placeholder-green-100/30 focus:border-green-400'
@@ -565,6 +566,17 @@ function ToonRow({
             }}
           />
           <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => {
+                setNote(toon.id, '').then(refresh);
+                setIsEditing(false);
+              }}
+              className="mr-auto shrink-0 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500 hover:text-white cursor-pointer transition-all flex items-center gap-1 border border-red-500/20"
+              title="Remove note"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+              Remove
+            </button>
             <button
               onClick={saveNote}
               className={`shrink-0 rounded px-2 py-1 text-xs text-white cursor-pointer transition-colors ${isBlocked ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
@@ -1226,7 +1238,7 @@ export function SidebarApp() {
                             return (
                               <>
                                 {toonyToons.length > 0 && (
-                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${toonyCollapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`}>
+                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${toonyCollapsed ? 'flex-[0_0_auto]' : (toonyToons.length <= 4 ? 'flex-none' : 'flex-auto')}`}>
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -1239,7 +1251,7 @@ export function SidebarApp() {
                                       <span>Toony Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
-                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${toonyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_0%] mb-1'}`}>
+                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${toonyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${toonyToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
                                       <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {toonyToons.map(renderToonRow)}
                                       </ul>
@@ -1247,7 +1259,7 @@ export function SidebarApp() {
                                   </section>
                                 )}
                                 {stinkyToons.length > 0 && (
-                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${stinkyCollapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`}>
+                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${stinkyCollapsed ? 'flex-[0_0_auto]' : (stinkyToons.length <= 4 ? 'flex-none' : 'flex-auto')}`}>
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -1260,7 +1272,7 @@ export function SidebarApp() {
                                       <span>Stinky Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${stinkyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
-                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${stinkyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_0%] mb-1'}`}>
+                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${stinkyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${stinkyToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
                                       <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {stinkyToons.map(renderToonRow)}
                                       </ul>
@@ -1268,7 +1280,7 @@ export function SidebarApp() {
                                   </section>
                                 )}
                                 {neutralToons.length > 0 && (
-                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${neutralCollapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`}>
+                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${neutralCollapsed ? 'flex-[0_0_auto]' : (neutralToons.length <= 4 ? 'flex-none' : 'flex-auto')}`}>
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -1281,7 +1293,7 @@ export function SidebarApp() {
                                       <span>Neutral Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
-                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${neutralCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_0%] mb-1'}`}>
+                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${neutralCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${neutralToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
                                       <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {neutralToons.map(renderToonRow)}
                                       </ul>
@@ -1606,6 +1618,7 @@ export function SidebarApp() {
                 </label>
                 <textarea
                   autoFocus
+                  onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
                   className={`w-full rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 transition-all shadow-inner custom-scrollbar resize-y min-h-[5rem] max-h-32 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'focus:border-red-400 focus:ring-red-400' : 'focus:border-emerald-400 focus:ring-emerald-400'}`}
                   placeholder={dialog.listKey === STORAGE_KEYS.BLOCKED ? "Rude, griefing, bad gags, etc..." : "Nice, helpful, communicative, strategic etc..."}
                   style={{ fieldSizing: 'content' } as React.CSSProperties}
