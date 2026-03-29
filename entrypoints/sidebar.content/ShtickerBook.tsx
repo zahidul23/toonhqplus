@@ -1032,7 +1032,7 @@ function RoundsPanel({
             className="flex h-8 w-8 items-center justify-center rounded-md border border-red-600 bg-red-500 text-white transition-colors hover:bg-red-600 active:scale-95 cursor-pointer"
             title="Reset gag choices"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
               <path d="M 4.5 16.5 A 9 9 0 1 0 12 3 a 9.75 9.75 0 0 0 -6.74 2.74 L 3 8" />
               <path d="M3 3v5h5" />
             </svg>
