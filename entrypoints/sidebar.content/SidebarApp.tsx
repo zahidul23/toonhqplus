@@ -1290,7 +1290,7 @@ export function SidebarApp() {
                                       }}
                                       className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
                                     >
-                                      <span>Neutral Toons</span>
+                                      <span>Notes</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
                                     <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${neutralCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${neutralToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
@@ -1536,7 +1536,7 @@ export function SidebarApp() {
                           <div className="h-7 w-7 rounded bg-red-400/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m22 19-3-3 3-3" /></svg>
                           </div>
-                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Toons List</div>
+                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Toons Lists</div>
                         </button>
 
                         <button
@@ -1579,12 +1579,12 @@ export function SidebarApp() {
                   <h4 className="text-lg font-bold text-white leading-tight">
                     {dialog.type === 'delete_group' ? 'Delete Group' :
                       dialog.type === 'clear_history' ? 'Clear History' :
-                        dialog.type === 'clear_toons' ? 'Clear Toons List' : 'Reset Navigation'}
+                        dialog.type === 'clear_toons' ? 'Clear Toons Lists' : 'Reset Navigation'}
                   </h4>
                   <p className="mt-1 text-sm text-red-100 opacity-90">
                     {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
                       dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
-                        dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toons? This cannot be undone.' :
+                        dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toony Toons, Stinky Toons, and all Toon Notes? This cannot be undone.' :
                           'Are you sure you want to reset your navigation bar to its default settings?'}
                   </p>
                 </div>

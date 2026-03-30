@@ -1653,11 +1653,11 @@ function FacilitiesTabContent({
 function FieldOfficeTabContent() {
   const [selectedStar, setSelectedStar] = useState(4);
 
-  const boilerHp = [
-    { star: 1, hp: 4000, label: '1★' },
-    { star: 2, hp: 4500, label: '2★' },
-    { star: 3, hp: 5000, label: '3★' },
-    { star: 4, hp: 5500, label: '4★' },
+  const boilerStats = [
+    { star: 1, hp: 4000, label: '1★', merits: 1400 },
+    { star: 2, hp: 4500, label: '2★', merits: 1800 },
+    { star: 3, hp: 5000, label: '3★', merits: 2200 },
+    { star: 4, hp: 5500, label: '4★', merits: 2600 },
   ];
 
   const attacks = [
@@ -1756,7 +1756,7 @@ function FieldOfficeTabContent() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          {boilerHp.map((item) => (
+          {boilerStats.map((item) => (
             <button
               key={item.star}
               onClick={() => setSelectedStar(item.star)}
@@ -1770,7 +1770,7 @@ function FieldOfficeTabContent() {
                   <span key={i} className="text-yellow-300 text-lg">★</span>
                 ))
               } </div>
-              <div className="text-3xl font-black text-white tabular-nums">{item.hp} <span className="text-xs text-white/30">HP</span></div>
+              <div className="text-2xl font-black text-white tabular-nums">~{item.merits} Merits</div>
             </button>
           ))}
         </div>
@@ -2072,8 +2072,7 @@ function CloseBookButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-4 left-4 z-20 inline-flex items-center 
-      justify-center shadow-lg transition-all cursor-pointer"
+      className="absolute bottom-4 left-4 z-20 inline-flex transition-all cursor-pointer"
       aria-label="Close Shticker Book"
       title="Close Shticker Book"
     >
