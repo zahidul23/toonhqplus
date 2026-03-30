@@ -1677,7 +1677,7 @@ function FieldOfficeTabContent() {
   const jokeData = [
     { label: 'Restore 1 Track', s1: '25', s2: '35', s3: '45', s4: '50' },
     { label: 'Restore 2 Tracks', s1: '40', s2: '55', s3: '65', s4: '75' },
-    { label: 'Max Jokes', s1: '55', s2: '65', s3: '80', s4: '90' },
+    { label: 'Max Jokes', s1: '54-55', s2: '65', s3: '79-80', s4: '90' },
   ];
 
   const elevatorFailure = [
@@ -1733,16 +1733,34 @@ function FieldOfficeTabContent() {
     }
   };
 
+  const currentImage = getFieldOfficeImage(selectedStar);
+  const [prevImage, setPrevImage] = useState(currentImage);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPrevImage(currentImage);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [currentImage]);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl h-64">
+        <div className="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl h-64 bg-black/20">
+          {/* Previous image (stays behind) */}
           <img
-            src={getFieldOfficeImage(selectedStar)}
-            alt="Field Office"
-            className="h-full w-full object-cover transition-all duration-500"
+            src={prevImage}
+            alt=""
+            className="h-full w-full object-cover absolute inset-0"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          {/* New image (fades in) */}
+          <img
+            key={currentImage}
+            src={currentImage}
+            alt="Field Office"
+            className="h-full w-full object-cover absolute inset-0 animate-[fadeIn_0.5s_ease-in-out]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           <div className="absolute bottom-4 left-4">
             <h4 className="text-2xl font-black uppercase tracking-tight text-white drop-shadow-md">
               Sellbot Field Office
@@ -1787,24 +1805,27 @@ function FieldOfficeTabContent() {
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
                   <th className="px-3 py-2.5"></th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                  <th onClick={() => setSelectedStar(1)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(1)}`}>1★</th>
+                  <th onClick={() => setSelectedStar(2)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(2)}`}>2★</th>
+                  <th onClick={() => setSelectedStar(3)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(3)}`}>3★</th>
+                  <th onClick={() => setSelectedStar(4)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(4)}`}>4★</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {jokeData.map((row) => (
                   <tr key={row.label} className="hover:bg-white/5 transition-colors">
                     <td className="px-3 py-2.5 font-bold text-white/90">{row.label}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-all duration-500 ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-all duration-500 ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-all duration-500 ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-blue-300 tabular-nums transition-all duration-500 ${getColClass(4)}`}>{row.s4}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mt-2 pl-1 text-[10px] text-white/40 italic leading-tight text-right">
+            * Cold Caller Cubicles have 1 less max jokes in 1 and 3 star Field Offices.
           </div>
         </div>
 
@@ -1818,20 +1839,20 @@ function FieldOfficeTabContent() {
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
                   <th className="px-4 py-3"></th>
-                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(1)}`}>1★</th>
-                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(2)}`}>2★</th>
-                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(3)}`}>3★</th>
-                  <th className={`px-4 py-3 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                  <th onClick={() => setSelectedStar(1)} className={`px-4 py-3 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(1)}`}>1★</th>
+                  <th onClick={() => setSelectedStar(2)} className={`px-4 py-3 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(2)}`}>2★</th>
+                  <th onClick={() => setSelectedStar(3)} className={`px-4 py-3 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(3)}`}>3★</th>
+                  <th onClick={() => setSelectedStar(4)} className={`px-4 py-3 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(4)}`}>4★</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {elevatorFailure.map((row, idx) => (
                   <tr key={idx} className="hover:bg-white/5 transition-colors">
                     <td className="px-4 py-3 font-bold text-white/90">{row.name}</td>
-                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
-                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
-                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
-                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-all duration-500 ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-all duration-500 ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-all duration-500 ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-4 py-3 text-center font-black text-rose-300 tabular-nums transition-all duration-500 ${getColClass(4)}`}>{row.s4}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1851,20 +1872,20 @@ function FieldOfficeTabContent() {
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
                   <th className="px-3 py-2.5"></th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                  <th onClick={() => setSelectedStar(1)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(1)}`}>1★</th>
+                  <th onClick={() => setSelectedStar(2)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(2)}`}>2★</th>
+                  <th onClick={() => setSelectedStar(3)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(3)}`}>3★</th>
+                  <th onClick={() => setSelectedStar(4)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(4)}`}>4★</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {coldCallerMinigameDmg.map((row, idx) => (
                   <tr key={idx} className="hover:bg-white/5 transition-colors">
                     <td className="px-3 py-2.5 font-bold text-white/90">{row.name}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-all duration-500 ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-all duration-500 ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-all duration-500 ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-cyan-300 tabular-nums transition-all duration-500 ${getColClass(4)}`}>{row.s4}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1882,20 +1903,20 @@ function FieldOfficeTabContent() {
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
                   <th className="px-3 py-2.5"></th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                  <th onClick={() => setSelectedStar(1)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(1)}`}>1★</th>
+                  <th onClick={() => setSelectedStar(2)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(2)}`}>2★</th>
+                  <th onClick={() => setSelectedStar(3)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(3)}`}>3★</th>
+                  <th onClick={() => setSelectedStar(4)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(4)}`}>4★</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {megaMoverMinigameDmg.map((row, idx) => (
                   <tr key={idx} className="hover:bg-white/5 transition-colors">
                     <td className="px-3 py-2.5 font-bold text-white/90">{row.name}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(1)}`}>{row.s1}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(2)}`}>{row.s2}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(3)}`}>{row.s3}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-colors ${getColClass(4)}`}>{row.s4}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-all duration-500 ${getColClass(1)}`}>{row.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-all duration-500 ${getColClass(2)}`}>{row.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-all duration-500 ${getColClass(3)}`}>{row.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-orange-300 tabular-nums transition-all duration-500 ${getColClass(4)}`}>{row.s4}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1915,10 +1936,10 @@ function FieldOfficeTabContent() {
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
                   <th className="px-3 py-2.5"></th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                  <th onClick={() => setSelectedStar(1)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(1)}`}>1★</th>
+                  <th onClick={() => setSelectedStar(2)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(2)}`}>2★</th>
+                  <th onClick={() => setSelectedStar(3)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(3)}`}>3★</th>
+                  <th onClick={() => setSelectedStar(4)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(4)}`}>4★</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -1927,10 +1948,10 @@ function FieldOfficeTabContent() {
                   return (
                     <tr key={idx} className="hover:bg-white/5 transition-colors">
                       <td className={`px-3 py-2.5 font-bold text-white/90 ${indent}`}>{atk.name}</td>
-                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(1)}`}>{atk.s1}</td>
-                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(2)}`}>{atk.s2}</td>
-                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(3)}`}>{atk.s3}</td>
-                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-colors ${getColClass(4)}`}>{atk.s4}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-all duration-500 ${getColClass(1)}`}>{atk.s1}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-all duration-500 ${getColClass(2)}`}>{atk.s2}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-all duration-500 ${getColClass(3)}`}>{atk.s3}</td>
+                      <td className={`px-3 py-2.5 text-center font-black text-emerald-300 tabular-nums transition-all duration-500 ${getColClass(4)}`}>{atk.s4}</td>
                     </tr>
                   )
                 })}
@@ -1949,10 +1970,10 @@ function FieldOfficeTabContent() {
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
                   <th className="px-3 py-2.5"></th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(1)}`}>1★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(2)}`}>2★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(3)}`}>3★</th>
-                  <th className={`px-3 py-2.5 text-center transition-colors ${getColClass(4)}`}>4★</th>
+                  <th onClick={() => setSelectedStar(1)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(1)}`}>1★</th>
+                  <th onClick={() => setSelectedStar(2)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(2)}`}>2★</th>
+                  <th onClick={() => setSelectedStar(3)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(3)}`}>3★</th>
+                  <th onClick={() => setSelectedStar(4)} className={`px-3 py-2.5 text-center transition-all duration-500 cursor-pointer hover:bg-emerald-500/10 ${getColClass(4)}`}>4★</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -1962,10 +1983,10 @@ function FieldOfficeTabContent() {
                       <div className="font-bold text-white/90">{move.name}</div>
                       <div className="text-[9px] text-white/30 leading-tight">{move.note}</div>
                     </td>
-                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(1)}`}>{move.s1}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(2)}`}>{move.s2}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(3)}`}>{move.s3}</td>
-                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-colors ${getColClass(4)}`}>{move.s4}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-all duration-500 ${getColClass(1)}`}>{move.s1}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-all duration-500 ${getColClass(2)}`}>{move.s2}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-all duration-500 ${getColClass(3)}`}>{move.s3}</td>
+                    <td className={`px-3 py-2.5 text-center font-black text-white/70 tabular-nums transition-all duration-500 ${getColClass(4)}`}>{move.s4}</td>
                   </tr>
                 ))}
               </tbody>
