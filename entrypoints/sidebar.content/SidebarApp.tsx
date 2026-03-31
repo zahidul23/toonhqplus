@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } from 'react';
 import { groupTypes } from './groupTypes';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
@@ -849,6 +849,8 @@ export function SidebarApp() {
   const [toonyCollapsed, setToonyCollapsed] = useState(false);
   const [stinkyCollapsed, setStinkyCollapsed] = useState(false);
   const [neutralCollapsed, setNeutralCollapsed] = useState(false);
+  const [searchPage, setSearchPage] = useState(1);
+  const pageSize = 10;
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
 
@@ -862,15 +864,17 @@ export function SidebarApp() {
 
   // Debounce search term
   useEffect(() => {
-    if (!searchTerm) {
+    if (searchTerm.length < 2) {
       setDebouncedSearchTerm('');
       setIsSearching(false);
+      setSearchPage(1);
       return;
     }
     setIsSearching(true);
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
       setIsSearching(false);
+      setSearchPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
@@ -882,6 +886,11 @@ export function SidebarApp() {
       .filter((t) => t.name.toLowerCase().includes(lower))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [debouncedSearchTerm, historyToons]);
+
+  const paginatedSearchResults = useMemo(() => {
+    const start = (searchPage - 1) * pageSize;
+    return searchResults.slice(start, start + pageSize);
+  }, [searchResults, searchPage]);
 
   // Tooltip tracking state
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
@@ -1149,12 +1158,14 @@ export function SidebarApp() {
                     <section className="flex-1 flex flex-col min-h-0">
                       <h3 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1">Search Results</h3>
                       <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                        {isSearching ? (
+                        {searchTerm.length < 2 ? (
+                          <div className="py-6 text-center text-green-200/40 italic text-xs">Enter at least 2 characters to search...</div>
+                        ) : isSearching ? (
                           <div className="py-8 text-center text-green-200/40 italic">Searching...</div>
                         ) : searchResults.length === 0 ? (
                           <div className="py-8 text-center text-green-200/40 italic">No toons found matching "{searchTerm}"</div>
                         ) : (
-                          searchResults.map((toon) => {
+                          paginatedSearchResults.map((toon) => {
                             const isHovered = hoveredToonId
                               ? String(toon.id) === hoveredToonId
                               : (hoveredToonName && toon.name === hoveredToonName);
@@ -1188,6 +1199,30 @@ export function SidebarApp() {
                           })
                         )}
                       </ul>
+
+                      {searchResults.length > pageSize && (
+                        <div className="mt-2 flex items-center justify-between px-2 py-1.5 bg-black/20 rounded border border-white/5 mx-2 mb-2">
+                          <button
+                            onClick={() => setSearchPage((p) => Math.max(1, p - 1))}
+                            disabled={searchPage === 1}
+                            className="p-1 rounded text-green-200 hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
+                            title="Previous page"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                          </button>
+                          <span className="text-[10px] font-bold text-green-200/50 uppercase tracking-widest tabular-nums">
+                            Page {searchPage} of {Math.ceil(searchResults.length / pageSize)}
+                          </span>
+                          <button
+                            onClick={() => setSearchPage((p) => Math.min(Math.ceil(searchResults.length / pageSize), p + 1))}
+                            disabled={searchPage >= Math.ceil(searchResults.length / pageSize)}
+                            className="p-1 rounded text-green-200 hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
+                            title="Next page"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                          </button>
+                        </div>
+                      )}
                     </section>
                   ) : (
                     <>
