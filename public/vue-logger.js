@@ -6,6 +6,9 @@
  * so our content script can link rows to the toon data we fetch via API/WebSockets.
  */
 (function () {
+  if (window.__TOONHQ_PLUS_VUE_LOGGER__) return;
+  window.__TOONHQ_PLUS_VUE_LOGGER__ = true;
+  
   function generateToonHash(name, photo) {
     let str = name || '';
     if (photo && photo.includes('https://rendition.toontownrewritten.com/render/')) {

@@ -22,6 +22,8 @@ import {
   setSetting,
   getAllNotes,
   cleanupToonCache,
+  getToons,
+  getToonsByHashIds,
   type ToonRecord,
   type GroupRecord,
   type GroupMemberRecord,
@@ -235,7 +237,6 @@ function injectHighlightStyles() {
     .toonhq-plus-buttons button {
       cursor: pointer;
       border: none;
-      background: transparent;
       border-radius: 50%;
       padding: 2px;
       transition: transform 0.2s, opacity 0.2s;
@@ -300,6 +301,41 @@ function injectHighlightStyles() {
     }
     tr.toonhq-plus-note.toonhq-plus-favorite,
     tr.toonhq-plus-note.toonhq-plus-favorite td { background: rgba(34, 197, 94, 0.12) !important; }
+    
+    .toonhq-plus-btn-fav, .toonhq-plus-btn-block {
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      padding: 0;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .toonhq-plus-btn-fav:hover, .toonhq-plus-btn-block:hover { transform: scale(1.1); }
+    
+    .toonhq-plus-btn-fav { background-color: #1f8454; }
+    .toonhq-plus-btn-block { background-color: #dc2626; }
+
+    .toonhq-plus-btn-fav::after, .toonhq-plus-btn-block::after {
+      content: '';
+      width: 16px;
+      height: 16px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+    /* Thumbs Up */
+    .toonhq-plus-btn-fav::after {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10v12'/%3E%3Cpath d='M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z'/%3E%3C/svg%3E");
+    }
+    /* Block */
+    .toonhq-plus-btn-block::after {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m4.9 4.9 14.2 14.2'/%3E%3C/svg%3E");
+    }
     
     tr.toonhq-plus-note.toonhq-plus-blocked,
     tr.toonhq-plus-note.toonhq-plus-blocked td { background: rgba(239, 68, 68, 0.12) !important; }
@@ -373,20 +409,14 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
     container.className = 'toonhq-plus-buttons';
 
     const makeBtn = (
-      symbol: string,
+      className: string,
       title: string,
       listKey: string,
     ) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.innerHTML = symbol;
+      btn.className = className;
       btn.title = title;
-      Object.assign(btn.style, {
-        cursor: 'pointer',
-        border: 'none',
-        background: 'none',
-        padding: '0',
-      });
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const toonIdAttr = row.getAttribute('toon-id');
@@ -435,12 +465,9 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
       return btn;
     };
 
-    const thumbsUpSvg = `<div style="background-color: #1f8454; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg></div>`;
-    const blockSvg = `<div style="background-color: #dc2626; border-radius: 50%; padding: 6px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></div>`;
-
     container.append(
-      makeBtn(thumbsUpSvg, 'Add to Toony Toons', STORAGE_KEYS.FAVORITES),
-      makeBtn(blockSvg, 'Add to Stinky Toons', STORAGE_KEYS.BLOCKED),
+      makeBtn('toonhq-plus-btn-fav', 'Add to Toony Toons', STORAGE_KEYS.FAVORITES),
+      makeBtn('toonhq-plus-btn-block', 'Add to Stinky Toons', STORAGE_KEYS.BLOCKED),
     );
 
     // place the buttons inside the toon element itself
@@ -463,39 +490,69 @@ async function applyRowHighlights() {
   isApplyingHighlights = true;
 
   try {
-    const [favorites, blocked, allNotes] = await Promise.all([
+    const [favorites, blocked, allNotes, settings] = await Promise.all([
       getAllFromList('toony_toons'),
       getAllFromList('stinky_toons'),
       getAllNotes(),
+      getSettings(['notes-enabled']),
     ]);
 
-    const processRow = async (row: HTMLElement, index: number) => {
+    const rows = Array.from(document.querySelectorAll('.group-member-row')) as HTMLElement[];
+    if (rows.length === 0) return;
+
+    notesEnabled = settings['notes-enabled'] !== false;
+    const favIds = new Set(favorites);
+    const blkIds = new Set(blocked);
+
+    // Batch Fetch Toon Data
+    const idsToFetch = new Set<string>();
+    const hashIdsToFetch = new Set<string>();
+
+    rows.forEach(row => {
+      const idAttr = row.getAttribute('toon-id');
+      if (!idAttr || toons[idAttr]) return;
+
+      if (idAttr.startsWith('#')) {
+        hashIdsToFetch.add(idAttr);
+        // Fallback for legacy numeric keys that were stringified inside the hash
+        const candidate = idAttr.slice(1);
+        if (/^\d+$/.test(candidate)) idsToFetch.add(candidate);
+      } else {
+        idsToFetch.add(idAttr);
+      }
+    });
+
+    if (idsToFetch.size > 0 || hashIdsToFetch.size > 0) {
+      const [fetchedById, fetchedByHash] = await Promise.all([
+        idsToFetch.size > 0 ? getToons(Array.from(idsToFetch)) : Promise.resolve([]),
+        hashIdsToFetch.size > 0 ? getToonsByHashIds(Array.from(hashIdsToFetch)) : Promise.resolve([]),
+      ]);
+
+      [...fetchedById, ...fetchedByHash].forEach(rec => {
+        if (rec.id) toons[rec.id] = rec as ToonData;
+        if (rec.hashId) toons[rec.id] = rec as ToonData; // Also ensure standard id maps
+      });
+    }
+
+    rows.forEach((row, index) => {
       row.classList.remove(ROW_CLASS_FAVORITE, ROW_CLASS_BLOCKED);
       const nameEl = row.querySelector('.toon__name');
       const raw = nameEl?.textContent?.trim();
       if (!raw) return;
+
       const name = extractToonName(raw);
       const idAttr = row.getAttribute('toon-id');
 
-      // Resolve toon: check in-memory cache first, then DB (supports hash IDs)
-      let data: ToonData | null = idAttr && toons[idAttr] ? toons[idAttr] : null;
-      if (!data && idAttr) {
-        let rec: ToonRecord | undefined;
-        if (idAttr.startsWith('#')) {
+      // Resolve toon using cache
+      let data: ToonData | null = null;
+      if (idAttr) {
+        data = toons[idAttr] || null;
+        if (!data && idAttr.startsWith('#')) {
           const afterHash = idAttr.slice(1);
-          rec = /^\d+$/.test(afterHash) ? await getToon(afterHash) : undefined;
-          if (!rec) rec = await getToonByHashId(afterHash) ?? await getToonByHashId(idAttr);
-        } else {
-          rec = await getToon(idAttr);
-        }
-        if (rec) {
-          toons[idAttr] = rec as ToonData;
-          data = rec as ToonData;
+          data = toons[afterHash] || null;
         }
       }
 
-      const favIds = new Set(favorites);
-      const blkIds = new Set(blocked);
       const resolvedId = data?.id ?? idAttr ?? null;
 
       if (resolvedId != null && favIds.has(resolvedId)) row.classList.add(ROW_CLASS_FAVORITE);
@@ -538,9 +595,6 @@ async function applyRowHighlights() {
       }
 
       // Add Note Bubble
-      getSetting<boolean>('notes-enabled').then(enabled => {
-        notesEnabled = enabled !== false;
-      });
       if (notesEnabled && (resolvedId != null || index === 0)) {
         const noteText = resolvedId ? allNotes[resolvedId] : '';
         let displayNote = noteText || '';
@@ -607,10 +661,7 @@ async function applyRowHighlights() {
           existingSpacers.forEach(el => el.remove());
         }
       }
-    };
-
-    const rows = Array.from(document.querySelectorAll('.group-member-row')) as HTMLElement[];
-    await Promise.all(rows.map((r, i) => processRow(r, i)));
+    });
 
   } finally {
     isApplyingHighlights = false;
@@ -1589,7 +1640,13 @@ export default defineContentScript({
         dialogs.forEach((d) => fixDialog(d));
       }
     });
-    dialogObserver.observe(document.body, { childList: true, subtree: true });
+    // Narrow observation to the .vuedals container where modals are rendered
+    const vuedalsContainer = document.querySelector('.vuedals');
+    if (vuedalsContainer) {
+      dialogObserver.observe(vuedalsContainer, { childList: true, subtree: true });
+    } else {
+      dialogObserver.observe(document.body, { childList: true, subtree: true });
+    }
     ctx.onInvalidated(() => dialogObserver.disconnect());
 
     updateBossInfo();
@@ -1597,7 +1654,7 @@ export default defineContentScript({
 
     let dbHighlightTimeout: ReturnType<typeof setTimeout> | null = null;
     // Listen for DB changes (replaces browser.storage.onChanged)
-    window.addEventListener('toonhqplus-db-changed', ((e: CustomEvent) => {
+    const handleDbChange = ((e: CustomEvent) => {
       const { store } = e.detail || {};
       if (store === 'toony_toons' || store === 'stinky_toons' || store === 'notes') {
         if (dbHighlightTimeout) clearTimeout(dbHighlightTimeout);
@@ -1627,7 +1684,10 @@ export default defineContentScript({
           }
         });
       }
-    }) as EventListener);
+    }) as EventListener;
+
+    window.addEventListener('toonhqplus-db-changed', handleDbChange);
+    ctx.onInvalidated(() => window.removeEventListener('toonhqplus-db-changed', handleDbChange));
 
     let highlightTimeout: ReturnType<typeof setTimeout> | null = null;
     const observer = new MutationObserver(() => {

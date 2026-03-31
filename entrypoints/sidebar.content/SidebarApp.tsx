@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo, memo } from 'react';
 import { groupTypes } from './groupTypes';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
@@ -8,7 +8,9 @@ import {
   addToList,
   removeFromList,
   clearList,
-  getAllToons,
+  getToon,
+  getToons,
+  searchToons,
   putToon,
   getAllGroups,
   getGroupMembers,
@@ -113,7 +115,7 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function RelativeTime({ date }: { date: string }) {
+const RelativeTime = memo(({ date }: { date: string }) => {
   const [display, setDisplay] = useState(() => formatRelativeTime(date));
 
   useEffect(() => {
@@ -136,7 +138,7 @@ function RelativeTime({ date }: { date: string }) {
   }, [date]);
 
   return <span>{display}</span>;
-}
+});
 
 async function updateToonList(
   type: 'add' | 'move' | 'remove',
@@ -223,7 +225,7 @@ const decodeSuit = (trackId: string, suitCode: string | number | undefined) => {
   };
 };
 
-function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, isFavorited: boolean, isBlocked: boolean, note?: string }) {
+const ToonTooltip = memo(({ toon, isFavorited, isBlocked, note }: { toon: ToonData, isFavorited: boolean, isBlocked: boolean, note?: string }) => {
   if (!toon) return null;
   let toonClass = 'myToon';
   if (isFavorited) {
@@ -363,7 +365,7 @@ function ToonTooltip({ toon, isFavorited, isBlocked, note }: { toon: ToonData, i
       </div>
     </div >
   );
-}
+});
 
 
 function loadLists(): Promise<{ favorites: ToonId[]; blocked: ToonId[] }> {
@@ -373,7 +375,7 @@ function loadLists(): Promise<{ favorites: ToonId[]; blocked: ToonId[] }> {
   ]).then(([favorites, blocked]) => ({ favorites, blocked }));
 }
 
-function ToonRow({
+const ToonRow = memo(({
   toon,
   isFavorited,
   isBlocked,
@@ -397,7 +399,7 @@ function ToonRow({
   onRequestDialog: (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
   onMouseLeave?: () => void;
-}) {
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState(note || '');
 
@@ -571,7 +573,7 @@ function ToonRow({
                 setNote(toon.id, '').then(refresh);
                 setIsEditing(false);
               }}
-              className="mr-auto shrink-0 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500 hover:text-white cursor-pointer transition-all flex items-center gap-1 border border-red-500/20"
+              className="mr-auto shrink-0 rounded bg-red-500/10 px-2 py-1 text-xs text-red-300-400 hover:bg-red-500 hover:text-white cursor-pointer transition-all flex items-center gap-1 border border-red-500/20"
               title="Remove note"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
@@ -598,7 +600,7 @@ function ToonRow({
       ) : null}
     </li>
   );
-}
+});
 
 const DEFAULT_NAV_ITEMS = [
   { id: 'invasions', label: 'Invasions', href: '/invasions/', colorClass: 'blue' },
@@ -861,6 +863,8 @@ export function SidebarApp() {
   };
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<ToonData[]>([]);
+  const [searchTotal, setSearchTotal] = useState(0);
 
   // Debounce search term
   useEffect(() => {
@@ -873,24 +877,31 @@ export function SidebarApp() {
     setIsSearching(true);
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
-      setIsSearching(false);
       setSearchPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const searchResults = useMemo(() => {
-    if (!debouncedSearchTerm) return [];
-    const lower = debouncedSearchTerm.toLowerCase();
-    return Object.values(historyToons)
-      .filter((t) => t.name.toLowerCase().includes(lower))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [debouncedSearchTerm, historyToons]);
+  // Handle paginated search fetching
+  useEffect(() => {
+    if (!debouncedSearchTerm) {
+      setSearchResults([]);
+      setSearchTotal(0);
+      setIsSearching(false);
+      return;
+    }
 
-  const paginatedSearchResults = useMemo(() => {
-    const start = (searchPage - 1) * pageSize;
-    return searchResults.slice(start, start + pageSize);
-  }, [searchResults, searchPage]);
+    setIsSearching(true);
+    searchToons(debouncedSearchTerm, searchPage, pageSize).then(({ results, total }) => {
+      setSearchResults(results as ToonData[]);
+      setSearchTotal(total);
+      setIsSearching(false);
+    }).catch(err => {
+      console.error('Search failed:', err);
+      setIsSearching(false);
+    });
+  }, [debouncedSearchTerm, searchPage]);
+
 
   // Tooltip tracking state
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
@@ -899,9 +910,8 @@ export function SidebarApp() {
   const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; height: number } | null>(null);
 
   const refresh = useCallback(async () => {
-    const [{ favorites: f, blocked: b }, toonsArr, groups, groupMembers, allNotes, ids] = await Promise.all([
+    const [{ favorites: f, blocked: b }, groups, groupMembers, allNotes, ids] = await Promise.all([
       loadLists(),
-      getAllToons(),
       getAllGroups(),
       getAllGroupMembers(),
       getAllNotes(),
@@ -912,6 +922,12 @@ export function SidebarApp() {
     setBlocked(b);
     setNotes(allNotes);
     if (ids) setActiveToonIds(ids);
+
+    // Selective loading: Load only toons that are actually visible in UI sections
+    const visibleIds = new Set<string>([...f, ...b, ...Object.keys(allNotes), ...(ids || [])]);
+    groupMembers.forEach(m => visibleIds.add(String(m.toonId)));
+
+    const toonsArr = await getToons(Array.from(visibleIds));
 
     const toonsMap: Record<ToonId, ToonData> = {};
     for (const t of toonsArr) toonsMap[t.id] = t;
@@ -1054,11 +1070,9 @@ export function SidebarApp() {
         });
       }
       if (store === 'toons') {
-        getAllToons().then(toonsArr => {
-          const toonsMap: Record<ToonId, any> = {};
-          for (const t of toonsArr) toonsMap[t.id] = t;
-          setHistoryToons(toonsMap);
-        });
+        // Only refresh history cache if the change affects currently loaded toons
+        // (or ideally, we'd only load the ones that changed, but this is simpler for now)
+        refresh();
       }
       if (store === 'notes') {
         getAllNotes().then(setNotes);
@@ -1165,7 +1179,7 @@ export function SidebarApp() {
                         ) : searchResults.length === 0 ? (
                           <div className="py-8 text-center text-green-200/40 italic">No toons found matching "{searchTerm}"</div>
                         ) : (
-                          paginatedSearchResults.map((toon) => {
+                          searchResults.map((toon) => {
                             const isHovered = hoveredToonId
                               ? String(toon.id) === hoveredToonId
                               : (hoveredToonName && toon.name === hoveredToonName);
@@ -1200,7 +1214,7 @@ export function SidebarApp() {
                         )}
                       </ul>
 
-                      {searchResults.length > pageSize && (
+                      {searchTotal > pageSize && (
                         <div className="mt-2 flex items-center justify-between px-2 py-1.5 bg-black/20 rounded border border-white/5 mx-2 mb-2">
                           <button
                             onClick={() => setSearchPage((p) => Math.max(1, p - 1))}
@@ -1211,11 +1225,11 @@ export function SidebarApp() {
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
                           </button>
                           <span className="text-[10px] font-bold text-green-200/50 uppercase tracking-widest tabular-nums">
-                            Page {searchPage} of {Math.ceil(searchResults.length / pageSize)}
+                            Page {searchPage} of {Math.ceil(searchTotal / pageSize)}
                           </span>
                           <button
-                            onClick={() => setSearchPage((p) => Math.min(Math.ceil(searchResults.length / pageSize), p + 1))}
-                            disabled={searchPage >= Math.ceil(searchResults.length / pageSize)}
+                            onClick={() => setSearchPage((p) => Math.min(Math.ceil(searchTotal / pageSize), p + 1))}
+                            disabled={searchPage >= Math.ceil(searchTotal / pageSize)}
                             className="p-1 rounded text-green-200 hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
                             title="Next page"
                           >
@@ -1450,11 +1464,11 @@ export function SidebarApp() {
                                   isHovered={!!isHovered}
                                   isJustAdded={justAddedId === toonData.id}
                                   onRequestDialog={handleRequestDialog}
-                                  onMouseEnter={(e) => {
+                                  onMouseEnter={(e: React.MouseEvent) => {
                                     setHoveredToonId(String(toonData.id));
                                     setHoveredToonName(toonData.name);
                                     setHoverSource('sidebar');
-                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                     setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
                                   }}
                                   onMouseLeave={() => {
@@ -1749,11 +1763,11 @@ export function SidebarApp() {
         </div>
       )}
       {(() => {
-        const hoveredToon = hoveredToonId
-          ? historyToons[String(hoveredToonId)]
+        const hoveredToon = (hoveredToonId
+          ? historyToons[String(hoveredToonId)] || searchResults.find(t => String(t.id) === String(hoveredToonId))
           : hoveredToonName
-            ? Object.values(historyToons).find((t) => t.name === hoveredToonName)
-            : null;
+            ? Object.values(historyToons).find((t) => t.name === hoveredToonName) || searchResults.find(t => t.name === hoveredToonName)
+            : null);
         if (!hoveredToon || !hoveredRect) return null;
         return (
           <TooltipAnchor anchorRect={hoveredRect}>

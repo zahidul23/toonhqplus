@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, memo } from 'react';
 import { gags as gagsConfig } from './gags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ function getFacilityColorConfig(facilityId: string) {
 
 // ─── Shared primitive components ──────────────────────────────────────────────
 
-function MultiLayerBoilerHealthBar({ remaining, max, stars }: { remaining: number; max: number; stars: number }) {
+const MultiLayerBoilerHealthBar = memo(({ remaining, max, stars }: { remaining: number; max: number; stars: number }) => {
   const safeMax = Math.max(0, max);
   const safeRemaining = clampNumber(remaining, 0, safeMax);
 
@@ -296,7 +296,7 @@ function MultiLayerBoilerHealthBar({ remaining, max, stars }: { remaining: numbe
       <div className="absolute inset-y-0 left-0 bg-emerald-500 transition-all duration-500 ease-in-out" style={{ width: `${greenWidth * 100}%` }} />
     </div>
   );
-}
+});
 
 function DamageBadge({ value, className = '' }: { value: number; className?: string }) {
   return (
@@ -379,7 +379,7 @@ type GagButtonProps = {
   overlayTopLeft?: React.ReactNode;
 };
 
-function GagButton({ imageSrc, imageAlt, color, title, damage, disabled = false, onClick, overlayBottomRight, overlayBottom, overlayTopLeft }: GagButtonProps) {
+const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, disabled = false, onClick, overlayBottomRight, overlayBottom, overlayTopLeft }: GagButtonProps) => {
   return (
     <button
       type="button"
@@ -412,7 +412,7 @@ function GagButton({ imageSrc, imageAlt, color, title, damage, disabled = false,
       )}
     </button>
   );
-}
+});
 
 // ─── Boiler Calculator subcomponents ──────────────────────────────────────────
 
@@ -716,7 +716,7 @@ function RoundTypeIcon({ roundType }: { roundType: BoilerRoundType }) {
   return <div className="h-4 w-4" />;
 }
 
-function RoundSlotButton({
+const RoundSlotButton = memo(({
   cell,
   slotIndex,
   roundIndex,
@@ -734,7 +734,7 @@ function RoundSlotButton({
   getCellDamage: (cell: SelectedGagCell) => number;
   onSetActiveCell: (cell: { round: number; slot: number }) => void;
   onClearSlot: (round: number, slot: number) => void;
-}) {
+}) => {
   const isActive = activeCell.round === roundIndex && activeCell.slot === slotIndex;
   const track = cell ? gagTracks.find((t) => t.id === cell.trackId) : null;
   const gag = cell && track ? track.gags[cell.gagIndex] : null;
@@ -794,7 +794,7 @@ function RoundSlotButton({
       )}
     </button>
   );
-}
+});
 
 function RoundRow({
   roundIndex,

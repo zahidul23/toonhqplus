@@ -243,36 +243,115 @@ export async function getToonByHashId(hashId: string): Promise<ToonRecord | unde
   return rec ? normalizeToonRecord(rec) : undefined;
 }
 
+export async function getToonsByHashIds(hashIds: string[]): Promise<ToonRecord[]> {
+  const db = await openDB();
+  const index = tx(db, 'toons').objectStore('toons').index('hashId');
+  const results = await Promise.all(
+    hashIds.map(h => promisifyRequest<any>(index.get(h)))
+  );
+  return results.filter(Boolean).map(normalizeToonRecord);
+}
+
+export async function searchToons(query: string, page: number, pageSize: number): Promise<{ results: ToonRecord[], total: number }> {
+  const db = await openDB();
+  const store = tx(db, 'toons').objectStore('toons');
+  const lowerQuery = query.toLowerCase();
+  
+  // We have to scan because there's no name index, but we can at least avoid loading all into memory
+  const allMatches: ToonRecord[] = [];
+  
+  return new Promise((resolve, reject) => {
+    const req = store.openCursor();
+    req.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const toon = normalizeToonRecord(cursor.value);
+        if (toon.name.toLowerCase().includes(lowerQuery)) {
+          allMatches.push(toon);
+        }
+        cursor.continue();
+      } else {
+        // Sort by name
+        allMatches.sort((a, b) => a.name.localeCompare(b.name));
+        const total = allMatches.length;
+        const start = (page - 1) * pageSize;
+        const results = allMatches.slice(start, start + pageSize);
+        resolve({ results, total });
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// --- Write Buffering ---------------------------------------------------------
+const toonWriteBuffer = new Map<string, ToonRecord>();
+let flushTimeout: ReturnType<typeof setTimeout> | null = null;
+
+async function flushToonWriteBuffer() {
+  if (toonWriteBuffer.size === 0) return;
+  const toonsToSave = Array.from(toonWriteBuffer.values());
+  toonWriteBuffer.clear();
+  flushTimeout = null;
+
+  try {
+    const db = await openDB();
+    const t = tx(db, 'toons', 'readwrite');
+    const store = t.objectStore('toons');
+    toonsToSave.forEach(toon => {
+      store.put(toon);
+    });
+    await promisifyTx(t);
+    notifyChanged('toons');
+  } catch (e) {
+    console.error('[ToonHQ+] Batch write failed:', e);
+  }
+}
+
 export async function putToon(toon: ToonRecord): Promise<void> {
   const id = normalizeToonId(toon.id);
   if (!id) return;
-  const db = await openDB();
-  const t = tx(db, 'toons', 'readwrite');
-  t.objectStore('toons').put({ ...toon, id });
-  await promisifyTx(t);
-  notifyChanged('toons', id);
+  
+  toonWriteBuffer.set(id, { ...toon, id });
+  
+  if (!flushTimeout) {
+    flushTimeout = setTimeout(flushToonWriteBuffer, 1000);
+  }
 }
 
 export async function putToons(toons: ToonRecord[]): Promise<void> {
-  const valid = toons
-    .map((t) => {
-      const id = normalizeToonId(t.id);
-      return id ? ({ ...t, id } as ToonRecord) : null;
-    })
-    .filter((t): t is ToonRecord => t !== null);
-  if (!valid.length) return;
-  const db = await openDB();
-  const t = tx(db, 'toons', 'readwrite');
-  const store = t.objectStore('toons');
-  for (const toon of valid) store.put(toon);
-  await promisifyTx(t);
-  notifyChanged('toons');
+  let hasValid = false;
+  toons.forEach(t => {
+    const id = normalizeToonId(t.id);
+    if (id) {
+      toonWriteBuffer.set(id, { ...t, id });
+      hasValid = true;
+    }
+  });
+
+  if (hasValid && !flushTimeout) {
+    flushTimeout = setTimeout(flushToonWriteBuffer, 1000);
+  }
 }
 
 export async function getAllToons(): Promise<ToonRecord[]> {
   const db = await openDB();
   const recs = await promisifyRequest<any[]>(tx(db, 'toons').objectStore('toons').getAll());
   return recs.map(normalizeToonRecord);
+}
+
+export async function getToons(ids: ToonId[]): Promise<ToonRecord[]> {
+  const validIds = [...new Set(ids.map(normalizeToonId).filter((id): id is ToonId => id !== null))];
+  if (!validIds.length) return [];
+
+  const db = await openDB();
+  const store = tx(db, 'toons').objectStore('toons');
+  
+  // Use Promise.all with store.get for each ID in the same transaction
+  const results = await Promise.all(
+    validIds.map((id) => promisifyRequest<any>(store.get(id)))
+  );
+  
+  return results.filter(Boolean).map(normalizeToonRecord);
 }
 
 // --- Toony / Stinky lists ------------------------------------------------------
