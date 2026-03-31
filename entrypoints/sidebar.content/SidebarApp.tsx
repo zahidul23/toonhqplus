@@ -1252,9 +1252,9 @@ export function SidebarApp() {
                             const renderToonRow = (id: string) => {
                               const toon = historyToons[id];
                               if (!toon) return null;
-                              const isHovered =
-                                (hoveredToonId && String(toon.id) === hoveredToonId) ||
-                                (hoveredToonName && toon.name === hoveredToonName);
+                              const isHovered = hoveredToonId
+                                ? String(toon.id) === hoveredToonId
+                                : (hoveredToonName && toon.name === hoveredToonName);
                               return (
                                 <ToonRow
                                   key={toon.id}
@@ -1376,6 +1376,7 @@ export function SidebarApp() {
                               const timeB = new Date(b.userJoinedAt || b.created).getTime();
                               return timeB - timeA;
                             })
+                            .slice(0, 20)
                             .map((group) => {
                               const typeData = groupTypes.find((t) => t.id === group.type);
                               const groupName = typeData ? typeData.name : `Group #${group.id}`;
@@ -1449,9 +1450,9 @@ export function SidebarApp() {
                             targetIds.map((id: ToonId) => {
                               const toonData = historyToons[id];
                               if (!toonData) return null;
-                              const isHovered =
-                                (hoveredToonId && String(toonData.id) === hoveredToonId) ||
-                                (hoveredToonName && toonData.name === hoveredToonName);
+                              const isHovered = hoveredToonId
+                                ? String(toonData.id) === hoveredToonId
+                                : (hoveredToonName && toonData.name === hoveredToonName);
                               return (
                                 <ToonRow
                                   key={toonData.id}
