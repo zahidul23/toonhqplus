@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import { SidebarApp } from './SidebarApp';
-import { extractToonName } from './toonUtils';
+import { extractToonName, getCogValueFromName, getAverageSuitValue } from './toonUtils';
 import './style.css';
 import {
   openDB,
@@ -200,13 +200,14 @@ function injectHighlightStyles() {
       text-align: center;
     }
     .tooltip-tier-row {
-      gap: 12px;
-      padding: 4px 8px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0 12px;
+      padding: 6px 8px;
       margin: 0 -8px;
       border-radius: 4px;
       font-size: 12px;
-      display: flex;
-      justify-content: space-between;
     }
     .tooltip-tier-row .tooltip-label {
       text-align: right;
@@ -225,6 +226,23 @@ function injectHighlightStyles() {
     }
     .tooltip-tier-row.active .tooltip-value {
       color: #fff;
+    }
+    .tooltip-tier-row.tier-stats {
+      padding: 4px 8px;
+    }
+    .tooltip-note {
+      width: 100%;
+      font-size: 9px;
+      color: #9ca3af;
+      margin-top: 2px;
+      text-align: left;
+      font-style: italic;
+      opacity: 0.9;
+    }
+    .active .tooltip-note {
+      color: #34d399;
+      font-weight: 500;
+      opacity: 1;
     }
 
     /* buttons injected inside toon element */
@@ -725,31 +743,7 @@ const getCogNameForLevel = (level: number, suit: string) => {
   }
 }
 
-const getCogValueFromName = (name: string) => {
-  const cleanName = name.replace(/<[^>]*>?/gm, ' ');
-  if (cleanName.includes("2.0")) return 78;
 
-  const levelMatch = cleanName.match(/Level\s+(\d+)/i) || cleanName.match(/(\d+)$/);
-  const level = levelMatch ? parseInt(levelMatch[1]) : 1;
-
-  const offsets = {
-    "Bottom Feeder": 0, "Flunky": 0,
-    "Bloodsucker": 4, "Pencil Pusher": 4,
-    "Double Talker": 8, "Yesman": 8,
-    "Ambulance Chaser": 12, "Micromanager": 12,
-    "Back Stabber": 16, "Downsizer": 16,
-    "Spin Doctor": 20, "Head Hunter": 20,
-    "Legal Eagle": 24, "Corporate Raider": 24,
-    "Big Wig": 28, "The Big Cheese": 28,
-  };
-
-  for (const [cog, offset] of Object.entries(offsets)) {
-    if (cleanName.includes(cog)) {
-      return level + offset;
-    }
-  }
-  return level;
-};
 
 interface CJDifficultyTier {
   tier: number;
@@ -797,17 +791,45 @@ const PINK_SLIP_THRESHOLDS = [
   { minSuitValue: 1, slipCount: 2 }
 ];
 
-const renderTierRow = (label: string, value: string | number, isActive: boolean, extraClass = '') => `
+const renderTierRow = (label: string, value: string | number, isActive: boolean, extraClass = '', note = '') => `
   <div class="tooltip-tier-row ${isActive ? 'active' : ''} ${extraClass}">
     <div class="tooltip-label">${label}</div>
     <div class="tooltip-value">${value}</div>
+    ${note ? `<div class="tooltip-note">${note}</div>` : ''}
   </div>
 `;
 
-const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bossKey: string) => {
-  const lawyerRowsHtml = LAWYER_THRESHOLDS.map(threshold =>
-    renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.lawyerCount} Lawyers`, tierData.lawyers === threshold.lawyerCount)
-  ).join('');
+const getTooltipNoteForThreshold = (
+  minSuitValue: number,
+  currentSum: number,
+  currentCount: number,
+  currentAvg: number,
+  isActive: boolean,
+  bossKey: string
+) => {
+  if (currentCount >= 8 || minSuitValue <= 1) return '';
+  if (minSuitValue <= currentAvg && !isActive) return '';
+
+  const targetSum = minSuitValue * 8;
+  const action = isActive ? 'maintain' : 'reach';
+  const remaining = 8 - currentCount;
+  const avgNeeded = Math.ceil((targetSum - currentSum) / remaining);
+
+  if (avgNeeded > 78) {
+    return `Impossible to ${action} with 8 members`;
+  } else if (avgNeeded > 1) {
+    return `${getCogNameForLevel(avgNeeded, bossKey)}+ required to ${action}`;
+  }
+  return '';
+};
+
+const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bossKey: string, currentSum: number, currentCount: number) => {
+  const currentAvg = Math.floor(currentSum / currentCount);
+  const lawyerRowsHtml = LAWYER_THRESHOLDS.map(threshold => {
+    const isActive = tierData.lawyers === threshold.lawyerCount;
+    const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);
+    return renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.lawyerCount} Lawyers`, isActive, '', note);
+  }).join('');
 
   const statsList = [
     { label: 'Lawyers', value: tierData.lawyers },
@@ -817,7 +839,7 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
     { label: 'Evidence Heal', value: tierData.laffHeal + " Laff" }
   ];
 
-  const statsHtml = statsList.map(stat => renderTierRow(stat.label, stat.value, false)).join('');
+  const statsHtml = statsList.map(stat => renderTierRow(stat.label, stat.value, false, "tier-stats")).join('');
 
   return `
     <div class="tooltip-boss-info">
@@ -833,10 +855,13 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
   `;
 };
 
-const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, bossKey: string) => {
-  const rowsHtml = PINK_SLIP_THRESHOLDS.map(threshold =>
-    renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.slipCount} Slips`, currentPinkSlips === threshold.slipCount, 'bossbot-info')
-  ).join('');
+const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, bossKey: string, currentSum: number, currentCount: number) => {
+  const currentAvg = Math.floor(currentSum / currentCount);
+  const rowsHtml = PINK_SLIP_THRESHOLDS.map(threshold => {
+    const isActive = currentPinkSlips === threshold.slipCount;
+    const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);
+    return renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.slipCount} Slips`, isActive, 'bossbot-info', note);
+  }).join('');
 
   return `
     <div class="tooltip-boss-info">
@@ -869,16 +894,18 @@ const updateBossInfo = () => {
   if (!thisBossKey) return;
 
   const rows = dialog.querySelectorAll('.group-member-row');
-  let suitValues: number[] = [];
+  const suitNames: string[] = [];
   for (const row of rows) {
     const suitImg = row.querySelector('.toon__track--suit');
     if (suitImg instanceof HTMLElement && (suitImg.title || suitImg.dataset.originalTitle)) {
-      suitValues.push(getCogValueFromName(suitImg.title || suitImg.dataset.originalTitle || ''));
+      suitNames.push(suitImg.title || suitImg.dataset.originalTitle || '');
     }
   }
 
-  if (suitValues.length === 0) return;
-  const averageSuitValue = Math.round(suitValues.reduce((sum, value) => sum + value, 0) / suitValues.length);
+  const suitValues = suitNames.map(name => getCogValueFromName(name));
+  const currentSum = suitValues.reduce((sum, v) => sum + v, 0);
+  const averageSuitValue = getAverageSuitValue(suitNames);
+  if (averageSuitValue === 0) return;
   const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
 
   let infoText = '';
@@ -887,11 +914,11 @@ const updateBossInfo = () => {
   if (thisBossKey === 'lawbot') {
     const tierData = getCJDifficultyTier(averageSuitValue);
     infoText = `(${tierData.lawyers} lawyers)`;
-    html = renderLawbotTooltip(tierData, suitString, thisBossKey);
+    html = renderLawbotTooltip(tierData, suitString, thisBossKey, currentSum, suitNames.length);
   } else {
     const currentPinkSlips = getPinkSlips(averageSuitValue);
     infoText = `(${currentPinkSlips} Pink Slips)`;
-    html = renderBossbotTooltip(suitString, currentPinkSlips, thisBossKey);
+    html = renderBossbotTooltip(suitString, currentPinkSlips, thisBossKey, currentSum, suitNames.length);
   }
 
   // Ensure tooltip exists
