@@ -27,10 +27,10 @@ function App() {
 
       <div className="disclaimer">
         <div>
-          ToonHQ+ is an extension to enhance the ToonHQ experience.
+          ToonHQ+ is an extension that enhances the ToonHQ experience.
         </div>
         <div>
-          This extension is independently created and not affiliated, maintained, or endorsed by the ToonHQ team.
+          This extension is independently created and is not affiliated with, maintained by, or endorsed by the ToonHQ team.
         </div>
       </div>
 
