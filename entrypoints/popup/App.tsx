@@ -1,34 +1,67 @@
-import { useState } from 'react';
-import reactLogo from '@/assets/react.svg';
-import wxtLogo from '/wxt.svg';
 import './App.css';
+import logo from '@/assets/logo-32.png';
 
 function App() {
-  const [count, setCount] = useState(0);
-
   return (
-    <>
-      <div>
-        <a href="https://wxt.dev" target="_blank">
-          <img src={wxtLogo} className="logo" alt="WXT logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="popup-container">
+      <div className="title-container">
+        <img src={logo} alt="ToonHQ+ Logo" className="title-logo" />
+        <h1>ToonHQ+</h1>
       </div>
-      <h1>WXT + React</h1>
+
       <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+        <a href="https://toonhq.org/groups" target="_blank" rel="noreferrer">
+          <button className="cta-button">
+            Go to ToonHQ.com
+          </button>
+        </a>
       </div>
-      <p className="read-the-docs">
-        Click on the WXT and React logos to learn more
-      </p>
-    </>
+
+      <div className="card">
+        <a href="https://chromewebstore.google.com/detail/toonhq+/npoiljoenaihnleoogcmcpfgdikdjmfg" target="_blank" rel="noreferrer">
+          <button className="webstore-button">
+            Go to Chrome Web Store Page
+          </button>
+        </a>
+      </div>
+
+      <div className="disclaimer">
+        <div>
+          ToonHQ+ is an extension to enhance the ToonHQ experience.
+        </div>
+        <div>
+          This extension is independently created and not affiliated, maintained, or endorsed by the ToonHQ team.
+        </div>
+      </div>
+
+      <div className="bottom-section">
+        <div className="image-side">
+          <img
+            src="https://rendition.toontownrewritten.com/render/7414000001501b451bba1b25002525010400010000000000000000010000032c00/waving/128x128.png"
+            alt="Waving Toon"
+          />
+        </div>
+
+        <div className="feedback">
+          <div>
+            <div>
+              Have any questions, suggestions or other feedback?
+            </div>
+            <div>
+              Feel free to reach out!
+            </div>
+          </div>
+          <div className="contact-info">
+            <div>
+              Discord: <a href="https://discord.com/users/140381706992484352" target="_blank" rel="noreferrer"><strong>@hoque</strong></a>
+            </div>
+            <div>
+              Email: <a href="mailto:toonyhoque@gmail.com"><strong>toonyhoque@gmail.com</strong></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
