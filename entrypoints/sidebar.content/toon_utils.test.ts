@@ -1,4 +1,4 @@
-import { getCogValueFromName, getAverageSuitValue } from './toonUtils';
+import { getCogValueFromName, getAverageSuitValue, getGroupDisplayName, getGroupSimpleName } from './toonUtils';
 
 /**
  * Simple test runner for ToonUtils.
@@ -61,6 +61,38 @@ function runTests() {
     const actual = getAverageSuitValue(names);
     const passed = actual === expected;
     console.log(`${passed ? 'PASS' : 'FAIL'} | [${names.join(', ')}] -> expected ${expected}, got ${actual}`);
+  });
+
+  const groupDisplayNameTests = [
+    { typeId: 28, groupId: 123, expected: 'CEO' },
+    { typeId: 22, groupId: 456, expected: 'VP' },
+    { typeId: 20, groupId: 789, expected: 'Building' },
+    { typeId: 20, groupId: 789, options: { '16': 50, '17': 55 }, expected: 'One Story Sellbot Building' },
+    { typeId: 23, groupId: 111, options: { '22': 69, '23': 70 }, expected: 'Bullion Sound Mint' },
+    { typeId: 999, groupId: 101, expected: 'Group #101' },
+    { typeId: 999, expected: 'Unknown Group' },
+  ];
+
+  console.log('\n[getGroupDisplayName Tests]');
+  groupDisplayNameTests.forEach(({ typeId, groupId, options, expected }) => {
+    const actual = getGroupDisplayName(typeId, groupId, options as any);
+    const passed = actual === expected;
+    console.log(`${passed ? 'PASS' : 'FAIL'} | type ${typeId}, id ${groupId}, options ${JSON.stringify(options)} -> expected "${expected}", got "${actual}"`);
+  });
+
+  const groupSimpleNameTests = [
+    { typeId: 28, groupId: 123, options: { 30: 95 }, expected: 'Tier 1 CEO' },
+    { typeId: 20, groupId: 789, options: { 17: 55 }, expected: 'Sellbot Building' },
+    { typeId: 20, groupId: 789, options: { 16: 50, 17: 55 }, expected: 'Sellbot Building' }, // Stories showOnSimple=false
+    { typeId: 46, groupId: 222, options: { 41: 125 }, expected: 'One Star Field Office' }, // Field Office simpleName override
+    { typeId: 999, groupId: 101, expected: 'Group #101' },
+  ];
+
+  console.log('\n[getGroupSimpleName Tests]');
+  groupSimpleNameTests.forEach(({ typeId, groupId, options, expected }) => {
+    const actual = getGroupSimpleName(typeId, groupId, options as any);
+    const passed = actual === expected;
+    console.log(`${passed ? 'PASS' : 'FAIL'} | type ${typeId}, id ${groupId}, options ${JSON.stringify(options)} -> expected "${expected}", got "${actual}"`);
   });
 
   console.log('\n--- Tests Completed ---');

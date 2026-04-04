@@ -60,6 +60,7 @@ export interface GroupRecord {
   type: number;
   created: string;
   userJoinedAt: string;
+  options?: Record<string, number>;
 }
 
 export interface GroupMemberRecord {

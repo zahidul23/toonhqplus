@@ -1315,6 +1315,7 @@ export default defineContentScript({
         type: group.type,
         created: group.created,
         userJoinedAt: activeMember.joined || group.created,
+        options: group.options,
       }).catch(console.error);
 
       // Persist all members

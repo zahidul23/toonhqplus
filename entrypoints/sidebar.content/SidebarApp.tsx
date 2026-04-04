@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo, memo } from 'react';
 import { groupTypes } from './groupTypes';
+import { getGroupDisplayName, getGroupSimpleName } from './toonUtils';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
 import { ShtickerBook } from './ShtickerBook.tsx';
@@ -137,7 +138,11 @@ const RelativeTime = memo(({ date }: { date: string }) => {
     return () => clearTimeout(timeoutId);
   }, [date]);
 
-  return <span>{display}</span>;
+  return (
+    <span title={`${new Date(date).toDateString()} ${new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}>
+      {display}
+    </span>
+  );
 });
 
 async function updateToonList(
@@ -1362,7 +1367,7 @@ export function SidebarApp() {
               {activeTab === 'history' && (
                 <section className="flex-1 flex flex-col min-h-0">
                   {selectedHistoryGroup === null ? (
-                    <>
+                    <div className="flex-1 flex flex-col min-h-0">
                       <div className="mb-2 shrink-0 flex items-center justify-between">
                         <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
                       </div>
@@ -1377,18 +1382,34 @@ export function SidebarApp() {
                               return timeB - timeA;
                             })
                             .slice(0, 20)
-                            .map((group) => {
-                              const typeData = groupTypes.find((t) => t.id === group.type);
-                              const groupName = typeData ? typeData.name : `Group #${group.id}`;
+                            .map((group: any) => {
+                              const groupName = getGroupSimpleName(group.type, group.id, group.options);
                               const groupMembers = historyGroupMembers[group.id];
                               return (
-                                <div key={group.id} className="group relative">
+                                <div 
+                                  key={group.id} 
+                                  className="group relative"
+                                  style={{ viewTransitionName: `group-card-${group.id}` } as React.CSSProperties}
+                                >
                                   <button
-                                    onClick={() => setSelectedHistoryGroup(group.id)}
+                                    onClick={() => {
+                                      if ((document as any).startViewTransition) {
+                                        (document as any).startViewTransition(() => {
+                                          setSelectedHistoryGroup(group.id);
+                                        });
+                                      } else {
+                                        setSelectedHistoryGroup(group.id);
+                                      }
+                                    }}
                                     className="w-full text-left rounded border border-black/50 bg-black/40 hover:bg-black/60 p-3 shadow-sm transition-colors flex justify-between items-center cursor-pointer"
                                   >
                                     <div className="flex-1 min-w-0">
-                                      <span className="block text-sm font-bold text-white truncate">{groupName}</span>
+                                      <span 
+                                        className="block text-sm font-bold text-white truncate"
+                                        style={{ viewTransitionName: `group-title-${group.id}` } as React.CSSProperties}
+                                      >
+                                        {groupName}
+                                      </span>
                                       <span className="block text-xs text-green-200 mt-1">
                                         <RelativeTime date={group.userJoinedAt || group.created} />
                                       </span>
@@ -1409,104 +1430,115 @@ export function SidebarApp() {
                             })
                         )}
                       </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex flex-col min-h-0">
-                      <div className="flex items-center gap-2 mb-3 shrink-0">
-                        <button
-                          onClick={() => setSelectedHistoryGroup(null)}
-                          className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white cursor-pointer"
-                        >
-                          ← Back
-                        </button>
-                        <h3 className="text-sm font-bold text-green-50 truncate">
-                          {groupTypes.find((t) => t.id === historyGroups[selectedHistoryGroup]?.type)?.name || `Group #${historyGroups[selectedHistoryGroup]?.id}`}
-                        </h3>
-                      </div>
-                      <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                        {(() => {
-                          const group = historyGroups[selectedHistoryGroup];
-                          const toons = historyGroupMembers[group.id]?.toons;
-
-                          const userActiveIds: ToonId[] = [];
-                          const otherActiveIds: ToonId[] = [];
-                          const userLeftIds: ToonId[] = [];
-                          const otherLeftIds: ToonId[] = [];
-
-                          (toons).forEach((toon: { toonId: ToonId, left: boolean }) => {
-                            const isUserToon = activeToonIds.includes(toon.toonId);
-                            const hasLeft = toon.left;
-
-                            if (isUserToon) {
-                              if (hasLeft) userLeftIds.push(toon.toonId);
-                              else userActiveIds.push(toon.toonId);
-                            } else {
-                              if (hasLeft) otherLeftIds.push(toon.toonId);
-                              else otherActiveIds.push(toon.toonId);
-                            }
-                          });
-
-                          const renderRows = (targetIds: ToonId[]) =>
-                            targetIds.map((id: ToonId) => {
-                              const toonData = historyToons[id];
-                              if (!toonData) return null;
-                              const isHovered = hoveredToonId
-                                ? String(toonData.id) === hoveredToonId
-                                : (hoveredToonName && toonData.name === hoveredToonName);
-                              return (
-                                <ToonRow
-                                  key={toonData.id}
-                                  toon={toonData}
-                                  isFavorited={favorites.includes(toonData.id)}
-                                  isBlocked={blocked.includes(toonData.id)}
-                                  isOwnToon={activeToonIds.includes(toonData.id)}
-                                  note={notes[String(toonData.id)]}
-                                  refresh={refresh}
-                                  isHovered={!!isHovered}
-                                  isJustAdded={justAddedId === toonData.id}
-                                  onRequestDialog={handleRequestDialog}
-                                  onMouseEnter={(e: React.MouseEvent) => {
-                                    setHoveredToonId(String(toonData.id));
-                                    setHoveredToonName(toonData.name);
-                                    setHoverSource('sidebar');
-                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                    setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                                  }}
-                                  onMouseLeave={() => {
-                                    setHoveredToonId(null);
-                                    setHoveredToonName(null);
-                                    setHoverSource(null);
-                                    setHoveredRect(null);
-                                  }}
-                                />
-                              );
-                            });
-                          return (
-                            <>
-                              {userActiveIds.length > 0 && (
-                                <>
-                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1">Your Toons</div>
-                                  {renderRows(userActiveIds)}
-                                </>
-                              )}
-                              {otherActiveIds.length > 0 && (
-                                <>
-                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2">Group Members</div>
-                                  {renderRows(otherActiveIds)}
-                                </>
-                              )}
-                              {(userLeftIds.length > 0 || otherLeftIds.length > 0) && (
-                                <>
-                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2 opacity-50">Toons that left</div>
-                                  <div className="opacity-60">{renderRows([...userLeftIds, ...otherLeftIds])}</div>
-                                </>
-                              )}
-                            </>
-                          )
-
-                        })()}
-                      </ul>
                     </div>
+                  ) : (
+                    (() => {
+                      const group = historyGroups[selectedHistoryGroup!];
+                      if (!group) return null;
+                      const toons = historyGroupMembers[group.id]?.toons || [];
+
+                      const activeMemberIds: ToonId[] = [];
+                      const otherActiveIds: ToonId[] = [];
+                      const leftMemberIds: ToonId[] = [];
+
+                      toons.forEach((toon: { toonId: ToonId, left: boolean }) => {
+                        if (toon.left) {
+                          leftMemberIds.push(toon.toonId);
+                        } else if (activeToonIds.includes(toon.toonId)) {
+                          activeMemberIds.push(toon.toonId);
+                        } else {
+                          otherActiveIds.push(toon.toonId);
+                        }
+                      });
+
+                      const activeToRender = [...activeMemberIds, ...otherActiveIds];
+
+                      const renderRows = (targetIds: ToonId[]) =>
+                        targetIds.map((id: ToonId) => {
+                          const toonData = historyToons[id];
+                          if (!toonData) return null;
+                          const isHovered = hoveredToonId
+                            ? String(toonData.id) === hoveredToonId
+                            : (hoveredToonName && toonData.name === hoveredToonName);
+                          return (
+                            <ToonRow
+                              key={toonData.id}
+                              toon={toonData}
+                              isFavorited={favorites.includes(toonData.id)}
+                              isBlocked={blocked.includes(toonData.id)}
+                              isOwnToon={activeToonIds.includes(toonData.id)}
+                              note={notes[String(toonData.id)]}
+                              refresh={refresh}
+                              isHovered={!!isHovered}
+                              isJustAdded={justAddedId === toonData.id}
+                              onRequestDialog={handleRequestDialog}
+                              onMouseEnter={(e: React.MouseEvent) => {
+                                setHoveredToonId(String(toonData.id));
+                                setHoveredToonName(toonData.name);
+                                setHoverSource('sidebar');
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredToonId(null);
+                                setHoveredToonName(null);
+                                setHoverSource(null);
+                                setHoveredRect(null);
+                              }}
+                            />
+                          );
+                        });
+
+                      return (
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <div className="flex items-center gap-2 mb-3 shrink-0">
+                            <button
+                              onClick={() => {
+                                if ((document as any).startViewTransition) {
+                                  (document as any).startViewTransition(() => {
+                                    setSelectedHistoryGroup(null);
+                                  });
+                                } else {
+                                  setSelectedHistoryGroup(null);
+                                }
+                              }}
+                              className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white cursor-pointer"
+                            >
+                              ← Back
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <h3 
+                                className="text-sm font-bold text-green-50 break-words leading-tight"
+                                style={{ viewTransitionName: `group-title-${group.id}` } as React.CSSProperties}
+                              >
+                                {getGroupDisplayName(group.type, group.id, group.options)}
+                              </h3>
+                              <div className="text-[10px] text-green-200/50 mt-0.5 flex items-center gap-1.5">
+                                <RelativeTime date={group.userJoinedAt || group.created} />
+                                <span className="opacity-30">•</span>
+                                <span>
+                                  {`${new Date(group.userJoinedAt || group.created).toDateString()} ${new Date(group.userJoinedAt || group.created).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                            {activeToRender.length > 0 && (
+                              <>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-1">Group Members</div>
+                                {renderRows(activeToRender)}
+                              </>
+                            )}
+                            {leftMemberIds.length > 0 && (
+                              <>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2 opacity-50">Toons that left</div>
+                                <div className="opacity-60">{renderRows(leftMemberIds)}</div>
+                              </>
+                            )}
+                          </ul>
+                        </div>
+                      );
+                    })()
                   )}
                 </section>
               )}
