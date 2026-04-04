@@ -3,7 +3,7 @@ import { gags as gagsConfig } from './gags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc';
+type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'bosses';
 
 type AllowedGagTrackId = 'throw' | 'squirt' | 'sound';
 type BoilerRoundType = 'neutral' | 'fired_up' | 'defense' | 'meltdown';
@@ -110,6 +110,71 @@ const SOS_SOUND_GAGS: Array<{ gagIndex: number; damage: number; image: string; n
   { gagIndex: 4, damage: 55, image: SOS_SID, name: "Sid Sonata" },
   { gagIndex: 5, damage: 75, image: SOS_MOE, name: "Moe Zart" },
 ];
+const BOSSES_INFO = [
+  {
+    id: 'cj',
+    title: 'Chief Justice (CJ)',
+    fullName: 'Chief Justice',
+    shortName: 'CJ',
+    rewardLabel: 'Cog Summons',
+    image: 'https://toonhq.org/static/assets/groups/large/cj.jpg',
+    bossImage: 'https://toonhq.org/static/assets/groups/square/cj.jpg',
+    cardBg: '#2e5db1',
+    cardBorder: '#60a5fa',
+    department: 'Lawbot',
+    tiers: [
+      { tier: 1, cgv: '1-9', cgl: 'Bottom Feeder 1 - Bloodsucker 5', lawyers: 8, gavels: 4, evidence: 38, bonus: 'No', healed: 1 },
+      { tier: 2, cgv: '10-18', cgl: 'Bloodsucker 6 - Ambulance Chaser 6', lawyers: 8, gavels: 5, evidence: 36, bonus: 'No', healed: 1 },
+      { tier: 3, cgv: '19-26', cgl: 'Ambulance Chaser 7 - Spin Doctor 6', lawyers: 8, gavels: 5, evidence: 34, bonus: 'No', healed: 1 },
+      { tier: 4, cgv: '27-35', cgl: 'Spin Doctor 7 - Legal Eagle 11', lawyers: 8, gavels: 6, evidence: 32, bonus: 'No', healed: 2 },
+      { tier: 5, cgv: '36-43', cgl: 'Big Wig 8 - Big Wig 15', lawyers: 8, gavels: 6, evidence: 30, bonus: 'No', healed: 2 },
+      { tier: 6, cgv: '44-52', cgl: 'Big Wig 16 - Big Wig 24', lawyers: 8, gavels: 7, evidence: 28, bonus: 'No', healed: 3 },
+      { tier: 7, cgv: '53-60', cgl: 'Big Wig 25 - Big Wig 32', lawyers: 9, gavels: 7, evidence: 26, bonus: 'Yes', healed: 3 },
+      { tier: 8, cgv: '61-69', cgl: 'Big Wig 33 - Big Wig 41', lawyers: 9, gavels: 8, evidence: 24, bonus: 'Yes', healed: 4 },
+      { tier: 9, cgv: '70+', cgl: 'Big Wig 42+', lawyers: 10, gavels: 8, evidence: 22, bonus: 'Yes', healed: 4 },
+    ],
+    attacks: [
+      { name: 'Bump', damage: 1, note: 'Bumping into CJ' },
+      { name: 'Swipe', damage: 5, note: 'Near CJ' },
+      { name: 'Jump', damage: 10, note: "CJ's shockwave slam" },
+    ],
+    moves: [
+      { name: 'Contempt', effect: 'Jump', note: 'CJ yell initiates a jump' },
+      { name: 'Stun Bonus', effect: 'Laff / Weight', note: 'All Cogs stunned = +10 Laff & Weight bonus' },
+    ],
+  },
+  {
+    id: 'ceo',
+    title: 'Chief Executive Officer (CEO)',
+    fullName: 'Chief Executive Officer',
+    shortName: 'CEO',
+    rewardLabel: 'Pink Slips',
+    image: 'https://toonhq.org/static/assets/groups/large/ceo.jpg',
+    bossImage: 'https://toonhq.org/static/assets/groups/square/ceo.jpg',
+    cardBg: '#4a3728',
+    cardBorder: '#8c5d3d',
+    department: 'Bossbot',
+    tiers: [
+      { tier: 1, cgv: '1-16', cgl: 'Flunky 1 - Micromanager 4', timer: '270s', cogs: 'Head Hunter 10-11', tables: 8, cogsTable: 4, totalCogs: 40, slips: 2 },
+      { tier: 2, cgv: '17-32', cgl: 'Micromanager 5 - Corp Raider 8', timer: '285s', cogs: 'Head Hunter / Corp Raider 10-12', tables: 9, cogsTable: 5, totalCogs: 50, slips: 3 },
+      { tier: 3, cgv: '33-47', cgl: 'Corp Raider 9 - Big Cheese 19', timer: '300s', cogs: 'Corporate Raider 11-12', tables: 10, cogsTable: 6, totalCogs: 55, slips: 4 },
+      { tier: 4, cgv: '48-62', cgl: 'Big Cheese 20 - Big Cheese 34', timer: '315s', cogs: 'Corp Raider / Big Cheese 11-13', tables: 12, cogsTable: 8, totalCogs: 60, slips: 5 },
+      { tier: 5, cgv: '63+', cgl: 'Big Cheese 35+', timer: '330s', cogs: 'Big Cheese 12-14', tables: 13, cogsTable: 5, totalCogs: 65, slips: 6 },
+    ],
+    attacks: [
+      { name: 'Swing', damage: 'Varies', note: 'Stream of golf balls' },
+      { name: 'Throw Gears', damage: 'Varies', note: 'Targeted gear toss' },
+      { name: 'Fore', damage: 'Varies', note: 'Giant golf ball waves' },
+      { name: 'Reorganize', damage: 20, note: 'Destroy belt (Orange health)' },
+      { name: 'Downsize', damage: 25, note: 'Destroy belt (Red health)' },
+    ],
+    moves: [
+      { name: 'Banquet', effect: 'Oil Cans', note: 'Feed Cogs to avoid battle rounds' },
+      { name: 'Seltzer', effect: 'Damage', note: 'Low: 6, Med: 12, High: 24' },
+      { name: 'Golf', effect: 'Slowing', note: 'Slow down CEO treadmill' },
+    ],
+  },
+];
 
 const FACILITIES_INFO: FacilityInfo[] = [
   {
@@ -165,8 +230,8 @@ const FACILITIES_INFO: FacilityInfo[] = [
     bossName: 'Club President',
     image: 'https://toonhq.org/static/assets/groups/large/golf.jpg',
     bossImage: '/images/president.webp',
-    cardBg: '#8c5d3d',
-    cardBorder: '#ca8a04',
+    cardBg: '#4a3728',
+    cardBorder: '#8c5d3d',
     subtypes: [
       { name: 'The First Fairway', minReward: 882, maxReward: 975, bossHealth: 1200, shortName: 'Fairway' },
       { name: 'The Final Fringe', minReward: 2097, maxReward: 2305, bossHealth: 1750, shortName: 'Fringe' },
@@ -1421,14 +1486,14 @@ function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBa
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-10">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
         {/* 1. Images (Top on mobile, Top-Left on desktop) */}
-        <div className="lg:col-span-6">
+        <div className="lg:col-span-3">
           <FacilityImages facility={facility} heightClass="h-48" />
         </div>
 
         {/* 2. Boss HP & Rewards (Middle on mobile, Right column on desktop) */}
-        <div className="lg:col-span-4 lg:row-span-2 space-y-6">
+        <div className="lg:col-span-2 lg:row-span-2 space-y-6">
           {/* Boss HP Section */}
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
             <div className="mb-4 flex items-center gap-2">
@@ -1449,7 +1514,7 @@ function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBa
         </div>
 
         {/* 3. Attacks & Special Moves (Bottom on mobile, Bottom-Left on desktop) */}
-        <div className="lg:col-span-6">
+        <div className="lg:col-span-3">
           <BossInfographic facilityId={facility.id} />
         </div>
       </div>
@@ -1999,6 +2064,285 @@ function FieldOfficeTabContent() {
   );
 }
 
+// ─── Bosses tab subcomponents ────────────────────────────────────────────────
+
+function BossCard({ boss, idx, onOpen }: { boss: any; idx: number; onOpen: (idx: number) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(idx)}
+      className="group relative flex flex-col rounded-xl border p-3 text-white transition-all hover:brightness-110 hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left w-full shadow-lg"
+      style={{
+        background: `linear-gradient(180deg, ${boss.cardBg}ee 0%, ${boss.cardBg}c8 55%, #0f172abf 100%)`,
+        borderColor: boss.cardBorder,
+      }}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="text-sm font-black uppercase tracking-tight">{boss.title}</h4>
+        <div className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:bg-white/20 group-hover:text-white transition-colors">
+          View Tiers
+        </div>
+      </div>
+      <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
+        <img src={boss.image} alt={boss.title} className="h-[200px] w-full rounded-md border border-white/20 object-cover" />
+        <img src={boss.bossImage} alt={boss.title} className="h-[200px] w-[200px] rounded-md border border-white/20 bg-black/30 object-contain" />
+      </div>
+      <div className="mt-2 w-full text-center py-2 bg-black/20 rounded-lg border border-white/5">
+        <p className="text-xs font-bold text-white/60 uppercase tracking-widest">Department: {boss.department}</p>
+        <p className="text-sm font-black text-emerald-400">{boss.tiers.length} Difficulty Tiers</p>
+      </div>
+    </button>
+  );
+}
+
+function BossTierTable({ boss }: { boss: any }) {
+  if (boss.id === 'cj') {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+          <h5 className="text-sm font-black uppercase tracking-widest text-blue-400">CJ Difficulty Tiers</h5>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-white/5 bg-black/20">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                <th className="px-2 py-2 text-center whitespace-nowrap">Tier</th>
+                <th className="px-2 py-2 whitespace-nowrap">Cog Disguise</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap">Lawyers</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap">Gavels</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap">Evidence</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap">Bonus</th>
+                <th className="px-2 py-2 text-center whitespace-nowrap">Heal</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {boss.tiers.map((t: any) => (
+                <tr key={t.tier} className="hover:bg-white/5 transition-colors">
+                  <td className="px-2 py-2 text-center font-black text-white/90">{t.tier}</td>
+                  <td className="px-2 py-2">
+                    <span className="font-black text-white/50 mr-1.5">({t.cgv})</span>
+                    <span className="text-white/80">{t.cgl}</span>
+                  </td>
+                  <td className="px-2 py-2 text-center font-black text-emerald-300 tabular-nums">{t.lawyers}</td>
+                  <td className="px-2 py-2 text-center font-black text-orange-300 tabular-nums">{t.gavels}</td>
+                  <td className="px-2 py-2 text-center font-black text-cyan-300 tabular-nums">{t.evidence}</td>
+                  <td className={`px-2 py-2 text-center font-black ${t.bonus === 'Yes' ? 'text-emerald-400' : 'text-white/20'}`}>{t.bonus}</td>
+                  <td className="px-2 py-2 text-center font-black text-rose-300 tabular-nums">+{t.healed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-amber-600 animate-pulse" />
+        <h5 className="text-sm font-black uppercase tracking-widest text-amber-500">CEO Difficulty Tiers</h5>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-white/5 bg-black/20">
+        <table className="w-full min-w-max text-left text-[13px]">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+              <th className="px-2 py-2 text-center whitespace-nowrap">Tier</th>
+              <th className="px-2 py-2 whitespace-nowrap">Cog Disguise</th>
+              <th className="px-2 py-2 text-center whitespace-nowrap">Timer</th>
+              <th className="px-2 py-2 text-center whitespace-nowrap">Cogs Seated</th>
+              <th className="px-2 py-2 text-center whitespace-nowrap">Tables</th>
+              <th className="px-2 py-2 text-center whitespace-nowrap">Cogs</th>
+              <th className="px-2 py-2 text-center whitespace-nowrap">Slips</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {boss.tiers.map((t: any) => (
+              <tr key={t.tier} className="hover:bg-white/5 transition-colors">
+                <td className="px-2 py-2 text-center font-black text-white/90">{t.tier}</td>
+                <td className="px-2 py-2">
+                  <span className="font-black text-white/50 mr-1.5">({t.cgv})</span>
+                  <span className="text-white/80">{t.cgl}</span>
+                </td>
+                <td className="px-2 py-2 text-center font-black text-emerald-300 tabular-nums">{t.timer}</td>
+                <td className="px-2 py-2 text-center font-bold text-blue-300">{t.cogs}</td>
+                <td className="px-2 py-2 text-center font-black text-orange-300 tabular-nums">{t.tables}</td>
+                <td className="px-2 py-2 text-center font-black text-purple-300 tabular-nums">{t.totalCogs}</td>
+                <td className="px-2 py-2 text-center font-black text-rose-400 tabular-nums">{t.slips}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function getDepartmentColorConfig(dept: string) {
+  switch (dept.toLowerCase()) {
+    case 'sellbot':
+      return { color: 'text-purple-400', dot: 'bg-purple-500' };
+    case 'cashbot':
+      return { color: 'text-emerald-400', dot: 'bg-emerald-500' };
+    case 'lawbot':
+      return { color: 'text-blue-400', dot: 'bg-blue-500' };
+    case 'bossbot':
+      return { color: 'text-amber-400', dot: 'bg-amber-500' };
+    default:
+      return { color: 'text-blue-400', dot: 'bg-blue-500' };
+  }
+}
+
+function BossImages({
+  boss,
+  heightClass,
+}: {
+  boss: any;
+  heightClass: string;
+}) {
+  const widthClass = heightClass.replace('h-', 'w-');
+  return (
+    <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
+      <img src={boss.image} alt={boss.title} className={`${heightClass} w-full rounded-md border border-white/20 object-cover`} />
+      <img src={boss.bossImage} alt={boss.title} className={`${heightClass} ${widthClass} rounded-md border border-white/20 bg-black/30 object-cover`} />
+    </div>
+  );
+}
+
+function BossInfoSection({ boss }: { boss: any }) {
+  const { color, dot } = getDepartmentColorConfig(boss.department);
+
+  return (
+    <div className="space-y-6">
+      {/* Attacks Table */}
+      {boss.attacks && (
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full ${dot} animate-pulse`} />
+            <h5 className={`text-sm font-black uppercase tracking-widest ${color}`}>Boss Attacks</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[12px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5">Attack</th>
+                  <th className="px-3 py-2.5 text-center">Damage</th>
+                  <th className="px-3 py-2.5">Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {boss.attacks.map((atk: any) => (
+                  <tr key={atk.name} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5 font-bold text-white/90">{atk.name}</td>
+                    <td className="px-3 py-2.5 text-center font-black text-orange-300 tabular-nums">{atk.damage}</td>
+                    <td className="px-3 py-2.5 text-[10px] leading-tight text-white/40">{atk.note || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Special Moves Table */}
+      {boss.moves && (
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full ${dot} animate-pulse`} />
+            <h5 className={`text-sm font-black uppercase tracking-widest ${color}`}>Special Moves</h5>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+            <table className="w-full text-left text-[12px]">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5 font-black uppercase text-white/40">
+                  <th className="px-3 py-2.5">Move</th>
+                  <th className="px-3 py-2.5">Effect</th>
+                  <th className="px-3 py-2.5">Description</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {boss.moves.map((move: any) => (
+                  <tr key={move.name} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5 font-bold text-white/90">{move.name}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded px-1.5 py-0.5 font-black border ${color.replace('text', 'bg')}/10 ${color} ${color.replace('text', 'border')}/20`}>
+                        {move.effect}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-[10px] leading-snug text-white/50">{move.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BossesTabContent({
+  activeBoss,
+  setActiveBoss,
+}: {
+  activeBoss: number | null;
+  setActiveBoss: (idx: number | null) => void;
+}) {
+  if (activeBoss !== null) {
+    const boss = BOSSES_INFO[activeBoss];
+    return (
+      <section
+        className="mx-auto max-w-6xl rounded-xl border p-6 text-white"
+        style={{
+          background: `linear-gradient(180deg, ${boss.cardBg}ee 0%, ${boss.cardBg}c8 55%, #0f172abf 100%)`,
+          borderColor: boss.cardBorder,
+        }}
+      >
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveBoss(null)}
+              className="group flex h-10 w-10 items-center justify-center rounded-full bg-black/30 text-white/70 transition-all hover:bg-black/50 hover:text-white cursor-pointer"
+              title="Back to Overview"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:-translate-x-0.5">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <h4 className="text-2xl font-black uppercase tracking-tight">{boss.title}</h4>
+          </div>
+          <div className="rounded-md bg-black/40 px-3 py-1 text-sm font-bold text-white/80 border border-white/10 uppercase tracking-widest">
+            {boss.department}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
+          {/* 1. Images & Panels (Top-Left on desktop) */}
+          <div className="lg:col-span-3 space-y-6">
+            <BossImages boss={boss} heightClass="h-[200px]" />
+            <BossTierTable boss={boss} />
+          </div>
+
+          {/* 2. Right Column (Space for other panels) */}
+          <div className="lg:col-span-1 lg:row-span-2 space-y-6">
+            {/* No panels to add here right now */}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 min-[1200px]:grid-cols-2">
+      {BOSSES_INFO.map((boss, idx) => (
+        <BossCard key={boss.title} boss={boss} idx={idx} onOpen={setActiveBoss} />
+      ))}
+    </div>
+  );
+}
+
 // ─── ShtickerBook shell subcomponents ─────────────────────────────────────────
 
 function OpenBookButton({ onClick }: { onClick: () => void }) {
@@ -2047,27 +2391,47 @@ function BookSidebar({
     <div className="w-48 shrink-0 border-r border-[#0a2e1d]/80 bg-[#0f3f28] p-2">
       <button
         type="button"
+        onClick={() => { onTabChange('bosses'); onFacilityChange(null); }}
+        className={navButtonClass('bosses', 'mb-1')}
+      >
+        Bosses
+      </button>
+
+      <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
+        {BOSSES_INFO.map((boss, idx) => (
+          <button
+            key={boss.title}
+            type="button"
+            onClick={() => { onTabChange('bosses'); onFacilityChange(idx); }}
+            className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'bosses' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+              }`}
+          >
+            {(boss as any).fullName || boss.title}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
         onClick={() => { onTabChange('facilities'); onFacilityChange(null); }}
-        className={navButtonClass('facilities', 'mb-2')}
+        className={navButtonClass('facilities', 'mb-1')}
       >
         Facilities
       </button>
 
-      {activeTab === 'facilities' && (
-        <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
-          {FACILITIES_INFO.map((facility, idx) => (
-            <button
-              key={facility.title}
-              type="button"
-              onClick={() => onFacilityChange(idx)}
-              className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
-                }`}
-            >
-              {facility.title}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
+        {FACILITIES_INFO.map((facility, idx) => (
+          <button
+            key={facility.title}
+            type="button"
+            onClick={() => { onTabChange('facilities'); onFacilityChange(idx); }}
+            className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'facilities' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+              }`}
+          >
+            {facility.title}
+          </button>
+        ))}
+      </div>
 
       <button
         type="button"
@@ -2110,20 +2474,42 @@ export function ShtickerBook() {
   const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<InfoBookTab>(() => {
     try {
-      const stored = localStorage.getItem('toonhqplus_shtickerbook_active_tab');
-      if (stored === 'facilities' || stored === 'field_office' || stored === 'boiler_calc') {
-        return stored as InfoBookTab;
+      const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'bosses'];
+        if (validTabs.includes(parsed.tab)) {
+          return parsed.tab as InfoBookTab;
+        }
       }
     } catch (e) { }
     return 'facilities';
   });
-  const [activeFacility, setActiveFacility] = useState<number | null>(null);
+
+  const [activeFacility, setActiveFacility] = useState<number | null>(() => {
+    try {
+      const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const tab = parsed.tab as InfoBookTab;
+        const idx = parsed.facility;
+        if (typeof idx === 'number') {
+          if (tab === 'facilities' && idx >= 0 && idx < FACILITIES_INFO.length) return idx;
+          if (tab === 'bosses' && idx >= 0 && idx < BOSSES_INFO.length) return idx;
+        }
+      }
+    } catch (e) { }
+    return null;
+  });
 
   useEffect(() => {
     try {
-      localStorage.setItem('toonhqplus_shtickerbook_active_tab', activeTab);
+      localStorage.setItem(
+        'toonhqplus_shtickerbook_state',
+        JSON.stringify({ tab: activeTab, facility: activeFacility }),
+      );
     } catch (e) { }
-  }, [activeTab]);
+  }, [activeTab, activeFacility]);
 
   const closeBook = () => {
     if (isClosing) return;
@@ -2172,6 +2558,9 @@ export function ShtickerBook() {
                 )}
                 {activeTab === 'field_office' && <FieldOfficeTabContent />}
                 {activeTab === 'boiler_calc' && <BoilerCalculator />}
+                {activeTab === 'bosses' && (
+                  <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveFacility} />
+                )}
               </div>
             </div>
 
