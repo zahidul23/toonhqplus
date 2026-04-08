@@ -54,11 +54,12 @@ const SOS_FRANZ_NECKVEIN = 'https://rendition.toontownrewritten.com/render/740d0
 const SOS_BARNACLE_BESSIE = 'https://rendition.toontownrewritten.com/render/7414050200010c010c01190d000d0d010400000000000000000000000000000000/portrait/128x128.webp';
 
 
-const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; turns?: number; image: string; name: string }>> = {
+const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; turns?: number; image: string; name: string; isInstaKill?: boolean }>> = {
   trap: [
     { gagIndex: 3, damage: 60, image: SOS_CLERK_WILL, name: "Clerk Will" },
     { gagIndex: 4, damage: 120, image: SOS_CLERK_PENNY, name: "Clerk Penny" },
     { gagIndex: 5, damage: 180, image: SOS_CLERK_CLARA, name: "Clerk Clara" },
+    { gagIndex: 7, damage: 9999, image: getExtensionImageUrl('images/pinkslips.png'), name: "Pink Slip", isInstaKill: true },
   ],
   sound: [
     { gagIndex: 3, damage: 35, image: SOS_BARB, name: "Barbara Seville" },
@@ -97,7 +98,7 @@ interface Cog {
 
 // ─── Components ───────────────────────────────────────────────────────────────
 
-const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, disabled = false, onClick, overlayBottomRight, overlayBottom, targetPopup }: any) => {
+const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage, disabled = false, onClick, onOrganicClick, overlayBottom, targetPopup, organicTargetPopup, hasOrganic }: any) => {
   return (
     <div className="relative group">
       <button
@@ -122,13 +123,25 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, disabled = f
             {overlayBottom}
           </div>
         )}
-        {overlayBottomRight && (
-          <div className="absolute -bottom-1 -right-1 z-10 transition-transform group-hover:scale-110">
-            {overlayBottomRight}
-          </div>
-        )}
       </button>
+
+      {hasOrganic && (
+        <button
+          type="button"
+          onClick={onOrganicClick}
+          className="absolute -bottom-1 -right-1 z-20 w-6 h-6 transition-all hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+          title={organicTitle || `Organic ${title}`}
+        >
+          <img
+            src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
+            alt="Organic"
+            className="w-full h-full object-contain"
+          />
+        </button>
+      )}
+
       {targetPopup}
+      {organicTargetPopup}
     </div>
   );
 });
@@ -136,13 +149,15 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, disabled = f
 function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, activePopup, setActivePopup }: { track: GagTrack, onSelectGag: any, cogs: Cog[], cogDamages: number[], getHealthColor: any, activePopup: any, setActivePopup: any }) {
   const sosGags = SOS_GAGS[track.id] || [];
 
-  const TargetPopup = ({ trackId, gagIndex, variant }: { trackId: string; gagIndex: number; variant: GagVariant }) => {
+  const TargetPopup = ({ trackId, gagIndex, variant, alignment = 'center' }: { trackId: string; gagIndex: number; variant: GagVariant; alignment?: 'left' | 'center' | 'right' }) => {
     const isOpen = activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant;
     if (!isOpen) return null;
 
+    const alignClass = alignment === 'left' ? 'left-0' : alignment === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2';
+
     return (
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-[#0c3622] p-1.5 rounded-xl border border-white/10 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1">
-        <div className="flex gap-1">
+      <div className={`absolute bottom-full mb-3 w-max bg-[#0c3622] p-2 rounded-2xl border border-white/10 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 ${alignClass}`}>
+        <div className="flex gap-2">
           {[0, 1, 2, 3].map(cogIdx => {
             const cog = cogs[cogIdx];
             const choice = COG_CHOICES.find(c => c.id === cog.id);
@@ -153,32 +168,48 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             const innerHp = Math.min(maxHp, remainingTotal);
             const pInner = (innerHp / maxHp) * 100;
             const pOuter = (outerHp / maxHp) * 100;
-            const labelStr = choice?.type === 'boss' ? choice.label.split(' ')[1].substring(0,3) : cog.id;
+            const labelStr = choice?.type === 'boss' ? choice.label.split(' ')[1] : `Level ${cog.id}`;
+            const isPinkSlip = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex)?.isInstaKill;
+            const isSupervisor = choice?.type === 'boss';
+            const isDisabled = isPinkSlip && isSupervisor;
 
             return (
               <button
                 key={cogIdx}
+                disabled={isDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectGag(trackId, gagIndex, variant, cogIdx);
                   setActivePopup(null);
                 }}
-                className="flex flex-col items-center justify-between p-1.5 w-10 h-10 rounded-lg border border-white/5 bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 transition-all cursor-pointer"
+                className={`group/target relative flex flex-col items-center justify-between p-2 w-20 h-24 rounded-xl border border-white/10 transition-all overflow-hidden shadow-lg ${isDisabled ? 'opacity-20 cursor-not-allowed grayscale bg-black/80' : 'bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 cursor-pointer'}`}
               >
-                <div className="flex-1 flex items-center justify-center">
-                  <span className="text-[11px] font-black text-white/80">{labelStr}</span>
-                </div>
-                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden relative">
-                  <div
-                    className={`absolute top-0 left-0 bottom-0 transition-all duration-300 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
-                    style={{ width: `${cog.isV2 && outerHp > 0 ? pOuter : pInner}%` }}
+                {choice?.img && (
+                  <img
+                    src={choice.img as string}
+                    alt={labelStr}
+                    className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover/target:opacity-60 group-hover/target:scale-110 transition-all duration-500"
                   />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+                
+                <div className="relative z-10 flex flex-col items-center">
+                  <span className="text-[11px] font-black text-white/90 truncate max-w-full drop-shadow-md">{labelStr}</span>
+                </div>
+
+                <div className="relative z-10 w-full flex flex-col gap-1 mt-auto">
+                    <div className="h-2 w-full bg-black/60 rounded-full overflow-hidden relative border border-white/10">
+                      <div
+                        className={`absolute top-0 left-0 bottom-0 transition-all duration-300 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
+                        style={{ width: `${cog.isV2 && outerHp > 0 ? pOuter : pInner}%` }}
+                      />
+                    </div>
                 </div>
               </button>
             );
           })}
         </div>
-        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#0c3622]"></div>
+        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]"></div>
       </div>
     );
   };
@@ -199,32 +230,17 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
 
   return (
     <div className="flex flex-col gap-1.5">
-      {sosGags.length > 0 && (
-        <div className="flex gap-1">
-          <div className="w-14 h-10" />
-          <div className="w-14 h-10" />
-          <div className="w-14 h-10" />
-          <div className="w-14 h-10" />
-          {sosGags.map((sos: any) => (
-            <GagButton
-              key={`sos-${sos.gagIndex}`}
-              imageSrc={sos.image}
-              imageAlt={sos.name}
-              color={track.color}
-              title={`${sos.name} (${sos.damage})`}
-              damage={sos.damage}
-              onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', true)}
-            />
-          ))}
-        </div>
-      )}
-
       <div className="flex gap-1 items-center">
         {track.gags.map((gag: any, idx: number) => {
-          const isAllTarget = track.id === 'sound' || idx === 6 || (track.id === 'lure' && [1, 3, 5].includes(idx));
+          const isAllTarget = track.id === 'sound' || (['trap', 'lure', 'drop'].includes(track.id) && idx === 6) || (track.id === 'lure' && [1, 3, 5].includes(idx));
           const titleText = track.id === 'lure'
             ? `${gag.name} (${LURE_DURATIONS[idx]} rounds)`
             : `${gag.name} (${gag.base})`;
+
+          const organicDamage = gag.organic ?? gag.base;
+          const organicTitle = track.id === 'lure'
+            ? `Organic ${gag.name}`
+            : `Organic ${gag.name} (${organicDamage})`;
 
           return (
             <GagButton
@@ -233,45 +249,44 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
               imageAlt={gag.name}
               color={track.color}
               title={titleText}
+              organicTitle={organicTitle}
               damage={gag.base}
               onClick={(e: any) => handleGagClick(e, track.id, idx, 'base', isAllTarget)}
+              onOrganicClick={(e: any) => handleGagClick(e, track.id, idx, 'organic', isAllTarget)}
+              hasOrganic={true}
               targetPopup={!isAllTarget && (
-                <TargetPopup trackId={track.id} gagIndex={idx} variant="base" />
+                <TargetPopup trackId={track.id} gagIndex={idx} variant="base" alignment={idx < 3 ? 'left' : idx > 4 ? 'right' : 'center'} />
+              )}
+              organicTargetPopup={!isAllTarget && (
+                <TargetPopup trackId={track.id} gagIndex={idx} variant="organic" alignment={idx < 3 ? 'left' : idx > 4 ? 'right' : 'center'} />
               )}
             />
           );
         })}
-      </div>
 
-      {track.id !== 'lure' && (
-        <div className="flex gap-1">
-          {track.gags.map((gag: any, idx: number) => {
-            const organicDamage = gag.organic ?? gag.base;
-            const isAllTarget = track.id === 'sound' || idx === 6;
-            return (
-              <GagButton
-                key={`${track.id}-${idx}-organic`}
-                imageSrc={`https://toonhq.org/static/assets/gags/${gag.image}`}
-                imageAlt={`${gag.name} organic`}
-                color={track.color}
-                title={`${gag.name} (Organic ${organicDamage})`}
-                damage={organicDamage}
-                onClick={(e: any) => handleGagClick(e, track.id, idx, 'organic', isAllTarget)}
-                targetPopup={!isAllTarget && (
-                  <TargetPopup trackId={track.id} gagIndex={idx} variant="organic" />
-                )}
-                overlayBottomRight={
-                  <img
-                    src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
-                    alt="Organic"
-                    className="h-5 w-5"
-                  />
-                }
-              />
-            );
-          })}
-        </div>
-      )}
+        {sosGags.length > 0 && (
+          <>
+            <div className="w-px h-8 bg-white/10 mx-1" />
+            {sosGags.map((sos: any) => {
+              const isAllTarget = sos.isInstaKill !== true;
+              return (
+                <GagButton
+                  key={`sos-${sos.gagIndex}`}
+                  imageSrc={sos.image}
+                  imageAlt={sos.name}
+                  color={track.color}
+                  title={`${sos.name} (${sos.damage})`}
+                  damage={sos.damage}
+                  onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
+                  targetPopup={!isAllTarget && (
+                    <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
+                  )}
+                />
+              );
+            })}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -314,7 +329,8 @@ export function CogCalculator() {
   }, []);
 
   const handleSelectGag = (trackId: string, gagIndex: number, variant: GagVariant, targetIdx?: number) => {
-    const isAllTarget = trackId === 'sound' || variant === 'sos' || gagIndex === 6 || (trackId === 'lure' && [1, 3, 5, 6].includes(gagIndex));
+    const isSosInstaKill = variant === 'sos' && (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex)?.isInstaKill;
+    const isAllTarget = trackId === 'sound' || (variant === 'sos' && !isSosInstaKill) || (['trap', 'lure', 'drop'].includes(trackId) && gagIndex === 6) || (trackId === 'lure' && [1, 3, 5].includes(gagIndex));
 
     setSelectedGagsByRound(prev => {
       const next = [...prev.map(r => [...r])];
@@ -393,15 +409,25 @@ export function CogCalculator() {
         const luredAtStartOfPhase = currentCogs.map(c => c.isLured);
         const trappedAtStartOfPhase = currentCogs.map(c => c.isTrapped);
         const phaseDamage = [0, 0, 0, 0];
+        const instaKillThisPhase = [false, false, false, false];
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
           let baseDmg = getGagDamage(gag);
+          const isInstaKill = gag.variant === 'sos' && (SOS_GAGS[gag.trackId] || []).find(s => s.gagIndex === gag.gagIndex)?.isInstaKill;
           const targets = gag.target === 'all' ? [0, 1, 2, 3] : [gag.targetIdx!];
 
           targets.forEach(cogIdx => {
             const cog = currentCogs[cogIdx];
             let currentDmg = baseDmg;
+
+            if (isInstaKill) {
+              const choice = COG_CHOICES.find(c => c.id === cog.id);
+              if (choice?.type !== 'boss') {
+                instaKillThisPhase[cogIdx] = true;
+                return;
+              }
+            }
 
             if (hitCounts[cogIdx] >= 2 && !['trap', 'lure'].includes(trackId)) {
               currentDmg = Math.floor(currentDmg * 1.2);
@@ -449,9 +475,25 @@ export function CogCalculator() {
 
         // Resolve phase damage with v2 layer caps
         phaseDamage.forEach((dmg, idx) => {
-          if (dmg === 0) return;
           const state = cogStates[idx];
           if (state.layer === 0) return; // already dead
+
+          if (instaKillThisPhase[idx]) {
+            const cog = currentCogs[idx];
+            const hpLeftForKill = (cog.isV2 ? state.maxHp * 2 : state.maxHp) - (cumulativeDamages[idx] + cogDamagesThisRound[idx]);
+            state.totalEffectiveDamage += hpLeftForKill;
+            cogDamagesThisRound[idx] += hpLeftForKill;
+            state.layer = 0;
+            state.damageOnCurrentLayer = 0;
+            currentCogs[idx].isLured = false;
+            currentCogs[idx].lureDuration = 0;
+            currentCogs[idx].isTrapped = false;
+            currentCogs[idx].trapDamage = 0;
+            trapDamageOnCog[idx] = 0;
+            return;
+          }
+
+          if (dmg === 0) return;
 
           const remainingHpOnLayer = state.maxHp - state.damageOnCurrentLayer;
 
@@ -527,27 +569,105 @@ export function CogCalculator() {
   };
 
   return (
-    <div className="grid grid-cols-[2fr_3fr] gap-3 h-full" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
-      {/* Left Panel: Gag Picker */}
-      <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
-        <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
-        <div className="bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col gap-4">
-          {gagTracks.map(track => (
-            <GagTrackPicker
-              key={track.id}
-              track={track}
-              onSelectGag={handleSelectGag}
-              cogs={cogs}
-              cogDamages={activeStats.cogDamages}
-              getHealthColor={getHealthColor}
-              activePopup={activePopup}
-              setActivePopup={setActivePopup}
-            />
+    <div className="grid grid-cols-[35fr_65fr] gap-3 h-full" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
+      {/* Left Panel: Selected Gags (Rounds) */}
+      <div className="flex-1 bg-[#082416] rounded-xl p-4 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[540px]">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-base font-bold text-white">Rounds</h4>
+          <button
+            onClick={() => {
+              setSelectedGagsByRound([
+                [null, null, null, null],
+                [null, null, null, null],
+                [null, null, null, null],
+                [null, null, null, null],
+                [null, null, null, null],
+                [null, null, null, null],
+              ]);
+              setActiveRound(0);
+              setActiveGagSlot(0);
+            }}
+            className="text-[10px] font-black uppercase text-red-400 hover:text-red-300 transition-colors"
+          >
+            Clear All
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto pr-1 custom-scrollbar">
+          {[0, 1, 2, 3, 4, 5].map(rIdx => (
+            <div
+              key={rIdx}
+              onClick={() => {
+                setActiveRound(rIdx);
+                setActiveGagSlot(0);
+              }}
+              className={`flex items-center gap-2.5 p-2 rounded-xl border transition-all cursor-pointer ${activeRound === rIdx
+                ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'
+                }`}
+            >
+              <div className="w-16 flex flex-col items-center">
+                <span className="text-[10px] font-black text-white/40 uppercase">Round {rIdx + 1}</span>
+              </div>
+              <div className="flex-1 flex gap-2">
+                {selectedGagsByRound[rIdx].map((gag, gIdx) => {
+                  const track = gag ? gagTracks.find(t => t.id === gag.trackId) : null;
+                  const gagData = track ? track.gags[gag!.gagIndex] : null;
+                  const sosInfo = gag?.variant === 'sos' ? (SOS_GAGS[gag!.trackId] || []).find(s => s.gagIndex === gag!.gagIndex) : null;
+                  const imgSrc = sosInfo ? sosInfo.image : (gagData ? `https://toonhq.org/static/assets/gags/${gagData.image}` : null);
+                  const isSlotActive = activeRound === rIdx && activeGagSlot === gIdx;
+
+                  return (
+                    <div key={gIdx} className="flex flex-col items-center gap-1">
+                      <div className="flex gap-0.5 h-3 items-center">
+                        {[0, 1, 2, 3].map(cIdx => {
+                          const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
+                          return (
+                            <span key={cIdx} className={`text-[9px] font-black w-1 text-center ${isTargeted ? 'text-emerald-400' : 'text-white/10'}`}>
+                              {isTargeted ? '•' : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (gag) clearGagSlot(rIdx, gIdx);
+                          else {
+                            setActiveRound(rIdx);
+                            setActiveGagSlot(gIdx);
+                          }
+                        }}
+                        className={`w-9 h-9 rounded-lg border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
+                          gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/20'
+                          }`}
+                        style={gag && track ? { backgroundColor: track.color } : {}}
+                      >
+                        {imgSrc ? (
+                          <>
+                            <img src={imgSrc} alt="Gag" className="w-7 h-7 object-contain" />
+                            {gag?.variant === 'organic' && (
+                              <img
+                                src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
+                                alt="Organic"
+                                className="absolute -bottom-1 -right-1 w-4 h-4 shadow-sm z-10 drop-shadow-md"
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-black text-white/5">{gIdx + 1}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Right Panel: Cogs & Selection */}
+      {/* Right Panel: Cogs & Gag Picker */}
       <div className="flex flex-col gap-3">
         {/* Cogs Panel */}
         <div className="bg-black/40 rounded-xl p-4 flex flex-col gap-4">
@@ -644,7 +764,7 @@ export function CogCalculator() {
                        })()}
                     </button>
                     {activeCogSlot === idx && (
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max max-w-[320px]">
+                      <div className={`absolute top-full mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max max-w-[320px] ${idx < 2 ? 'left-0' : 'right-0'}`}>
                         <div className="flex items-center justify-between mb-2 ml-1 mr-1">
                           <div className="text-[10px] uppercase tracking-widest font-bold text-white/40">Levels</div>
                           <div
@@ -738,99 +858,21 @@ export function CogCalculator() {
           </div>
         </div>
 
-        {/* Selected Gags Panel */}
-        <div className="flex-1 bg-[#082416] rounded-xl p-4 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[300px]">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-base font-bold text-white">Rounds</h4>
-            <button
-              onClick={() => {
-                setSelectedGagsByRound([
-                  [null, null, null, null],
-                  [null, null, null, null],
-                  [null, null, null, null],
-                  [null, null, null, null],
-                  [null, null, null, null],
-                  [null, null, null, null],
-                ]);
-                setActiveRound(0);
-                setActiveGagSlot(0);
-              }}
-              className="text-[10px] font-black uppercase text-red-400 hover:text-red-300 transition-colors"
-            >
-              Clear All
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {[0, 1, 2, 3, 4, 5].map(rIdx => (
-              <div
-                key={rIdx}
-                onClick={() => {
-                  setActiveRound(rIdx);
-                  setActiveGagSlot(0);
-                }}
-                className={`flex items-center gap-3 p-2 rounded-xl border transition-all cursor-pointer ${activeRound === rIdx
-                  ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                  : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'
-                  }`}
-              >
-                <div className="w-16 flex flex-col items-center">
-                  <span className="text-[10px] font-black text-white/40 uppercase">Round {rIdx + 1}</span>
-                </div>
-                <div className="flex-1 flex gap-2">
-                  {selectedGagsByRound[rIdx].map((gag, gIdx) => {
-                    const track = gag ? gagTracks.find(t => t.id === gag.trackId) : null;
-                    const gagData = track ? track.gags[gag!.gagIndex] : null;
-                    const sosInfo = gag?.variant === 'sos' ? (SOS_GAGS[gag!.trackId] || []).find(s => s.gagIndex === gag!.gagIndex) : null;
-                    const imgSrc = sosInfo ? sosInfo.image : (gagData ? `https://toonhq.org/static/assets/gags/${gagData.image}` : null);
-                    const isSlotActive = activeRound === rIdx && activeGagSlot === gIdx;
-
-                    return (
-                      <div key={gIdx} className="flex flex-col items-center gap-1">
-                        <div className="flex gap-0.5 h-3 items-center">
-                          {[0, 1, 2, 3].map(cIdx => {
-                            const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
-                            return (
-                              <span key={cIdx} className={`text-[9px] font-black w-1.5 text-center ${isTargeted ? 'text-emerald-400' : 'text-white/10'}`}>
-                                {isTargeted ? 'X' : '-'}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (gag) clearGagSlot(rIdx, gIdx);
-                            else {
-                              setActiveRound(rIdx);
-                              setActiveGagSlot(gIdx);
-                            }
-                          }}
-                          className={`w-10 h-10 rounded-lg border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
-                            gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/20'
-                            }`}
-                          style={gag && track ? { backgroundColor: track.color } : {}}
-                        >
-                          {imgSrc ? (
-                            <>
-                              <img src={imgSrc} alt="Gag" className="w-8 h-8 object-contain" />
-                              {gag?.variant === 'organic' && (
-                                <img
-                                  src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
-                                  alt="Organic"
-                                  className="absolute -bottom-1 -right-1 w-4 h-4 shadow-sm z-10 drop-shadow-md"
-                                />
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-[10px] font-black text-white/10">{gIdx + 1}</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+        {/* Gag Picker Panel (Now at the bottom) */}
+        <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
+          <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
+          <div className="bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col gap-4">
+            {gagTracks.map(track => (
+              <GagTrackPicker
+                key={track.id}
+                track={track}
+                onSelectGag={handleSelectGag}
+                cogs={cogs}
+                cogDamages={activeStats.cogDamages}
+                getHealthColor={getHealthColor}
+                activePopup={activePopup}
+                setActivePopup={setActivePopup}
+              />
             ))}
           </div>
         </div>
