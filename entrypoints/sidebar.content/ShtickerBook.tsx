@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState, memo } from 'react';
 import { gags as gagsConfig } from './gags';
+import { CogCalculator } from './CogCalculator';
+
+import { AboutTabContent } from './AboutTab';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'bosses';
+type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'cog_calc' | 'bosses' | 'about';
 
 type AllowedGagTrackId = 'throw' | 'squirt' | 'sound';
 type BoilerRoundType = 'neutral' | 'fired_up' | 'defense' | 'meltdown';
@@ -396,7 +399,7 @@ function ShieldIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
-function BookIcon({ width = 16, height = 16, className = '', isOpen }: { width?: number; height?: number; className?: string; isOpen?: boolean | null }) {
+export function BookIcon({ width = 16, height = 16, className = '', isOpen }: { width?: number; height?: number; className?: string; isOpen?: boolean | null }) {
   if (isOpen === true) {
     return (
       <div className='book-opened' />
@@ -2388,66 +2391,86 @@ function BookSidebar({
     }`;
 
   return (
-    <div className="w-48 shrink-0 border-r border-[#0a2e1d]/80 bg-[#0f3f28] p-2">
-      <button
-        type="button"
-        onClick={() => { onTabChange('bosses'); onFacilityChange(null); }}
-        className={navButtonClass('bosses', 'mb-1')}
-      >
-        Bosses
-      </button>
+    <div className="w-48 shrink-0 border-r border-[#0a2e1d]/80 bg-[#0f3f28] p-2 flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+        {/* <button
+          type="button"
+          onClick={() => { onTabChange('bosses'); onFacilityChange(null); }}
+          className={navButtonClass('bosses', 'mb-1')}
+        >
+          Bosses
+        </button>
 
-      <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
-        {BOSSES_INFO.map((boss, idx) => (
-          <button
-            key={boss.title}
-            type="button"
-            onClick={() => { onTabChange('bosses'); onFacilityChange(idx); }}
-            className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'bosses' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
-              }`}
-          >
-            {(boss as any).fullName || boss.title}
-          </button>
-        ))}
+        <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
+          {BOSSES_INFO.map((boss, idx) => (
+            <button
+              key={boss.title}
+              type="button"
+              onClick={() => { onTabChange('bosses'); onFacilityChange(idx); }}
+              className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'bosses' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+                }`}
+            >
+              {(boss as any).fullName || boss.title}
+            </button>
+          ))}
+        </div> */}
+
+        <button
+          type="button"
+          onClick={() => { onTabChange('facilities'); onFacilityChange(null); }}
+          className={navButtonClass('facilities', 'mb-1')}
+        >
+          Facilities
+        </button>
+
+        <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
+          {FACILITIES_INFO.map((facility, idx) => (
+            <button
+              key={facility.title}
+              type="button"
+              onClick={() => { onTabChange('facilities'); onFacilityChange(idx); }}
+              className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'facilities' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+                }`}
+            >
+              {facility.title}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => { onTabChange('field_office'); onFacilityChange(null); }}
+          className={navButtonClass('field_office', 'mb-2')}
+        >
+          Field Offices
+        </button>
+
+        {/* <button
+          type="button"
+          onClick={() => { onTabChange('cog_calc'); onFacilityChange(null); }}
+          className={navButtonClass('cog_calc', 'mb-2')}
+        >
+          Cog Calculator
+        </button> */}
+
+        <button
+          type="button"
+          onClick={() => { onTabChange('boiler_calc'); onFacilityChange(null); }}
+          className={navButtonClass('boiler_calc', 'mb-2')}
+        >
+          Boiler Calculator
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => { onTabChange('facilities'); onFacilityChange(null); }}
-        className={navButtonClass('facilities', 'mb-1')}
-      >
-        Facilities
-      </button>
-
-      <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
-        {FACILITIES_INFO.map((facility, idx) => (
-          <button
-            key={facility.title}
-            type="button"
-            onClick={() => { onTabChange('facilities'); onFacilityChange(idx); }}
-            className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'facilities' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
-              }`}
-          >
-            {facility.title}
-          </button>
-        ))}
+      <div className="mt-auto pt-2 border-t border-emerald-800/50 pb-20">
+        <button
+          type="button"
+          onClick={() => { onTabChange('about'); onFacilityChange(null); }}
+          className={navButtonClass('about')}
+        >
+          About
+        </button>
       </div>
-
-      <button
-        type="button"
-        onClick={() => { onTabChange('field_office'); onFacilityChange(null); }}
-        className={navButtonClass('field_office', 'mb-2')}
-      >
-        Field Offices
-      </button>
-
-      <button
-        type="button"
-        onClick={() => { onTabChange('boiler_calc'); onFacilityChange(null); }}
-        className={navButtonClass('boiler_calc')}
-      >
-        Boiler Calculator
-      </button>
     </div>
   );
 }
@@ -2477,7 +2500,7 @@ export function ShtickerBook() {
       const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
       if (raw) {
         const parsed = JSON.parse(raw);
-        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'bosses'];
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'about'];
         if (validTabs.includes(parsed.tab)) {
           return parsed.tab as InfoBookTab;
         }
@@ -2558,9 +2581,11 @@ export function ShtickerBook() {
                 )}
                 {activeTab === 'field_office' && <FieldOfficeTabContent />}
                 {activeTab === 'boiler_calc' && <BoilerCalculator />}
+                {/* {activeTab === 'cog_calc' && <CogCalculator />}
                 {activeTab === 'bosses' && (
                   <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveFacility} />
-                )}
+                )} */}
+                {activeTab === 'about' && <AboutTabContent />}
               </div>
             </div>
 

@@ -832,9 +832,11 @@ function TooltipAnchor({
   );
 }
 
+import { ToonTrackerTab } from './ToonTrackerTab';
+
 export function SidebarApp() {
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'history' | 'toons' | 'settings'>('history');
+  const [activeTab, setActiveTab] = useState<'tracker' | 'history' | 'toons' | 'settings'>('history');
   const [favorites, setFavorites] = useState<ToonId[]>([]);
   const [blocked, setBlocked] = useState<ToonId[]>([]);
   const [historyToons, setHistoryToons] = useState<Record<ToonId, ToonData>>({});
@@ -1038,6 +1040,7 @@ export function SidebarApp() {
     };
   }, [handleRequestDialog]);
 
+
   useEffect(() => {
     refresh();
     getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed']).then(values => {
@@ -1050,7 +1053,6 @@ export function SidebarApp() {
       if (values['neutral-collapsed'] !== undefined) setNeutralCollapsed(!!values['neutral-collapsed']);
     });
 
-    // Listen for DB changes (replaces browser.storage.onChanged)
     const handleDbChange = (e: Event) => {
       const { store } = (e as CustomEvent).detail || {};
       if (store === 'toony_toons' || store === 'stinky_toons') {
@@ -1076,7 +1078,6 @@ export function SidebarApp() {
       }
       if (store === 'toons') {
         // Only refresh history cache if the change affects currently loaded toons
-        // (or ideally, we'd only load the ones that changed, but this is simpler for now)
         refresh();
       }
       if (store === 'notes') {
@@ -1094,6 +1095,7 @@ export function SidebarApp() {
         getSetting<boolean>('neutral-collapsed').then(v => { if (v !== undefined) setNeutralCollapsed(!!v); });
       }
     };
+
     window.addEventListener('toonhqplus-db-changed', handleDbChange);
     return () => {
       window.removeEventListener('toonhqplus-db-changed', handleDbChange);
@@ -1122,6 +1124,15 @@ export function SidebarApp() {
         {open && (
           <aside className="w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0">
             <div className="flex border-b border-[#0a2e1d]/80 bg-[#0c3622]">
+              <button
+                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'tracker' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                onClick={() => {
+                  setActiveTab('tracker');
+                  setSetting('active-tab', 'tracker').catch(console.error);
+                }}
+              >
+                Tracker
+              </button>
               <button
                 className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
                 onClick={() => {
@@ -1152,7 +1163,9 @@ export function SidebarApp() {
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col min-h-0 p-3">
+            <div className="flex-1 flex flex-col min-h-0 p-0">
+              {activeTab === 'tracker' && <ToonTrackerTab />}
+
               {activeTab === 'toons' && (
                 <>
                   <div className="mb-3 shrink-0 relative">
@@ -1386,8 +1399,8 @@ export function SidebarApp() {
                               const groupName = getGroupSimpleName(group.type, group.id, group.options);
                               const groupMembers = historyGroupMembers[group.id];
                               return (
-                                <div 
-                                  key={group.id} 
+                                <div
+                                  key={group.id}
                                   className="group relative"
                                   style={{ viewTransitionName: `group-card-${group.id}` } as React.CSSProperties}
                                 >
@@ -1404,7 +1417,7 @@ export function SidebarApp() {
                                     className="w-full text-left rounded border border-black/50 bg-black/40 hover:bg-black/60 p-3 shadow-sm transition-colors flex justify-between items-center cursor-pointer"
                                   >
                                     <div className="flex-1 min-w-0">
-                                      <span 
+                                      <span
                                         className="block text-sm font-bold text-white truncate"
                                         style={{ viewTransitionName: `group-title-${group.id}` } as React.CSSProperties}
                                       >
@@ -1507,7 +1520,7 @@ export function SidebarApp() {
                               ← Back
                             </button>
                             <div className="flex-1 min-w-0">
-                              <h3 
+                              <h3
                                 className="text-sm font-bold text-green-50 break-words leading-tight"
                                 style={{ viewTransitionName: `group-title-${group.id}` } as React.CSSProperties}
                               >
@@ -1639,7 +1652,7 @@ export function SidebarApp() {
           </aside>
         )}
       </div>
-      {dialog && dialog.isOpen && (
+      {dialog?.isOpen && (
         <div
           className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'}`}
           onClick={() => setDialog(null)}

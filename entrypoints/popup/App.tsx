@@ -30,7 +30,7 @@ function App() {
           ToonHQ+ is an extension that enhances the ToonHQ experience.
         </div>
         <div>
-          This extension is independently created and is not affiliated with, maintained by, or endorsed by the ToonHQ team.
+          This extension is independently created and is not affiliated with, maintained, or endorsed by the ToonHQ team.
         </div>
       </div>
 
