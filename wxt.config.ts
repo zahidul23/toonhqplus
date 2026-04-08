@@ -26,6 +26,7 @@ export default defineConfig({
     },
   },
   runner: {
+    chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
     startUrls: ['https://toonhq.org/groups']
   },
 });

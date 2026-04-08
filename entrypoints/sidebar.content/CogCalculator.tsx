@@ -8,6 +8,35 @@ const COG_HEALTH: Record<number, number> = {
   11: 156, 12: 196, 13: 224, 14: 254, 15: 286, 16: 320, 17: 356, 18: 394, 19: 434, 20: 476
 };
 
+import { browser } from 'wxt/browser';
+
+function getExtensionImageUrl(path: string): string {
+  const cleanPath = path.replace(/^\/+/, '');
+  try {
+    return browser.runtime.getURL(cleanPath as any);
+  } catch (e) {
+    return `/${cleanPath}`;
+  }
+}
+
+const COG_CHOICES = [
+  ...[...Array(20)].map((_, i) => ({ 
+    id: `${i + 1}`, 
+    label: `Level ${i + 1}`, 
+    hp: COG_HEALTH[i + 1], 
+    type: 'normal' as const, 
+    img: 'https://toonhq.org/static/assets/cogs/skelecog.png' 
+  })),
+  { id: 'factory_scrap', label: 'Scrap Foreman', hp: 250, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
+  { id: 'factory_steel', label: 'Steel Foreman', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
+  { id: 'mint_coin', label: 'Coin Auditor', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
+  { id: 'mint_bullion', label: 'Bullion Auditor', hp: 1150, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
+  { id: 'office_junior', label: 'Junior Clerk', hp: 1100, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
+  { id: 'office_senior', label: 'Senior Clerk', hp: 1500, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
+  { id: 'golf_fairway', label: 'Fairway President', hp: 1200, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
+  { id: 'golf_fringe', label: 'Fringe President', hp: 1750, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
+];
+
 const SOS_MOE = 'https://rendition.toontownrewritten.com/render/7401000001000000008b010e000e0e010400000000000000000000000000000000/portrait/128x128.webp';
 const SOS_SID = 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp';
 const SOS_BARB = 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp';
@@ -58,10 +87,12 @@ type GagTrack = {
 };
 
 interface Cog {
-  level: number;
+  id: string;
   isTrapped: boolean;
   isLured: boolean;
   lureDuration?: number;
+  trapDamage?: number;
+  isV2?: boolean;
 }
 
 // ─── Components ───────────────────────────────────────────────────────────────
@@ -114,9 +145,15 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
         <div className="flex gap-1">
           {[0, 1, 2, 3].map(cogIdx => {
             const cog = cogs[cogIdx];
-            const maxHp = COG_HEALTH[cog.level];
-            const remainingHp = Math.max(0, maxHp - (cogDamages[cogIdx] || 0));
-            const percentage = (remainingHp / maxHp) * 100;
+            const choice = COG_CHOICES.find(c => c.id === cog.id);
+            const maxHp = choice?.hp || 196;
+            const dmg = cogDamages[cogIdx] || 0;
+            const remainingTotal = Math.max(0, (cog.isV2 ? maxHp * 2 : maxHp) - dmg);
+            const outerHp = cog.isV2 ? Math.max(0, remainingTotal - maxHp) : 0;
+            const innerHp = Math.min(maxHp, remainingTotal);
+            const pInner = (innerHp / maxHp) * 100;
+            const pOuter = (outerHp / maxHp) * 100;
+            const labelStr = choice?.type === 'boss' ? choice.label.split(' ')[1].substring(0,3) : cog.id;
 
             return (
               <button
@@ -129,12 +166,12 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                 className="flex flex-col items-center justify-between p-1.5 w-10 h-10 rounded-lg border border-white/5 bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 transition-all cursor-pointer"
               >
                 <div className="flex-1 flex items-center justify-center">
-                  <span className="text-[11px] font-black text-white/80">{cog.level}</span>
+                  <span className="text-[11px] font-black text-white/80">{labelStr}</span>
                 </div>
                 <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden relative">
                   <div
-                    className={`h-full transition-all duration-300 ${getHealthColor(percentage)}`}
-                    style={{ width: `${percentage}%` }}
+                    className={`absolute top-0 left-0 bottom-0 transition-all duration-300 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
+                    style={{ width: `${cog.isV2 && outerHp > 0 ? pOuter : pInner}%` }}
                   />
                 </div>
               </button>
@@ -239,14 +276,27 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
   );
 }
 
+const FACILITY_PRESETS = [
+  { name: "Scrap Factory", cogs: [{id: 'factory_scrap', isV2: false}, {id: '5', isV2: false}, {id: '5', isV2: false}, {id: '6', isV2: false}] },
+  { name: "Steel Factory", cogs: [{id: 'factory_steel', isV2: false}, {id: '11', isV2: false}, {id: '11', isV2: false}, {id: '12', isV2: false}] },
+  { name: "Coin Mint", cogs: [{id: 'mint_coin', isV2: false}, {id: '10', isV2: false}, {id: '10', isV2: false}, {id: '9', isV2: false}] },
+  { name: "Bullion Mint", cogs: [{id: 'mint_bullion', isV2: false}, {id: '12', isV2: false}, {id: '12', isV2: false}, {id: '11', isV2: false}] },
+  { name: "Junior Office", cogs: [{id: '11', isV2: false}, {id: 'office_junior', isV2: false}, {id: '11', isV2: false}, {id: '11', isV2: false}] },
+  { name: "Senior Office", cogs: [{id: '13', isV2: false}, {id: 'office_senior', isV2: false}, {id: '12', isV2: false}, {id: '13', isV2: false}] },
+  { name: "Fairway Course", cogs: [{id: '11', isV2: false}, {id: 'golf_fairway', isV2: false}, {id: '11', isV2: true}, {id: '10', isV2: true}] },
+  { name: "Fringe Course", cogs: [{id: '13', isV2: false}, {id: 'golf_fringe', isV2: false}, {id: '13', isV2: true}, {id: '12', isV2: true}] },
+];
+
 export function CogCalculator() {
   const [cogs, setCogs] = useState<Cog[]>([
-    { level: 12, isTrapped: false, isLured: false },
-    { level: 12, isTrapped: false, isLured: false },
-    { level: 12, isTrapped: false, isLured: false },
-    { level: 12, isTrapped: false, isLured: false },
+    { id: '12', isTrapped: false, isLured: false, isV2: false },
+    { id: '12', isTrapped: false, isLured: false, isV2: false },
+    { id: '12', isTrapped: false, isLured: false, isV2: false },
+    { id: '12', isTrapped: false, isLured: false, isV2: false },
   ]);
   const [selectedGagsByRound, setSelectedGagsByRound] = useState<SelectedGag[][]>([
+    [null, null, null, null],
+    [null, null, null, null],
     [null, null, null, null],
     [null, null, null, null],
     [null, null, null, null],
@@ -255,6 +305,9 @@ export function CogCalculator() {
   const [activeRound, setActiveRound] = useState<number>(0);
   const [activeGagSlot, setActiveGagSlot] = useState<number>(0);
   const [activePopup, setActivePopup] = useState<{ trackId: string; gagIndex: number; variant: GagVariant } | null>(null);
+  const [activeCogSlot, setActiveCogSlot] = useState<number | null>(null);
+  const [presetMenuOpen, setPresetMenuOpen] = useState<boolean>(false);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
 
   const gagTracks = useMemo(() => {
     return (gagsConfig as GagTrack[]).filter(t => t.id !== 'toonup');
@@ -305,10 +358,20 @@ export function CogCalculator() {
 
   const roundResults = useMemo(() => {
     let currentCogs = cogs.map(c => ({ ...c, lureDuration: 0, trapDamage: 0 }));
+    let cogStates = cogs.map(c => {
+      const choice = COG_CHOICES.find(x => x.id === c.id);
+      return {
+        maxHp: choice?.hp || 196,
+        layer: c.isV2 ? 2 : 1,
+        damageOnCurrentLayer: 0,
+        totalEffectiveDamage: 0,
+      };
+    });
+    
     let cumulativeDamages = [0, 0, 0, 0];
     const results = [];
 
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < 6; r++) {
       const selectedGags = selectedGagsByRound[r];
       const cogDamagesThisRound = [0, 0, 0, 0];
       const trackDamages: Record<string, number> = {};
@@ -329,6 +392,7 @@ export function CogCalculator() {
 
         const luredAtStartOfPhase = currentCogs.map(c => c.isLured);
         const trappedAtStartOfPhase = currentCogs.map(c => c.isTrapped);
+        const phaseDamage = [0, 0, 0, 0];
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
@@ -351,7 +415,7 @@ export function CogCalculator() {
             } else if (trackId === 'lure') {
               if (trappedAtStartOfPhase[cogIdx]) {
                 const trapDmg = trapDamageOnCog[cogIdx];
-                cogDamagesThisRound[cogIdx] += trapDmg;
+                phaseDamage[cogIdx] += trapDmg;
                 trackDamages['trap'] = (trackDamages['trap'] || 0) + trapDmg;
                 trapDamageOnCog[cogIdx] = 0;
                 cog.isTrapped = false;
@@ -362,7 +426,7 @@ export function CogCalculator() {
                 cog.lureDuration = LURE_DURATIONS[gag.gagIndex] || 3;
               }
             } else if (trackId === 'sound') {
-              cogDamagesThisRound[cogIdx] += currentDmg;
+              phaseDamage[cogIdx] += currentDmg;
               trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               cog.isLured = false;
               cog.lureDuration = 0;
@@ -370,17 +434,48 @@ export function CogCalculator() {
               if (luredAtStartOfPhase[cogIdx]) {
                 currentDmg = Math.floor(currentDmg * 1.5);
               }
-              cogDamagesThisRound[cogIdx] += currentDmg;
+              phaseDamage[cogIdx] += currentDmg;
               trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               cog.isLured = false;
               cog.lureDuration = 0;
             } else if (trackId === 'drop') {
               if (!luredAtStartOfPhase[cogIdx]) {
-                cogDamagesThisRound[cogIdx] += currentDmg;
+                phaseDamage[cogIdx] += currentDmg;
                 trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               }
             }
           });
+        });
+
+        // Resolve phase damage with v2 layer caps
+        phaseDamage.forEach((dmg, idx) => {
+          if (dmg === 0) return;
+          const state = cogStates[idx];
+          if (state.layer === 0) return; // already dead
+
+          const remainingHpOnLayer = state.maxHp - state.damageOnCurrentLayer;
+
+          if (dmg >= remainingHpOnLayer) {
+            // Layer destroyed!
+            const effectiveDmgThisPhase = remainingHpOnLayer;
+            state.totalEffectiveDamage += effectiveDmgThisPhase;
+            cogDamagesThisRound[idx] += effectiveDmgThisPhase;
+            // overkill is discarded!
+            state.layer -= 1;
+            state.damageOnCurrentLayer = 0;
+            
+            // clear lure/trap status on death of v1 suit
+            currentCogs[idx].isLured = false;
+            currentCogs[idx].lureDuration = 0;
+            currentCogs[idx].isTrapped = false;
+            currentCogs[idx].trapDamage = 0;
+            trapDamageOnCog[idx] = 0;
+          } else {
+            // Sub-lethal damage to layer
+            state.damageOnCurrentLayer += dmg;
+            state.totalEffectiveDamage += dmg;
+            cogDamagesThisRound[idx] += dmg;
+          }
         });
       });
 
@@ -432,7 +527,7 @@ export function CogCalculator() {
   };
 
   return (
-    <div className="grid grid-cols-[2fr_3fr] gap-3 h-full" onClick={() => setActivePopup(null)}>
+    <div className="grid grid-cols-[2fr_3fr] gap-3 h-full" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
       {/* Left Panel: Gag Picker */}
       <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
         <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
@@ -458,45 +553,151 @@ export function CogCalculator() {
         <div className="bg-black/40 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h4 className="text-base font-bold text-white">Cogs After Round {activeRound + 1}</h4>
-            <div className="text-xs text-white/40 uppercase font-black tracking-widest">Target Selection</div>
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setPresetMenuOpen(!presetMenuOpen); setActiveCogSlot(null); }}
+                className="flex items-center justify-between gap-2 bg-black/40 border border-white/10 rounded-lg p-2 text-white font-bold text-sm cursor-pointer hover:bg-black/60 hover:border-emerald-500/50 transition-colors w-[160px]"
+              >
+                <span className="truncate">{activePreset || "Facility Presets"}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 flex-shrink-0"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              {presetMenuOpen && (
+                <div className="absolute top-full right-0 mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max flex flex-col gap-1">
+                  <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActivePreset(null);
+                        setPresetMenuOpen(false);
+                      }}
+                      className={`text-left px-3 py-2 text-sm font-bold text-white/50 hover:text-white hover:bg-emerald-500/30 rounded-lg transition-colors cursor-pointer ${activePreset === null ? 'bg-black/40 text-white' : ''}`}
+                    >
+                      Clear Preset
+                  </button>
+                  <div className="h-px bg-white/10 my-1"/>
+                  {FACILITY_PRESETS.map((preset, i) => (
+                    <button
+                      key={i}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCogs(preset.cogs.map(c => ({ id: c.id, isTrapped: false, isLured: false, isV2: c.isV2 })));
+                        setActivePreset(preset.name);
+                        setPresetMenuOpen(false);
+                      }}
+                      className={`text-left px-3 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-emerald-500/30 rounded-lg transition-colors cursor-pointer ${activePreset === preset.name ? 'bg-emerald-500/50 text-white border border-emerald-400' : ''}`}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-2">
             {cogs.map((cog, idx) => {
-              const maxHp = COG_HEALTH[cog.level];
-              const remainingHp = Math.max(0, maxHp - activeStats.cogDamages[idx]);
-              const percentage = (remainingHp / maxHp) * 100;
+              const choice = COG_CHOICES.find(c => c.id === cog.id);
+              const maxHp = choice?.hp || 196;
+              const dmg = activeStats.cogDamages[idx] || 0;
+              const totalMax = maxHp * (cog.isV2 ? 2 : 1);
+              const remainingTotal = Math.max(0, totalMax - dmg);
+              const outerHp = cog.isV2 ? Math.max(0, remainingTotal - maxHp) : 0;
+              const innerHp = Math.min(maxHp, remainingTotal);
+              const pInner = (innerHp / maxHp) * 100;
+              const pOuter = (outerHp / maxHp) * 100;
               const finalCog = activeStats.finalCogs[idx];
 
               return (
                 <div key={idx} className="flex flex-col gap-2">
                   <div className="relative group">
-                    <select
-                      value={cog.level}
-                      onChange={(e) => {
-                        const next = [...cogs];
-                        next[idx] = { ...next[idx], level: parseInt(e.target.value) };
-                        setCogs(next);
-                      }}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white font-bold text-sm appearance-none cursor-pointer hover:bg-black/60 transition-colors"
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setActiveCogSlot(activeCogSlot === idx ? null : idx); }}
+                      className="w-full aspect-square relative rounded-xl border border-white/10 bg-black/40 overflow-hidden cursor-pointer hover:border-emerald-400/50 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] transition-all group p-0 m-0"
                     >
-                      {Object.keys(COG_HEALTH).map(lvl => (
-                        <option key={lvl} value={lvl}>Level {lvl}</option>
-                      ))}
-                    </select>
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-white/20">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-                    </div>
+                        {(() => {
+                         if (!choice) return null;
+                         if (choice.type === 'normal') {
+                           return (
+                             <div className="flex flex-col items-center justify-center h-full w-full relative">
+                               <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60" />
+                               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+                               <div className="relative flex flex-col items-center justify-center pointer-events-none">
+                                 {cog.isV2 && (
+                                   <div className="absolute top-0 right-0 bg-fuchsia-600/90 text-[8px] font-black px-1.5 py-0.5 rounded-bl shadow text-white tracking-widest uppercase">
+                                     v2.0
+                                   </div>
+                                 )}
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Level</span>
+                                 <span className="text-4xl font-black text-white">{choice.id}</span>
+                               </div>
+                             </div>
+                           );
+                         }
+                         return (
+                           <>
+                             <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+                             <div className="absolute bottom-1.5 inset-x-0 pointer-events-none">
+                               <span className="block text-center text-[10px] font-bold text-white leading-tight px-1">{choice.label}</span>
+                             </div>
+                           </>
+                         );
+                       })()}
+                    </button>
+                    {activeCogSlot === idx && (
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max max-w-[320px]">
+                        <div className="flex items-center justify-between mb-2 ml-1 mr-1">
+                          <div className="text-[10px] uppercase tracking-widest font-bold text-white/40">Levels</div>
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = [...cogs];
+                              next[idx] = { ...next[idx], isV2: !next[idx].isV2 };
+                              setCogs(next);
+                            }}
+                            className={`flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors border ${cog.isV2 ? 'bg-fuchsia-900/40 border-fuchsia-500/50 text-fuchsia-300' : 'bg-black/20 border-white/5 text-white/40 hover:bg-black/40 hover:text-white/60'}`}
+                          >
+                            <span className="text-[9px] font-black uppercase tracking-widest">v2.0</span>
+                            <div className={`w-6 h-3 rounded-full relative transition-colors ${cog.isV2 ? 'bg-fuchsia-500' : 'bg-white/10'}`}>
+                              <div className={`absolute top-0.5 bottom-0.5 w-2 rounded-full bg-white transition-all ${cog.isV2 ? 'left-[14px]' : 'left-0.5'}`} />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-5 gap-1 mb-3">
+                          {COG_CHOICES.filter(c => c.type === 'normal').map(c => (
+                            <button 
+                              key={c.id} 
+                              onClick={(e) => { e.stopPropagation(); const next = [...cogs]; next[idx] = { ...next[idx], id: c.id }; setCogs(next); setActiveCogSlot(null); }} 
+                              className={`relative w-9 h-9 rounded-md border flex items-center justify-center text-xs font-black transition-all cursor-pointer overflow-hidden ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400 text-emerald-100 shadow-[0_0_10px_rgba(52,211,153,0.3)]' : 'bg-black/30 border-white/5 text-white/60 hover:bg-black/50 hover:text-white'}`}
+                            >
+                              <img src={c.img as string} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity" />
+                              <span className="relative z-10">{c.id}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40">Supervisors</div>
+                        <div className="grid grid-cols-4 gap-1">
+                          {COG_CHOICES.filter(c => c.type === 'boss').map(c => (
+                            <button key={c.id} onClick={(e) => { e.stopPropagation(); const next = [...cogs]; next[idx] = { ...next[idx], id: c.id, isV2: false }; setCogs(next); setActiveCogSlot(null); }} className={`relative w-[60px] h-16 rounded-md border flex flex-col items-center justify-center gap-1 transition-all p-1 cursor-pointer ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400' : 'bg-black/30 border-white/5 hover:bg-black/50'}`}>
+                               <img src={c.img as string} alt={c.label} className="w-8 h-8 object-contain" />
+                               <span className="text-[8px] font-bold text-center leading-tight text-white/80">{c.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="bg-black/20 border border-white/5 rounded-lg p-2 flex flex-col gap-2">
                     <div className="h-8 w-full bg-white/5 rounded-md overflow-hidden relative">
                       <div
-                        className={`h-full transition-all duration-500 ${getHealthColor(percentage)}`}
-                        style={{ width: `${percentage}%` }}
+                        className={`absolute top-0 left-0 bottom-0 transition-all duration-500 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
+                        style={{ width: `${cog.isV2 && outerHp > 0 ? pOuter : pInner}%` }}
                       />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-[10px] font-black text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] tabular-nums">
-                          {remainingHp} / {maxHp}
+                      <div className="absolute inset-0 flex items-center justify-center gap-1.5 pointer-events-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+                        {cog.isV2 && outerHp > 0 && (
+                          <span className="bg-fuchsia-600 rounded px-1 text-[8px] font-black text-white tracking-wider shadow-sm">V2.0</span>
+                        )}
+                        <span className="text-[10px] font-black text-white tabular-nums">
+                          {cog.isV2 && outerHp > 0 ? outerHp : innerHp} / {maxHp}
                         </span>
                       </div>
                     </div>
@@ -548,6 +749,8 @@ export function CogCalculator() {
                   [null, null, null, null],
                   [null, null, null, null],
                   [null, null, null, null],
+                  [null, null, null, null],
+                  [null, null, null, null],
                 ]);
                 setActiveRound(0);
                 setActiveGagSlot(0);
@@ -559,7 +762,7 @@ export function CogCalculator() {
           </div>
 
           <div className="flex flex-col gap-2">
-            {[0, 1, 2, 3].map(rIdx => (
+            {[0, 1, 2, 3, 4, 5].map(rIdx => (
               <div
                 key={rIdx}
                 onClick={() => {
@@ -609,7 +812,16 @@ export function CogCalculator() {
                           style={gag && track ? { backgroundColor: track.color } : {}}
                         >
                           {imgSrc ? (
-                            <img src={imgSrc} alt="Gag" className="w-8 h-8 object-contain" />
+                            <>
+                              <img src={imgSrc} alt="Gag" className="w-8 h-8 object-contain" />
+                              {gag?.variant === 'organic' && (
+                                <img
+                                  src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
+                                  alt="Organic"
+                                  className="absolute -bottom-1 -right-1 w-4 h-4 shadow-sm z-10 drop-shadow-md"
+                                />
+                              )}
+                            </>
                           ) : (
                             <span className="text-[10px] font-black text-white/10">{gIdx + 1}</span>
                           )}

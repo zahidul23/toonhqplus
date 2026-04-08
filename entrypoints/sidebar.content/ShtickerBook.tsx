@@ -2393,7 +2393,7 @@ function BookSidebar({
   return (
     <div className="w-48 shrink-0 border-r border-[#0a2e1d]/80 bg-[#0f3f28] p-2 flex flex-col h-full">
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-        {/* <button
+        <button
           type="button"
           onClick={() => { onTabChange('bosses'); onFacilityChange(null); }}
           className={navButtonClass('bosses', 'mb-1')}
@@ -2413,7 +2413,7 @@ function BookSidebar({
               {(boss as any).fullName || boss.title}
             </button>
           ))}
-        </div> */}
+        </div>
 
         <button
           type="button"
@@ -2445,13 +2445,13 @@ function BookSidebar({
           Field Offices
         </button>
 
-        {/* <button
+        <button
           type="button"
           onClick={() => { onTabChange('cog_calc'); onFacilityChange(null); }}
           className={navButtonClass('cog_calc', 'mb-2')}
         >
           Cog Calculator
-        </button> */}
+        </button>
 
         <button
           type="button"
@@ -2500,7 +2500,7 @@ export function ShtickerBook() {
       const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
       if (raw) {
         const parsed = JSON.parse(raw);
-        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'about'];
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about'];
         if (validTabs.includes(parsed.tab)) {
           return parsed.tab as InfoBookTab;
         }
@@ -2581,10 +2581,10 @@ export function ShtickerBook() {
                 )}
                 {activeTab === 'field_office' && <FieldOfficeTabContent />}
                 {activeTab === 'boiler_calc' && <BoilerCalculator />}
-                {/* {activeTab === 'cog_calc' && <CogCalculator />}
+                {activeTab === 'cog_calc' && <CogCalculator />}
                 {activeTab === 'bosses' && (
                   <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveFacility} />
-                )} */}
+                )}
                 {activeTab === 'about' && <AboutTabContent />}
               </div>
             </div>
