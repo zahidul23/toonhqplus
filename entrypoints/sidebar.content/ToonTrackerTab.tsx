@@ -3,6 +3,14 @@ import { getSetting, setSetting } from './db';
 import type { ToonTrackerData } from './tracker';
 import { browser } from 'wxt/browser';
 
+type RewardHistoryEntry = {
+  message: string;
+  timestamp: number;
+};
+
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_REWARD_LIMIT = 5;
+
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
   try {
@@ -10,6 +18,47 @@ function getExtensionImageUrl(path: string): string {
   } catch (e) {
     return `/${cleanPath}`;
   }
+}
+
+function getRewardHistoryKey(toonId: string): string {
+  return `tracker-reward-history-${toonId}`;
+}
+
+function pruneRewardHistory(entries: RewardHistoryEntry[]): RewardHistoryEntry[] {
+  const cutoff = Date.now() - ONE_WEEK_MS;
+  return entries
+    .filter((entry) => entry.timestamp >= cutoff)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 100);
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const diffMs = Date.now() - timestamp;
+  const diffSeconds = Math.max(0, Math.floor(diffMs / 1000));
+
+  if (diffSeconds < 10) return 'just now';
+  if (diffSeconds < 60) return `${diffSeconds}s ago`;
+  if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
+  if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`;
+  return `${Math.floor(diffSeconds / 86400)}d ago`;
+}
+
+function RelativeRewardTime({ timestamp }: { timestamp: number }) {
+  const [display, setDisplay] = useState(() => formatRelativeTime(timestamp));
+
+  useEffect(() => {
+    setDisplay(formatRelativeTime(timestamp));
+
+    const update = () => {
+      setDisplay(formatRelativeTime(timestamp));
+    };
+
+    update();
+    const intervalId = window.setInterval(update, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [timestamp]);
+
+  return <span>{display}</span>;
 }
 
 export function ToonTrackerTab() {
@@ -25,7 +74,8 @@ export function ToonTrackerTab() {
     suits: true,
     rewards: true
   });
-  const [rewardHistory, setRewardHistory] = useState<{ message: string; timestamp: number }[]>([]);
+  const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
+  const [showAllRewardHistory, setShowAllRewardHistory] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const lastResponseTime = useRef<number>(0);
@@ -43,12 +93,12 @@ export function ToonTrackerTab() {
   const addNotification = async (message: string) => {
     if (!toonDataRef.current?.data.toon.id) return;
     const toonId = toonDataRef.current.data.toon.id;
-    const historyKey = `tracker-reward-history-${toonId}`;
-    
-    const history = await getSetting<{ message: string, timestamp: number }[]>(historyKey) || [];
-    const updated = [{ message, timestamp: Date.now() }, ...history].slice(0, 50);
+    const historyKey = getRewardHistoryKey(toonId);
+
+    const history = await getSetting<RewardHistoryEntry[]>(historyKey) || [];
+    const updated = pruneRewardHistory([{ message, timestamp: Date.now() }, ...history]);
     await setSetting(historyKey, updated);
-    
+
     if (toonDataRef.current?.data.toon.id === toonId) {
       setRewardHistory(updated);
     }
@@ -119,6 +169,19 @@ export function ToonTrackerTab() {
     return changes;
   };
 
+  const loadRewardHistory = async (toonId: string) => {
+    const historyKey = getRewardHistoryKey(toonId);
+    const storedHistory = await getSetting<RewardHistoryEntry[]>(historyKey) || [];
+    const prunedHistory = pruneRewardHistory(storedHistory);
+
+    if (prunedHistory.length !== storedHistory.length) {
+      await setSetting(historyKey, prunedHistory);
+    }
+
+    setRewardHistory(prunedHistory);
+    setShowAllRewardHistory(false);
+  };
+
   const startSync = (providedKey?: string, silent = false, targetToonId?: string) => {
     console.log(`[ToonTracker] Starting sync. Target: ${targetToonId || 'Any'}, Silent: ${silent}`);
     if (wsRef.current) {
@@ -126,7 +189,7 @@ export function ToonTrackerTab() {
       wsRef.current.close();
       wsRef.current = null;
     }
-    
+
     if (!silent) setIsSyncing(true);
     setConnectionStatus('idle');
 
@@ -146,7 +209,7 @@ export function ToonTrackerTab() {
 
     ports.forEach((port) => {
       const ws = new WebSocket(`ws://localhost:${port}/`);
-      
+
       const timeoutId = setTimeout(() => {
         if (ws.readyState === WebSocket.CONNECTING) {
           ws.close();
@@ -157,7 +220,7 @@ export function ToonTrackerTab() {
         clearTimeout(timeoutId);
         console.log(`[ToonTracker] Port ${port} opened`);
         activeConnections.push(ws);
-        
+
         const authKey = providedKey || Math.random().toString(36).substring(2, 11);
         setSetting('tracker-auth-key', authKey).catch(console.error);
 
@@ -172,7 +235,7 @@ export function ToonTrackerTab() {
           if (msgData.type === 'authorize') {
             ws.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
           }
-          
+
           if (msgData.event === 'all' && msgData.data?.toon) {
             const toonId = msgData.data.toon.id;
             console.log(`[ToonTracker] Received data from port ${port} for toon:`, msgData.data.toon.name);
@@ -209,8 +272,14 @@ export function ToonTrackerTab() {
             const isTarget = targetToonId === toonId;
             const isFirstAny = !targetToonId && !primaryFound;
 
-            if (isTarget || isFirstAny) {
+            const isCurrentPrimary = wsRef.current === ws && toonDataRef.current?.data.toon.id === toonId;
+
+            if (isTarget || isFirstAny || isCurrentPrimary) {
               console.log(`[ToonTracker] Port ${port} matches criteria, promoting to primary connection`);
+              const previousRewards = toonDataRef.current?.data.rewards;
+              const nextRewards = msgData.data.rewards;
+              const rewardChanges = checkRewards(previousRewards, nextRewards);
+
               primaryFound = true;
               wsRef.current = ws;
               setToonTrackerData(msgData);
@@ -221,6 +290,9 @@ export function ToonTrackerTab() {
               // Persist as last used
               setSetting(`tracker-data-${toonId}`, msgData).catch(console.error);
               setSetting('last-tracker-toon-id', toonId).catch(console.error);
+              rewardChanges.forEach((message) => {
+                addNotification(message).catch(console.error);
+              });
 
               // Setup heartbeat for this primary connection IF NOT ALREADY STARTED
               if (!(ws as any)._heartbeatStarted) {
@@ -279,7 +351,10 @@ export function ToonTrackerTab() {
       lastId = id;
       if (id) {
         getSetting<any>(`tracker-data-${id}`).then(data => {
-          if (data) setToonTrackerData(prev => prev || data);
+          if (data) {
+            setToonTrackerData(prev => prev || data);
+            loadRewardHistory(id).catch(console.error);
+          }
         });
       }
     });
@@ -296,6 +371,17 @@ export function ToonTrackerTab() {
     });
   }, []);
 
+  useEffect(() => {
+    const toonId = toonTrackerData?.data.toon.id;
+    if (!toonId) {
+      setRewardHistory([]);
+      setShowAllRewardHistory(false);
+      return;
+    }
+
+    loadRewardHistory(toonId).catch(console.error);
+  }, [toonTrackerData?.data.toon.id]);
+
   const isDropdownOpenRef = useRef(false);
   useEffect(() => {
     isDropdownOpenRef.current = isDropdownOpen;
@@ -305,7 +391,7 @@ export function ToonTrackerTab() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      
+
       if (!isDropdownOpenRef.current) return;
 
       // If the target is no longer in the document, it was likely removed by a React render
@@ -327,7 +413,7 @@ export function ToonTrackerTab() {
   const removeSavedToon = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     console.log('[ToonTracker] X button clicked for ID:', id);
-    
+
     // If this is the active toon, disconnect first
     if (toonTrackerData?.data.toon.id === id) {
       console.log('[ToonTracker] Removing active toon, disconnecting first...');
@@ -339,10 +425,10 @@ export function ToonTrackerTab() {
     const updated = savedToons.filter(t => t.id !== id);
     setSavedToons(updated);
     await setSetting('tracker-toon-list', updated);
-    
+
     console.log('[ToonTracker] Clearing cached data for ID:', id);
     await setSetting(`tracker-data-${id}`, null);
-    
+
     const lastId = await getSetting('last-tracker-toon-id');
     if (lastId === id) {
       console.log('[ToonTracker] Clearing last-tracker-toon-id...');
@@ -361,12 +447,13 @@ export function ToonTrackerTab() {
     }
     setConnectionStatus('idle');
     setIsSyncing(false);
+    setShowAllRewardHistory(false);
     await setSetting('tracker-auth-key', null);
   };
 
   const selectToon = (id: string) => {
     console.log('Selecting toon:', id);
-    
+
     // Close existing connection if any
     if (wsRef.current) {
       wsRef.current.onclose = null;
@@ -412,12 +499,17 @@ export function ToonTrackerTab() {
     };
   }, []);
 
+  const weeklyRewardHistory = rewardHistory;
+  const visibleRewardHistory = showAllRewardHistory
+    ? weeklyRewardHistory
+    : weeklyRewardHistory.slice(0, RECENT_REWARD_LIMIT);
+
   return (
-    <section className="flex-1 flex flex-col bg-black/10 rounded-lg border border-white/5 mx-1 overflow-hidden">
+    <section className="flex-1 flex flex-col overflow-hidden">
       {/* Header with Toon Info and Sync Button */}
-      <div className="px-3 py-2.5 border-b border-white/5 flex items-center gap-3 bg-white/[0.03] relative" ref={dropdownRef}>
-        <div 
-          className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" 
+      <div className="px-3 py-2 flex items-center gap-3 relative" ref={dropdownRef}>
+        <div
+          className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header"
           onMouseDown={(e) => {
             e.stopPropagation();
             console.log('[ToonTracker] Header clicked, toggling dropdown. Current state:', isDropdownOpen);
@@ -538,26 +630,27 @@ export function ToonTrackerTab() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar py-4 px-2 space-y-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar py-2">
         {toonTrackerData ? (
-          <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {/* Rewards Section */}
-            <div className="space-y-2">
-              <button 
+            <div className="space-y-2 rounded-xl border border-sky-300/10 bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <button
                 onClick={() => toggleSection('rewards')}
                 className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer"
               >
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 group-hover:text-white/60 transition-colors">Rewards</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Rewards</h4>
                 <div className="flex items-center gap-2">
-                  <div className="h-[1px] w-12 bg-white/5 group-hover:bg-white/10 transition-colors" />
-                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform duration-300 ${expandedSections.rewards ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={`transition-transform duration-300 ${expandedSections.rewards ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                 </div>
               </button>
-              
+
               {expandedSections.rewards && (
-                <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="animate-in fade-in slide-in-from-top-1 duration-200">
                   {toonTrackerData.data.rewards && (
-                    <div className="flex justify-between items-center px-2 py-3 bg-white/5 rounded-xl border border-white/5 shadow-inner backdrop-blur-sm">
+                    <div className="flex justify-between items-center px-2 py-3 ">
                       {(() => {
                         const rewards = toonTrackerData.data.rewards;
                         const totals = {
@@ -596,7 +689,6 @@ export function ToonTrackerTab() {
                                 </div>
                               )}
                             </div>
-                            <span className="text-[8px] font-black uppercase tracking-widest text-white/30 group-hover/reward:text-white/60 transition-colors">{rt.id}</span>
                           </div>
                         ));
                       })()}
@@ -604,36 +696,62 @@ export function ToonTrackerTab() {
                   )}
 
                   {/* Reward History List */}
-                  {rewardHistory.length > 0 && (
-                    <div className="bg-black/20 rounded-lg border border-white/5 overflow-hidden">
-                      <div className="px-3 py-1.5 bg-white/5 border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-white/30">Recent History</div>
-                      <div className="divide-y divide-white/5 max-h-40 overflow-y-auto custom-scrollbar">
-                        {rewardHistory.map((entry, i) => (
-                          <div key={i} className="px-3 py-2 flex justify-between items-center gap-4 hover:bg-white/[0.02] transition-colors">
-                            <span className="text-[11px] font-bold text-emerald-400/90 leading-tight">{entry.message}</span>
-                            <span className="text-[9px] font-black text-white/20 tabular-nums shrink-0 uppercase">
-                              {new Date(entry.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  <div className="bg-slate-950/30 rounded-lg border border-sky-200/10 overflow-hidden">
+                    <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
+                        <div className="text-[10px] text-white/30">
+                          {weeklyRewardHistory.length > 0
+                            ? `${Math.min(RECENT_REWARD_LIMIT, weeklyRewardHistory.length)} recent rewards${weeklyRewardHistory.length > RECENT_REWARD_LIMIT ? ` of ${weeklyRewardHistory.length} this week` : ' this week'}`
+                            : 'No rewards recorded in the past week'}
+                        </div>
+                      </div>
+                      {weeklyRewardHistory.length > RECENT_REWARD_LIMIT && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllRewardHistory((prev) => !prev)}
+                          className="shrink-0 rounded-md border border-sky-200/10 bg-white/[0.04] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-sky-100/60 hover:bg-white/[0.08] hover:text-sky-100 transition-colors"
+                        >
+                          {showAllRewardHistory ? 'Show 5' : 'Show Week'}
+                        </button>
+                      )}
+                    </div>
+
+                    {visibleRewardHistory.length > 0 ? (
+                      <div className="divide-y divide-white/5 max-h-56 overflow-y-auto custom-scrollbar">
+                        {visibleRewardHistory.map((entry, i) => (
+                          <div key={`${entry.timestamp}-${i}`} className="px-3 py-2.5 flex justify-between items-start gap-4 hover:bg-white/[0.02] transition-colors">
+                            <span className="text-[11px] font-bold text-emerald-300/90 leading-tight">{entry.message}</span>
+                            <span
+                              className="text-[9px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right"
+                              title={new Date(entry.timestamp).toLocaleString()}
+                            >
+                              <RelativeRewardTime timestamp={entry.timestamp} />
                             </span>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="px-3 py-5 text-center text-[10px] font-black uppercase tracking-[0.24em] text-white/25">
+                        Nothing obtained yet
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Cog Suits Section */}
-            <div className="space-y-2">
-              <button 
+            <div className="space-y-2 rounded-xl border border-fuchsia-300/10 bg-[linear-gradient(180deg,rgba(88,28,135,0.22),rgba(17,24,39,0.5))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <button
                 onClick={() => toggleSection('suits')}
                 className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer"
               >
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 group-hover:text-white/60 transition-colors">Cog Suits</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Cog Suits</h4>
                 <div className="flex items-center gap-2">
-                  <div className="h-[1px] w-12 bg-white/5 group-hover:bg-white/10 transition-colors" />
-                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform duration-300 ${expandedSections.suits ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
-                </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={`transition-transform duration-300 ${expandedSections.suits ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>                </div>
               </button>
 
               {expandedSections.suits && (
@@ -725,139 +843,140 @@ export function ToonTrackerTab() {
 
                           {/* Expansion Lip */}
                           {!isMaxed && suit.promotion && remaining > 0 && (
-                          <div className="pt-1 mt-1 border-t border-white/10">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedSuitId(expandedSuitId === id ? null : id);
-                              }}
-                              className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group"
-                            >
-                              <span className="text-[9.5px] font-black uppercase tracking-[0.2em] opacity-40 group-hover:opacity-100 transition-opacity" style={{ color: colors.text }}>
-                                {expandedSuitId === id ? 'Hide Recommendations' : 'Show Recommendations'}
-                              </span>
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="10"
-                                height="10"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className={`transition-transform duration-300 ${expandedSuitId === id ? 'rotate-180' : ''}`}
-                                style={{ color: colors.accent }}
+                            <div className="pt-1 mt-1 border-t border-white/10">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedSuitId(expandedSuitId === id ? null : id);
+                                }}
+                                className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group"
                               >
-                                <polyline points="6 9 12 15 18 9" />
-                              </svg>
-                            </button>
+                                <span className="text-[9.5px] font-black uppercase tracking-[0.2em] opacity-40 group-hover:opacity-100 transition-opacity" style={{ color: colors.text }}>
+                                  {expandedSuitId === id ? 'Hide Recommendations' : 'Show Recommendations'}
+                                </span>
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="3"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className={`transition-transform duration-300 ${expandedSuitId === id ? 'rotate-180' : ''}`}
+                                  style={{ color: colors.accent }}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                              </button>
 
-                            {expandedSuitId === id && (
-                              <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-2 space-y-1.5 pb-1">
-                                {(() => {
-                                  const facilities: any = {
-                                    sell: {
-                                      items: [
-                                        { name: 'Long Steel', val: 1630 },
-                                        { name: 'Short Steel, +5 Battles', val: 1503 },
-                                        { name: 'Short Steel, +4 Battles', val: 1376 },
-                                        { name: 'Short Steel, +3 Battles', val: 1249 },
-                                        { name: 'Short Steel, +2 Battles', val: 1121 },
-                                        { name: 'Short Steel, +1 Battle', val: 994 },
-                                        { name: 'Short Steel', val: 867 },
-                                        { name: 'Long Scrap', val: 638 },
-                                        { name: 'Short Scrap, +5 Battles', val: 590 },
-                                        { name: 'Short Scrap, +4 Battles', val: 542 },
-                                        { name: 'Short Scrap, +3 Battles', val: 494 },
-                                        { name: 'Short Scrap, +2 Battles', val: 446 },
-                                        { name: 'Short Scrap, +1 Battle', val: 398 },
-                                        { name: 'Short Scrap', val: 350 }
-                                      ]
-                                    },
-                                    cash: {
-                                      items: [
-                                        { name: 'Bullion Mint', val: 1850 },
-                                        { name: 'Bullion Mint, 1 Skip', val: 1738 },
-                                        { name: 'Bullion Mint, 2 Skips', val: 1626 },
-                                        { name: 'Coin Mint', val: 807 },
-                                        { name: 'Coin Mint, 1 Skip', val: 755 },
-                                        { name: 'Coin Mint, 2 Skips', val: 702 }
-                                      ]
-                                    },
-                                    law: {
-                                      items: [
-                                        { name: 'Senior Wing', val: 2082 },
-                                        { name: 'Senior Wing, 1 Skip', val: 1968 },
-                                        { name: 'Senior Wing, 2 Skips', val: 1854 },
-                                        { name: 'Junior Wing', val: 889 },
-                                        { name: 'Junior Wing, 1 Skip', val: 835 },
-                                        { name: 'Junior Wing, 2 Skips', val: 781 }
-                                      ]
-                                    },
-                                    boss: {
-                                      items: [
-                                        { name: 'Final Fringe', val: 2305 },
-                                        { name: 'Final Fringe, 1 Skip', val: 2201 },
-                                        { name: 'Final Fringe, 2 Skips', val: 2097 },
-                                        { name: 'First Fairway', val: 975 },
-                                        { name: 'First Fairway, 1 Skip', val: 929 },
-                                        { name: 'First Fairway, 2 Skips', val: 882 }
-                                      ]
-                                    }
-                                  };
+                              {expandedSuitId === id && (
+                                <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-2 space-y-1.5 pb-1">
+                                  {(() => {
+                                    const facilities: any = {
+                                      sell: {
+                                        items: [
+                                          { name: 'Long Steel', val: 1630 },
+                                          { name: 'Short Steel, +5 Battles', val: 1503 },
+                                          { name: 'Short Steel, +4 Battles', val: 1376 },
+                                          { name: 'Short Steel, +3 Battles', val: 1249 },
+                                          { name: 'Short Steel, +2 Battles', val: 1121 },
+                                          { name: 'Short Steel, +1 Battle', val: 994 },
+                                          { name: 'Short Steel', val: 867 },
+                                          { name: 'Long Scrap', val: 638 },
+                                          { name: 'Short Scrap, +5 Battles', val: 590 },
+                                          { name: 'Short Scrap, +4 Battles', val: 542 },
+                                          { name: 'Short Scrap, +3 Battles', val: 494 },
+                                          { name: 'Short Scrap, +2 Battles', val: 446 },
+                                          { name: 'Short Scrap, +1 Battle', val: 398 },
+                                          { name: 'Short Scrap', val: 350 }
+                                        ]
+                                      },
+                                      cash: {
+                                        items: [
+                                          { name: 'Bullion Mint', val: 1850 },
+                                          { name: 'Bullion Mint, 1 Skip', val: 1738 },
+                                          { name: 'Bullion Mint, 2 Skips', val: 1626 },
+                                          { name: 'Coin Mint', val: 807 },
+                                          { name: 'Coin Mint, 1 Skip', val: 755 },
+                                          { name: 'Coin Mint, 2 Skips', val: 702 }
+                                        ]
+                                      },
+                                      law: {
+                                        items: [
+                                          { name: 'Senior Wing', val: 2082 },
+                                          { name: 'Senior Wing, 1 Skip', val: 1968 },
+                                          { name: 'Senior Wing, 2 Skips', val: 1854 },
+                                          { name: 'Junior Wing', val: 889 },
+                                          { name: 'Junior Wing, 1 Skip', val: 835 },
+                                          { name: 'Junior Wing, 2 Skips', val: 781 }
+                                        ]
+                                      },
+                                      boss: {
+                                        items: [
+                                          { name: 'Final Fringe', val: 2305 },
+                                          { name: 'Final Fringe, 1 Skip', val: 2201 },
+                                          { name: 'Final Fringe, 2 Skips', val: 2097 },
+                                          { name: 'First Fairway', val: 975 },
+                                          { name: 'First Fairway, 1 Skip', val: 929 },
+                                          { name: 'First Fairway, 2 Skips', val: 882 }
+                                        ]
+                                      }
+                                    };
 
-                                  const facilityData = facilities[dept];
-                                  if (!facilityData) return null;
-                                  const items = facilityData.items;
-                                  const highest = items[0];
-                                  const lowest = items[items.length - 1];
+                                    const facilityData = facilities[dept];
+                                    if (!facilityData) return null;
+                                    const items = facilityData.items;
+                                    const highest = items[0];
+                                    const lowest = items[items.length - 1];
 
-                                  let highestCount = Math.floor(remaining / highest.val);
-                                  let rem = remaining - (highestCount * highest.val);
-                                  let lowestCount = rem > 0 ? Math.ceil(rem / lowest.val) : 0;
+                                    let highestCount = Math.floor(remaining / highest.val);
+                                    let rem = remaining - (highestCount * highest.val);
+                                    let lowestCount = rem > 0 ? Math.ceil(rem / lowest.val) : 0;
 
-                                  const rows = [];
-                                  for (let c = 0; c < highestCount; c++) rows.push(highest);
-                                  for (let c = 0; c < lowestCount; c++) rows.push(lowest);
+                                    const rows = [];
+                                    for (let c = 0; c < highestCount; c++) rows.push(highest);
+                                    for (let c = 0; c < lowestCount; c++) rows.push(lowest);
 
-                                  const total = (highestCount * highest.val) + (lowestCount * lowest.val);
+                                    const total = (highestCount * highest.val) + (lowestCount * lowest.val);
 
-                                  return (
-                                    <div className="bg-black/10 rounded p-2 border border-white/5 flex flex-col gap-1.5">
-                                      {rows.map((row: any, i: number) => (
-                                        <div key={i} className="flex justify-between items-center text-[10.5px] font-medium opacity-80" style={{ color: colors.text }}>
-                                          <span className="truncate">{row.name}</span>
-                                          <span className="shrink-0 ml-2">~ {row.val} {statName}</span>
+                                    return (
+                                      <div className="bg-black/10 rounded p-2 border border-white/5 flex flex-col gap-1.5">
+                                        {rows.map((row: any, i: number) => (
+                                          <div key={i} className="flex justify-between items-center text-[10.5px] font-medium opacity-80" style={{ color: colors.text }}>
+                                            <span className="truncate">{row.name}</span>
+                                            <span className="shrink-0 ml-2">~ {row.val} {statName}</span>
+                                          </div>
+                                        ))}
+                                        <div className="pt-1 mt-1 border-t border-white/10 text-right text-[11.5px] font-black" style={{ color: colors.text }}>
+                                          <span className="text-left">Total</span> <span style={{ color: colors.accent }}>{total.toLocaleString()} {statName}</span>
                                         </div>
-                                      ))}
-                                      <div className="pt-1 mt-1 border-t border-white/10 text-right text-[11.5px] font-black" style={{ color: colors.text }}>
-                                        <span className="text-left">Total</span> <span style={{ color: colors.accent }}>{total.toLocaleString()} {statName}</span>
                                       </div>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
 
             {/* ToonTasks Section */}
-            <div className="space-y-2">
-              <button 
+            <div className="space-y-2 rounded-xl border border-amber-300/20 bg-[linear-gradient(180deg,rgba(120,53,15,0.22),rgba(28,25,23,0.45))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <button
                 onClick={() => toggleSection('tasks')}
                 className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer"
               >
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 group-hover:text-white/60 transition-colors">ToonTasks</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">ToonTasks</h4>
                 <div className="flex items-center gap-2">
-                  <div className="h-[1px] w-12 bg-white/5 group-hover:bg-white/10 transition-colors" />
-                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform duration-300 ${expandedSections.tasks ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={`transition-transform duration-300 ${expandedSections.tasks ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                 </div>
               </button>
 
