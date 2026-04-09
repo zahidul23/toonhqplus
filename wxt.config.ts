@@ -24,6 +24,14 @@ export default defineConfig({
       "48": "icon/logo-48.png",
       "128": "icon/logo-128.png"
     },
+    browser_specific_settings: {
+      gecko: {
+        id: 'toonhqplus@zhoque.com',
+        data_collection_permissions: {
+          required: ["none"]
+        }
+      } as any,
+    },
   },
   runner: {
     chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox'],

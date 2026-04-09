@@ -302,7 +302,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
 
   const handleGagClick = (e: React.MouseEvent, trackId: string, gagIndex: number, variant: GagVariant, isAllTarget: boolean) => {
     e.stopPropagation();
-    
+
     let livingTargetIdx = -1;
     let livingCount = 0;
     cogs.forEach((c, i) => {
@@ -317,8 +317,8 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
     if (!isAllTarget && livingCount === 1 && livingTargetIdx !== -1) {
       const sosInfo = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
       if (sosInfo?.isRemote && !activePopup?.gagIndex) {
-         setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
-         return;
+        setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
+        return;
       }
       onSelectGag(trackId, gagIndex, variant, livingTargetIdx);
       setActivePopup(null);
@@ -407,7 +407,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                   gagDisabled = true;
                 }
               }
-              
+
               return (
                 <React.Fragment key={`sos-${sos.gagIndex}`}>
                   {showSeparator && <div className="w-px h-8 bg-white/10 mx-1" />}
@@ -734,7 +734,7 @@ export function CogCalculator() {
             if (i === j) continue;
             const targetState = cogStates[j];
             if (targetState.layer === 0) continue;
-            
+
             // Re-define resolveDamage inside here or make it accessible
             const applyDmg = (d: number, idx: number) => {
               const s = cogStates[idx];
@@ -878,7 +878,7 @@ export function CogCalculator() {
                             const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
 
                             return (
-                              <span key={cIdx} className={`text-[8px] font-black w-1.5 text-center transition-colors ${isTargeted ? 'text-emerald-400' : 'text-white/10'}`}>
+                              <span key={cIdx} className={`text-[8px] font-black w-1.5 text-center transition-colors ${gagData ? 'text-emerald-400' : 'text-white/10'}`}>
                                 {isTargeted ? 'X' : '-'}
                               </span>
                             );
@@ -1141,9 +1141,9 @@ export function CogCalculator() {
                           if (effect.id === 'isDefenseDown') {
                             const isPresident = finalCog.id === 'golf_fairway' || finalCog.id === 'golf_fringe';
                             const deadCogsCount = activeStats.finalCogs.filter((c: Cog, i: number) => {
-                               const maxHp = getCogMaxHp(c, cogs);
-                               const cdmg = activeStats.cogDamages[i] || 0;
-                               return (c.isV2 ? maxHp * 2 : maxHp) <= cdmg;
+                              const maxHp = getCogMaxHp(c, cogs);
+                              const cdmg = activeStats.cogDamages[i] || 0;
+                              return (c.isV2 ? maxHp * 2 : maxHp) <= cdmg;
                             }).length;
 
                             if (isPresident && deadCogsCount > 0) {
