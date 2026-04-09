@@ -20,12 +20,12 @@ function getExtensionImageUrl(path: string): string {
 }
 
 const COG_CHOICES = [
-  ...[...Array(20)].map((_, i) => ({ 
-    id: `${i + 1}`, 
-    label: `Level ${i + 1}`, 
-    hp: COG_HEALTH[i + 1], 
-    type: 'normal' as const, 
-    img: 'https://toonhq.org/static/assets/cogs/skelecog.png' 
+  ...[...Array(20)].map((_, i) => ({
+    id: `${i + 1}`,
+    label: `Level ${i + 1}`,
+    hp: COG_HEALTH[i + 1],
+    type: 'normal' as const,
+    img: 'https://toonhq.org/static/assets/cogs/skelecog.png'
   })),
   { id: 'factory_scrap', label: 'Scrap Foreman', hp: 250, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
   { id: 'factory_steel', label: 'Steel Foreman', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
@@ -91,9 +91,46 @@ interface Cog {
   id: string;
   isTrapped: boolean;
   isLured: boolean;
+  isAttentive?: boolean;
+  isDefenseDown?: boolean;
+  isImmunity?: boolean;
+  isOverpaid?: boolean;
+  isRemoteDmg?: boolean;
+  isTenure?: boolean;
   lureDuration?: number;
   trapDamage?: number;
   isV2?: boolean;
+}
+
+const STATUS_EFFECTS = [
+  { id: 'isTrapped', label: 'Trapped', icon: 'Statuseffect_trapped.png', color: 'bg-orange-500', shadow: 'rgba(249,115,22,0.4)' },
+  { id: 'isLured', label: 'Lured', icon: 'Statuseffect_lured.png', color: 'bg-emerald-500', shadow: 'rgba(16,185,129,0.4)' },
+  { id: 'isAttentive', label: 'Attentive', icon: 'Statuseffect_attentive.png', color: 'bg-blue-500', shadow: 'rgba(59,130,246,0.4)' },
+  { id: 'isDefenseDown', label: 'Defense Down', icon: 'Statuseffect_defensedown.png', color: 'bg-red-500', shadow: 'rgba(239,68,68,0.4)' },
+  { id: 'isImmunity', label: 'Immunity', icon: 'Statuseffect_immunity.png', color: 'bg-gray-500', shadow: 'rgba(107,114,128,0.4)' },
+  { id: 'isOverpaid', label: 'Overpaid', icon: 'Statuseffect_overpaid.png', color: 'bg-yellow-500', shadow: 'rgba(234,179,8,0.4)' },
+  { id: 'isRemoteDmg', label: 'Remote DMG', icon: 'Statuseffect_remotedmg.png', color: 'bg-purple-500', shadow: 'rgba(168,85,247,0.4)' },
+  { id: 'isTenure', label: 'Tenure', icon: 'Statuseffect_tenure.png', color: 'bg-amber-500', shadow: 'rgba(245,158,11,0.4)' },
+];
+
+function getCogMaxHp(cog: Cog, allCogs: Cog[]): number {
+  const choice = COG_CHOICES.find(x => x.id === cog.id);
+  let baseHp = choice?.hp || 196;
+
+  const isMintAuditor = cog.id === 'mint_coin' || cog.id === 'mint_bullion';
+  if (!isMintAuditor) {
+    const hasCoin = allCogs.some(c => c.id === 'mint_coin');
+    const hasBullion = allCogs.some(c => c.id === 'mint_bullion');
+    if (hasBullion) {
+      baseHp += 200;
+    } else if (hasCoin) {
+      baseHp += 150;
+    } else if (cog.isOverpaid) {
+      baseHp += 150;
+    }
+  }
+
+  return baseHp;
 }
 
 // ─── Components ───────────────────────────────────────────────────────────────
@@ -161,7 +198,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
           {[0, 1, 2, 3].map(cogIdx => {
             const cog = cogs[cogIdx];
             const choice = COG_CHOICES.find(c => c.id === cog.id);
-            const maxHp = choice?.hp || 196;
+            const maxHp = getCogMaxHp(cog, cogs);
             const dmg = cogDamages[cogIdx] || 0;
             const remainingTotal = Math.max(0, (cog.isV2 ? maxHp * 2 : maxHp) - dmg);
             const outerHp = cog.isV2 ? Math.max(0, remainingTotal - maxHp) : 0;
@@ -171,7 +208,12 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             const labelStr = choice?.type === 'boss' ? choice.label.split(' ')[1] : `Level ${cog.id}`;
             const isPinkSlip = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex)?.isInstaKill;
             const isSupervisor = choice?.type === 'boss';
-            const isDisabled = isPinkSlip && isSupervisor;
+            const isTenured = cog.isTenure || isSupervisor;
+            let isDisabled = !!(isPinkSlip && isTenured);
+
+            if (trackId === 'lure' && !isPinkSlip && cog.isLured) {
+              isDisabled = true;
+            }
 
             return (
               <button
@@ -192,18 +234,18 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                   />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
-                
+
                 <div className="relative z-10 flex flex-col items-center">
                   <span className="text-[11px] font-black text-white/90 truncate max-w-full drop-shadow-md">{labelStr}</span>
                 </div>
 
                 <div className="relative z-10 w-full flex flex-col gap-1 mt-auto">
-                    <div className="h-2 w-full bg-black/60 rounded-full overflow-hidden relative border border-white/10">
-                      <div
-                        className={`absolute top-0 left-0 bottom-0 transition-all duration-300 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
-                        style={{ width: `${cog.isV2 && outerHp > 0 ? pOuter : pInner}%` }}
-                      />
-                    </div>
+                  <div className="h-2 w-full bg-black/60 rounded-full overflow-hidden relative border border-white/10">
+                    <div
+                      className={`absolute top-0 left-0 bottom-0 transition-all duration-300 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
+                      style={{ width: `${cog.isV2 && outerHp > 0 ? pOuter : pInner}%` }}
+                    />
+                  </div>
                 </div>
               </button>
             );
@@ -216,6 +258,24 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
 
   const handleGagClick = (e: React.MouseEvent, trackId: string, gagIndex: number, variant: GagVariant, isAllTarget: boolean) => {
     e.stopPropagation();
+    
+    let livingTargetIdx = -1;
+    let livingCount = 0;
+    cogs.forEach((c, i) => {
+      const maxHp = getCogMaxHp(c, cogs);
+      const dmg = cogDamages[i] || 0;
+      if ((c.isV2 ? maxHp * 2 : maxHp) > dmg) {
+        livingCount++;
+        livingTargetIdx = i;
+      }
+    });
+
+    if (!isAllTarget && livingCount === 1 && livingTargetIdx !== -1) {
+      onSelectGag(trackId, gagIndex, variant, livingTargetIdx);
+      setActivePopup(null);
+      return;
+    }
+
     if (isAllTarget) {
       onSelectGag(trackId, gagIndex, variant);
       setActivePopup(null);
@@ -242,6 +302,18 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             ? `Organic ${gag.name}`
             : `Organic ${gag.name} (${organicDamage})`;
 
+          let gagDisabled = false;
+          if (track.id === 'lure') {
+            const livingCogs = cogs.filter((c, i) => {
+              const maxHp = getCogMaxHp(c, cogs);
+              const dmg = cogDamages[i] || 0;
+              return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
+            });
+            if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
+              gagDisabled = true;
+            }
+          }
+
           return (
             <GagButton
               key={`${track.id}-${idx}-base`}
@@ -251,6 +323,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
               title={titleText}
               organicTitle={organicTitle}
               damage={gag.base}
+              disabled={gagDisabled}
               onClick={(e: any) => handleGagClick(e, track.id, idx, 'base', isAllTarget)}
               onOrganicClick={(e: any) => handleGagClick(e, track.id, idx, 'organic', isAllTarget)}
               hasOrganic={true}
@@ -269,6 +342,19 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             <div className="w-px h-8 bg-white/10 mx-1" />
             {sosGags.map((sos: any) => {
               const isAllTarget = sos.isInstaKill !== true;
+
+              let gagDisabled = false;
+              if (track.id === 'lure') {
+                const livingCogs = cogs.filter((c, i) => {
+                  const maxHp = getCogMaxHp(c, cogs);
+                  const dmg = cogDamages[i] || 0;
+                  return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
+                });
+                if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
+                  gagDisabled = true;
+                }
+              }
+
               return (
                 <GagButton
                   key={`sos-${sos.gagIndex}`}
@@ -277,6 +363,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                   color={track.color}
                   title={`${sos.name} (${sos.damage})`}
                   damage={sos.damage}
+                  disabled={gagDisabled}
                   onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
                   targetPopup={!isAllTarget && (
                     <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
@@ -292,14 +379,14 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
 }
 
 const FACILITY_PRESETS = [
-  { name: "Scrap Factory", cogs: [{id: 'factory_scrap', isV2: false}, {id: '5', isV2: false}, {id: '5', isV2: false}, {id: '6', isV2: false}] },
-  { name: "Steel Factory", cogs: [{id: 'factory_steel', isV2: false}, {id: '11', isV2: false}, {id: '11', isV2: false}, {id: '12', isV2: false}] },
-  { name: "Coin Mint", cogs: [{id: 'mint_coin', isV2: false}, {id: '10', isV2: false}, {id: '10', isV2: false}, {id: '9', isV2: false}] },
-  { name: "Bullion Mint", cogs: [{id: 'mint_bullion', isV2: false}, {id: '12', isV2: false}, {id: '12', isV2: false}, {id: '11', isV2: false}] },
-  { name: "Junior Office", cogs: [{id: '11', isV2: false}, {id: 'office_junior', isV2: false}, {id: '11', isV2: false}, {id: '11', isV2: false}] },
-  { name: "Senior Office", cogs: [{id: '13', isV2: false}, {id: 'office_senior', isV2: false}, {id: '12', isV2: false}, {id: '13', isV2: false}] },
-  { name: "Fairway Course", cogs: [{id: '11', isV2: false}, {id: 'golf_fairway', isV2: false}, {id: '11', isV2: true}, {id: '10', isV2: true}] },
-  { name: "Fringe Course", cogs: [{id: '13', isV2: false}, {id: 'golf_fringe', isV2: false}, {id: '13', isV2: true}, {id: '12', isV2: true}] },
+  { name: "Scrap Factory", cogs: [{ id: 'factory_scrap', isV2: false }, { id: '5', isV2: false }, { id: '5', isV2: false }, { id: '6', isV2: false }] },
+  { name: "Steel Factory", cogs: [{ id: 'factory_steel', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }, { id: '12', isV2: false }] },
+  { name: "Coin Mint", cogs: [{ id: 'mint_coin', isV2: false }, { id: '10', isV2: false }, { id: '10', isV2: false }, { id: '9', isV2: false }] },
+  { name: "Bullion Mint", cogs: [{ id: 'mint_bullion', isV2: false }, { id: '12', isV2: false }, { id: '12', isV2: false }, { id: '11', isV2: false }] },
+  { name: "Junior Office", cogs: [{ id: '11', isV2: false }, { id: 'office_junior', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }] },
+  { name: "Senior Office", cogs: [{ id: '13', isV2: false }, { id: 'office_senior', isV2: false }, { id: '12', isV2: false }, { id: '13', isV2: false }] },
+  { name: "Fairway Course", cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: true }, { id: '10', isV2: true }] },
+  { name: "Fringe Course", cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: true }, { id: '12', isV2: true }] },
 ];
 
 export function CogCalculator() {
@@ -343,7 +430,13 @@ export function CogCalculator() {
       };
       return next;
     });
-    setActiveGagSlot(prev => (prev + 1) % 4);
+    setActiveGagSlot(prev => {
+      const nextSlot = (prev + 1) % 4;
+      if (nextSlot === 0) {
+        setActiveRound(r => Math.min(r + 1, 5));
+      }
+      return nextSlot;
+    });
   };
 
   const clearGagSlot = (rIdx: number, slotIdx: number) => {
@@ -375,15 +468,14 @@ export function CogCalculator() {
   const roundResults = useMemo(() => {
     let currentCogs = cogs.map(c => ({ ...c, lureDuration: 0, trapDamage: 0 }));
     let cogStates = cogs.map(c => {
-      const choice = COG_CHOICES.find(x => x.id === c.id);
       return {
-        maxHp: choice?.hp || 196,
+        maxHp: getCogMaxHp(c, cogs),
         layer: c.isV2 ? 2 : 1,
         damageOnCurrentLayer: 0,
         totalEffectiveDamage: 0,
       };
     });
-    
+
     let cumulativeDamages = [0, 0, 0, 0];
     const results = [];
 
@@ -392,6 +484,8 @@ export function CogCalculator() {
       const cogDamagesThisRound = [0, 0, 0, 0];
       const trackDamages: Record<string, number> = {};
       const trapDamageOnCog = currentCogs.map(c => c.trapDamage || 0);
+
+      const deadCogsCountAtStart = cogStates.filter(s => s.layer === 0).length;
 
       const trackOrder = ['trap', 'lure', 'sound', 'throw', 'squirt', 'drop'];
 
@@ -423,7 +517,9 @@ export function CogCalculator() {
 
             if (isInstaKill) {
               const choice = COG_CHOICES.find(c => c.id === cog.id);
-              if (choice?.type !== 'boss') {
+              const hasMintSup = currentCogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+              const isTenured = cog.isTenure || choice?.type === 'boss' || hasMintSup;
+              if (!isTenured) {
                 instaKillThisPhase[cogIdx] = true;
                 return;
               }
@@ -433,6 +529,18 @@ export function CogCalculator() {
               currentDmg = Math.floor(currentDmg * 1.2);
             }
 
+            const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
+            let defenseDownStacks = 0;
+            if (isPresident && deadCogsCountAtStart > 0) {
+              defenseDownStacks = deadCogsCountAtStart;
+            } else if (cog.isDefenseDown) {
+              defenseDownStacks = 1;
+            }
+
+            if (defenseDownStacks > 0 && !['trap', 'lure'].includes(trackId)) {
+              currentDmg = Math.floor(currentDmg * (1 + 0.20 * defenseDownStacks));
+            }
+
             if (trackId === 'trap') {
               if (!luredAtStartOfPhase[cogIdx]) {
                 cog.isTrapped = true;
@@ -440,16 +548,25 @@ export function CogCalculator() {
               }
             } else if (trackId === 'lure') {
               if (trappedAtStartOfPhase[cogIdx]) {
-                const trapDmg = trapDamageOnCog[cogIdx];
+                let trapDmg = trapDamageOnCog[cogIdx];
+                if (defenseDownStacks > 0) {
+                  trapDmg = Math.floor(trapDmg * (1 + 0.20 * defenseDownStacks));
+                }
                 phaseDamage[cogIdx] += trapDmg;
                 trackDamages['trap'] = (trackDamages['trap'] || 0) + trapDmg;
                 trapDamageOnCog[cogIdx] = 0;
                 cog.isTrapped = false;
                 cog.isLured = false;
                 cog.lureDuration = 0;
-              } else {
+              } else if (!luredAtStartOfPhase[cogIdx]) {
                 cog.isLured = true;
-                cog.lureDuration = LURE_DURATIONS[gag.gagIndex] || 3;
+                let newDuration = LURE_DURATIONS[gag.gagIndex] || 3;
+                const choice = COG_CHOICES.find(c => c.id === cog.id);
+                const isAttentive = cog.isAttentive || choice?.type === 'boss';
+                if (isAttentive) {
+                  newDuration = 1;
+                }
+                cog.lureDuration = Math.max(cog.lureDuration || 0, newDuration);
               }
             } else if (trackId === 'sound') {
               phaseDamage[cogIdx] += currentDmg;
@@ -505,7 +622,7 @@ export function CogCalculator() {
             // overkill is discarded!
             state.layer -= 1;
             state.damageOnCurrentLayer = 0;
-            
+
             // clear lure/trap status on death of v1 suit
             currentCogs[idx].isLured = false;
             currentCogs[idx].lureDuration = 0;
@@ -552,28 +669,12 @@ export function CogCalculator() {
     return 'bg-red-500';
   };
 
-  const toggleTrapped = (idx: number) => {
-    setCogs(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], isTrapped: !next[idx].isTrapped };
-      return next;
-    });
-  };
-
-  const toggleLured = (idx: number) => {
-    setCogs(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], isLured: !next[idx].isLured };
-      return next;
-    });
-  };
-
   return (
-    <div className="grid grid-cols-[35fr_65fr] gap-3 h-full" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
+    <div className="grid grid-cols-[30fr_70fr] gap-3 h-full overflow-hidden" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
       {/* Left Panel: Selected Gags (Rounds) */}
-      <div className="flex-1 bg-[#082416] rounded-xl p-4 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[540px]">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-base font-bold text-white">Rounds</h4>
+      <div className="bg-[#082416] rounded-xl p-3 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[540px] overflow-hidden">
+        <div className="flex items-center justify-between mb-1 flex-shrink-0">
+          <h4 className="text-sm font-bold text-white">Rounds</h4>
           <button
             onClick={() => {
               setSelectedGagsByRound([
@@ -587,13 +688,13 @@ export function CogCalculator() {
               setActiveRound(0);
               setActiveGagSlot(0);
             }}
-            className="text-[10px] font-black uppercase text-red-400 hover:text-red-300 transition-colors"
+            className="text-[9px] font-black uppercase text-red-400 hover:text-red-300 transition-colors"
           >
-            Clear All
+            Clear
           </button>
         </div>
 
-        <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto pr-1 custom-scrollbar">
+        <div className="flex-1 flex flex-col gap-1 overflow-y-auto pr-0.5 custom-scrollbar">
           {[0, 1, 2, 3, 4, 5].map(rIdx => (
             <div
               key={rIdx}
@@ -601,15 +702,15 @@ export function CogCalculator() {
                 setActiveRound(rIdx);
                 setActiveGagSlot(0);
               }}
-              className={`flex items-center gap-2.5 p-2 rounded-xl border transition-all cursor-pointer ${activeRound === rIdx
-                ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+              className={`flex items-center gap-1.5 p-1.5 rounded-lg border transition-all cursor-pointer ${activeRound === rIdx
+                ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
                 : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'
                 }`}
             >
-              <div className="w-16 flex flex-col items-center">
-                <span className="text-[10px] font-black text-white/40 uppercase">Round {rIdx + 1}</span>
+              <div className="w-8 flex flex-col items-center flex-shrink-0">
+                <span className="text-[9px] font-black text-white/40 uppercase">R{rIdx + 1}</span>
               </div>
-              <div className="flex-1 flex gap-2">
+              <div className="flex-1 flex gap-1 justify-center">
                 {selectedGagsByRound[rIdx].map((gag, gIdx) => {
                   const track = gag ? gagTracks.find(t => t.id === gag.trackId) : null;
                   const gagData = track ? track.gags[gag!.gagIndex] : null;
@@ -618,16 +719,20 @@ export function CogCalculator() {
                   const isSlotActive = activeRound === rIdx && activeGagSlot === gIdx;
 
                   return (
-                    <div key={gIdx} className="flex flex-col items-center gap-1">
-                      <div className="flex gap-0.5 h-3 items-center">
-                        {[0, 1, 2, 3].map(cIdx => {
-                          const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
-                          return (
-                            <span key={cIdx} className={`text-[9px] font-black w-1 text-center ${isTargeted ? 'text-emerald-400' : 'text-white/10'}`}>
-                              {isTargeted ? '•' : ''}
-                            </span>
-                          );
-                        })}
+                    <div key={gIdx} className="flex flex-col items-center">
+                      <div className="flex flex-col gap-0.5 mb-0.5 items-center">
+                        {/* Target visualization (X and -) */}
+                        <div className="flex gap-0.5 h-2.5 items-center">
+                          {[0, 1, 2, 3].map(cIdx => {
+                            const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
+
+                            return (
+                              <span key={cIdx} className={`text-[8px] font-black w-1.5 text-center transition-colors ${isTargeted ? 'text-emerald-400' : 'text-white/10'}`}>
+                                {isTargeted ? 'X' : '-'}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div
                         onClick={(e) => {
@@ -638,19 +743,19 @@ export function CogCalculator() {
                             setActiveGagSlot(gIdx);
                           }
                         }}
-                        className={`w-9 h-9 rounded-lg border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
-                          gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/20'
+                        className={`w-12 h-12 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
+                          gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/10'
                           }`}
                         style={gag && track ? { backgroundColor: track.color } : {}}
                       >
                         {imgSrc ? (
                           <>
-                            <img src={imgSrc} alt="Gag" className="w-7 h-7 object-contain" />
+                            <img src={imgSrc} alt="Gag" className="w-9 h-9 object-contain" />
                             {gag?.variant === 'organic' && (
                               <img
                                 src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
                                 alt="Organic"
-                                className="absolute -bottom-1 -right-1 w-4 h-4 shadow-sm z-10 drop-shadow-md"
+                                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md"
                               />
                             )}
                           </>
@@ -668,7 +773,7 @@ export function CogCalculator() {
       </div>
 
       {/* Right Panel: Cogs & Gag Picker */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 min-w-0">
         {/* Cogs Panel */}
         <div className="bg-black/40 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -679,21 +784,21 @@ export function CogCalculator() {
                 className="flex items-center justify-between gap-2 bg-black/40 border border-white/10 rounded-lg p-2 text-white font-bold text-sm cursor-pointer hover:bg-black/60 hover:border-emerald-500/50 transition-colors w-[160px]"
               >
                 <span className="truncate">{activePreset || "Facility Presets"}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 flex-shrink-0"><path d="m6 9 6 6 6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 flex-shrink-0"><path d="m6 9 6 6 6-6" /></svg>
               </button>
               {presetMenuOpen && (
                 <div className="absolute top-full right-0 mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max flex flex-col gap-1">
                   <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActivePreset(null);
-                        setPresetMenuOpen(false);
-                      }}
-                      className={`text-left px-3 py-2 text-sm font-bold text-white/50 hover:text-white hover:bg-emerald-500/30 rounded-lg transition-colors cursor-pointer ${activePreset === null ? 'bg-black/40 text-white' : ''}`}
-                    >
-                      Clear Preset
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActivePreset(null);
+                      setPresetMenuOpen(false);
+                    }}
+                    className={`text-left px-3 py-2 text-sm font-bold text-white/50 hover:text-white hover:bg-emerald-500/30 rounded-lg transition-colors cursor-pointer ${activePreset === null ? 'bg-black/40 text-white' : ''}`}
+                  >
+                    Clear Preset
                   </button>
-                  <div className="h-px bg-white/10 my-1"/>
+                  <div className="h-px bg-white/10 my-1" />
                   {FACILITY_PRESETS.map((preset, i) => (
                     <button
                       key={i}
@@ -716,7 +821,7 @@ export function CogCalculator() {
           <div className="grid grid-cols-4 gap-2">
             {cogs.map((cog, idx) => {
               const choice = COG_CHOICES.find(c => c.id === cog.id);
-              const maxHp = choice?.hp || 196;
+              const maxHp = getCogMaxHp(cog, cogs);
               const dmg = activeStats.cogDamages[idx] || 0;
               const totalMax = maxHp * (cog.isV2 ? 2 : 1);
               const remainingTotal = Math.max(0, totalMax - dmg);
@@ -733,35 +838,35 @@ export function CogCalculator() {
                       onClick={(e) => { e.stopPropagation(); setActiveCogSlot(activeCogSlot === idx ? null : idx); }}
                       className="w-full aspect-square relative rounded-xl border border-white/10 bg-black/40 overflow-hidden cursor-pointer hover:border-emerald-400/50 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] transition-all group p-0 m-0"
                     >
-                        {(() => {
-                         if (!choice) return null;
-                         if (choice.type === 'normal') {
-                           return (
-                             <div className="flex flex-col items-center justify-center h-full w-full relative">
-                               <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60" />
-                               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
-                               <div className="relative flex flex-col items-center justify-center pointer-events-none">
-                                 {cog.isV2 && (
-                                   <div className="absolute top-0 right-0 bg-fuchsia-600/90 text-[8px] font-black px-1.5 py-0.5 rounded-bl shadow text-white tracking-widest uppercase">
-                                     v2.0
-                                   </div>
-                                 )}
-                                 <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Level</span>
-                                 <span className="text-4xl font-black text-white">{choice.id}</span>
-                               </div>
-                             </div>
-                           );
-                         }
-                         return (
-                           <>
-                             <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
-                             <div className="absolute bottom-1.5 inset-x-0 pointer-events-none">
-                               <span className="block text-center text-[10px] font-bold text-white leading-tight px-1">{choice.label}</span>
-                             </div>
-                           </>
-                         );
-                       })()}
+                      {(() => {
+                        if (!choice) return null;
+                        if (choice.type === 'normal') {
+                          return (
+                            <div className="flex flex-col items-center justify-center h-full w-full relative">
+                              <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+                              <div className="relative flex flex-col items-center justify-center pointer-events-none">
+                                {cog.isV2 && (
+                                  <div className="absolute top-0 right-0 bg-fuchsia-600/90 text-[8px] font-black px-1.5 py-0.5 rounded-bl shadow text-white tracking-widest uppercase">
+                                    v2.0
+                                  </div>
+                                )}
+                                <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Level</span>
+                                <span className="text-4xl font-black text-white">{choice.id}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <>
+                            <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+                            <div className="absolute bottom-1.5 inset-x-0 pointer-events-none">
+                              <span className="block text-center text-[10px] font-bold text-white leading-tight px-1">{choice.label}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </button>
                     {activeCogSlot === idx && (
                       <div className={`absolute top-full mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max max-w-[320px] ${idx < 2 ? 'left-0' : 'right-0'}`}>
@@ -784,9 +889,9 @@ export function CogCalculator() {
                         </div>
                         <div className="grid grid-cols-5 gap-1 mb-3">
                           {COG_CHOICES.filter(c => c.type === 'normal').map(c => (
-                            <button 
-                              key={c.id} 
-                              onClick={(e) => { e.stopPropagation(); const next = [...cogs]; next[idx] = { ...next[idx], id: c.id }; setCogs(next); setActiveCogSlot(null); }} 
+                            <button
+                              key={c.id}
+                              onClick={(e) => { e.stopPropagation(); const next = [...cogs]; next[idx] = { ...next[idx], id: c.id }; setCogs(next); setActiveCogSlot(null); }}
                               className={`relative w-9 h-9 rounded-md border flex items-center justify-center text-xs font-black transition-all cursor-pointer overflow-hidden ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400 text-emerald-100 shadow-[0_0_10px_rgba(52,211,153,0.3)]' : 'bg-black/30 border-white/5 text-white/60 hover:bg-black/50 hover:text-white'}`}
                             >
                               <img src={c.img as string} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity" />
@@ -795,13 +900,43 @@ export function CogCalculator() {
                           ))}
                         </div>
                         <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40">Supervisors</div>
-                        <div className="grid grid-cols-4 gap-1">
+                        <div className="grid grid-cols-4 gap-1 mb-3">
                           {COG_CHOICES.filter(c => c.type === 'boss').map(c => (
                             <button key={c.id} onClick={(e) => { e.stopPropagation(); const next = [...cogs]; next[idx] = { ...next[idx], id: c.id, isV2: false }; setCogs(next); setActiveCogSlot(null); }} className={`relative w-[60px] h-16 rounded-md border flex flex-col items-center justify-center gap-1 transition-all p-1 cursor-pointer ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400' : 'bg-black/30 border-white/5 hover:bg-black/50'}`}>
-                               <img src={c.img as string} alt={c.label} className="w-8 h-8 object-contain" />
-                               <span className="text-[8px] font-bold text-center leading-tight text-white/80">{c.label}</span>
+                              <img src={c.img as string} alt={c.label} className="w-8 h-8 object-contain" />
+                              <span className="text-[8px] font-bold text-center leading-tight text-white/80">{c.label}</span>
                             </button>
                           ))}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40">Statuses</div>
+                        <div className="grid grid-cols-4 gap-1">
+                          {STATUS_EFFECTS.map(effect => {
+                            const isSupervisor = COG_CHOICES.find(c => c.id === cog.id)?.type === 'boss';
+                            const hasMintSupervisor = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+                            const isAuditor = cog.id === 'mint_coin' || cog.id === 'mint_bullion';
+                            let isForced = false;
+                            if (effect.id === 'isTenure' && (isSupervisor || hasMintSupervisor)) isForced = true;
+                            if (effect.id === 'isAttentive' && isSupervisor) isForced = true;
+                            if (effect.id === 'isOverpaid' && (!isAuditor && hasMintSupervisor)) isForced = true;
+                            const isActive = !!(cog as any)[effect.id] || isForced;
+                            return (
+                              <button
+                                key={effect.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isForced) return;
+                                  const next = [...cogs];
+                                  (next[idx] as any)[effect.id] = !isActive;
+                                  setCogs(next);
+                                }}
+                                className={`relative w-[60px] h-[60px] rounded-md border flex flex-col items-center justify-center gap-1 transition-all p-1 ${isForced ? 'cursor-not-allowed' : 'cursor-pointer'} ${isActive ? `${effect.color}/30 border-white/40 shadow-[0_0_10px_${effect.shadow}]` : 'bg-black/30 border-white/5 opacity-40 hover:opacity-100 hover:bg-black/50'}`}
+                                title={effect.label}
+                              >
+                                <img src={getExtensionImageUrl(`images/statuses/${effect.icon}`)} alt={effect.label} className="w-8 h-8 object-contain" />
+                                <span className="text-[8px] font-bold text-center leading-tight text-white/80">{effect.label}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -822,34 +957,62 @@ export function CogCalculator() {
                       </div>
                     </div>
                     {/* Status Indicators Area */}
-                    <div className="flex gap-3 h-8 items-center justify-center">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleTrapped(idx); }}
-                        className={`transition-all cursor-pointer ${finalCog.isTrapped ? 'opacity-100' : 'opacity-20 hover:opacity-40'}`}
-                        title="Trapped"
-                      >
-                        <img
-                          src="https://toonhq.org/static/assets/gags/ttr/banana_peel.png"
-                          alt="Trapped"
-                          className="w-6 h-6 object-contain"
-                        />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleLured(idx); }}
-                        className={`transition-all cursor-pointer relative ${finalCog.isLured ? 'opacity-100' : 'opacity-20 hover:opacity-40'}`}
-                        title="Lured"
-                      >
-                        <img
-                          src="https://toonhq.org/static/assets/gags/ttr/small_magnet.png"
-                          alt="Lured"
-                          className="w-6 h-6 object-contain"
-                        />
-                        {finalCog.isLured && finalCog.lureDuration !== undefined && (
-                          <span className="absolute -top-1 -right-1 bg-green-500 text-[8px] font-black text-white px-1 rounded-full border border-black/20">
-                            {finalCog.lureDuration}
-                          </span>
-                        )}
-                      </button>
+                    <div className="flex flex-col gap-1.5 items-center justify-center py-1 text-center">
+                      <div className="flex flex-wrap gap-2 min-h-8 items-center justify-center px-1">
+                        {STATUS_EFFECTS.map(effect => {
+                          const isSupervisor = COG_CHOICES.find(c => c.id === finalCog.id)?.type === 'boss';
+                          const hasMintSupervisorAny = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+                          const isAuditor = finalCog.id === 'mint_coin' || finalCog.id === 'mint_bullion';
+
+                          let isForced = false;
+                          if (effect.id === 'isTenure' && (isSupervisor || hasMintSupervisorAny)) isForced = true;
+                          if (effect.id === 'isAttentive' && isSupervisor) isForced = true;
+                          if (effect.id === 'isOverpaid' && (!isAuditor && hasMintSupervisorAny)) isForced = true;
+
+                          let activeLocal = !!(finalCog as any)[effect.id] || isForced;
+
+                          let badgeValue: string | number | undefined = undefined;
+                          if (effect.id === 'isLured' && activeLocal && finalCog.lureDuration !== undefined) {
+                            badgeValue = finalCog.lureDuration;
+                          }
+
+                          if (effect.id === 'isDefenseDown') {
+                            const isPresident = finalCog.id === 'golf_fairway' || finalCog.id === 'golf_fringe';
+                            const deadCogsCount = activeStats.finalCogs.filter((c: Cog, i: number) => {
+                               const maxHp = getCogMaxHp(c, cogs);
+                               const cdmg = activeStats.cogDamages[i] || 0;
+                               return (c.isV2 ? maxHp * 2 : maxHp) <= cdmg;
+                            }).length;
+
+                            if (isPresident && deadCogsCount > 0) {
+                              activeLocal = true;
+                              badgeValue = deadCogsCount;
+                            } else if (activeLocal) {
+                              badgeValue = 1;
+                            }
+                          }
+
+                          return (
+                            <div
+                              key={effect.id}
+                              className={`transition-all relative flex items-center justify-center ${activeLocal ? 'opacity-100' : 'hidden'}`}
+                              style={activeLocal ? { filter: `drop-shadow(0 0 4px ${effect.shadow})` } : {}}
+                              title={effect.label}
+                            >
+                              <img
+                                src={getExtensionImageUrl(`images/statuses/${effect.icon}`)}
+                                alt={effect.label}
+                                className="w-5 h-5 object-contain"
+                              />
+                              {badgeValue !== undefined && (
+                                <div className={`absolute -top-1.5 -right-1.5 text-[8px] font-black text-white px-1 rounded-full border border-black/20 shadow-sm z-10 min-w-[12px] h-3 flex items-center justify-center ${effect.id === 'isDefenseDown' ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                                  {badgeValue}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -867,7 +1030,7 @@ export function CogCalculator() {
                 key={track.id}
                 track={track}
                 onSelectGag={handleSelectGag}
-                cogs={cogs}
+                cogs={activeRound === 0 ? cogs : roundResults[activeRound - 1].finalCogs}
                 cogDamages={activeStats.cogDamages}
                 getHealthColor={getHealthColor}
                 activePopup={activePopup}

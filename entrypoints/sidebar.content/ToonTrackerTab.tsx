@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getSetting, setSetting } from './db';
 import type { ToonTrackerData } from './tracker';
+import { browser } from 'wxt/browser';
+
+function getExtensionImageUrl(path: string): string {
+  const cleanPath = path.replace(/^\/+/, '');
+  try {
+    return browser.runtime.getURL(cleanPath as any);
+  } catch (e) {
+    return `/${cleanPath}`;
+  }
+}
 
 export function ToonTrackerTab() {
   const [toonTrackerData, setToonTrackerData] = useState<ToonTrackerData | null>(null);
@@ -406,6 +416,54 @@ export function ToonTrackerTab() {
       <div className="flex-1 overflow-y-auto custom-scrollbar py-4 px-2 space-y-4">
         {toonTrackerData ? (
           <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* Rewards Row */}
+            {toonTrackerData.data.rewards && (
+              <div className="flex justify-between items-center px-2 py-3 bg-white/5 rounded-xl border border-white/5 shadow-inner backdrop-blur-sm">
+                {(() => {
+                  const rewards = toonTrackerData.data.rewards;
+                  const totals = {
+                    pinkslips: rewards.pinkslips || 0,
+                    sos: Object.values(rewards.sos || {}).reduce((a: number, b) => a + (b as number), 0),
+                    unites: Object.values(rewards.unites || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0),
+                    remotes: Object.values(rewards.remotes || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0),
+                    summons: Object.values(rewards.summons || {}).reduce((a: number, b: any) => a + (b.single ? 1 : 0) + (b.building ? 1 : 0) + (b.invasion ? 1 : 0), 0),
+                  };
+
+                  const rewardTypes = [
+                    { id: 'sos', img: 'sos.png', count: totals.sos, color: 'blue' },
+                    { id: 'unites', img: 'unites.png', count: totals.unites, color: 'pink' },
+                    { id: 'remotes', img: 'remotes.png', count: totals.remotes, color: 'emerald' },
+                    { id: 'pinkslips', img: 'pinkslips.png', count: totals.pinkslips, color: 'orange' },
+                    { id: 'summons', img: 'summons.png', count: totals.summons, color: 'purple' },
+                  ];
+
+                  return rewardTypes.map(rt => (
+                    <div key={rt.id} className="relative group/reward flex flex-col items-center gap-1">
+                      <div className="w-10 h-10 rounded-full bg-black/40 border border-white/10 p-1.5 flex items-center justify-center relative transition-all group-hover/reward:scale-110 group-hover/reward:border-white/30 group-hover/reward:bg-black/60 shadow-lg">
+                        <img
+                          src={getExtensionImageUrl(`images/${rt.img}`)}
+                          alt={rt.id}
+                          className="w-full h-full object-contain filter drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]"
+                        />
+                        {rt.count > 0 && (
+                          <div className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-black text-white border border-white/20 shadow-xl z-10 
+                            ${rt.color === 'blue' ? 'bg-blue-600' :
+                              rt.color === 'pink' ? 'bg-pink-600' :
+                                rt.color === 'emerald' ? 'bg-emerald-600' :
+                                  rt.color === 'orange' ? 'bg-orange-600' :
+                                    'bg-purple-600'}`}
+                          >
+                            {rt.count}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-white/30 group-hover/reward:text-white/60 transition-colors">{rt.id}</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+
             {/* Cog Suits Section */}
             <div className="space-y-3">
               {Object.entries(toonTrackerData.data.cogsuits || {}).map(([id, suit]) => {
