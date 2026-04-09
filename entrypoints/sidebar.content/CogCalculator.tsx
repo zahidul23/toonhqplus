@@ -54,12 +54,15 @@ const SOS_FRANZ_NECKVEIN = 'https://rendition.toontownrewritten.com/render/740d0
 const SOS_BARNACLE_BESSIE = 'https://rendition.toontownrewritten.com/render/7414050200010c010c01190d000d0d010400000000000000000000000000000000/portrait/128x128.webp';
 
 
-const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; turns?: number; image: string; name: string; isInstaKill?: boolean }>> = {
+const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; rounds?: number; dmgOthers?: number; dmgExpire?: number; image: string; name: string; isInstaKill?: boolean; isRemote?: boolean; stars?: number }>> = {
   trap: [
     { gagIndex: 3, damage: 60, image: SOS_CLERK_WILL, name: "Clerk Will" },
     { gagIndex: 4, damage: 120, image: SOS_CLERK_PENNY, name: "Clerk Penny" },
     { gagIndex: 5, damage: 180, image: SOS_CLERK_CLARA, name: "Clerk Clara" },
     { gagIndex: 7, damage: 9999, image: getExtensionImageUrl('images/pinkslips.png'), name: "Pink Slip", isInstaKill: true },
+    { gagIndex: 8, damage: 0, rounds: 2, dmgOthers: 45, dmgExpire: 45, image: getExtensionImageUrl('images/remotes.png'), name: "1-Star Remote", isRemote: true, stars: 1 },
+    { gagIndex: 9, damage: 0, rounds: 3, dmgOthers: 60, dmgExpire: 90, image: getExtensionImageUrl('images/remotes.png'), name: "2-Star Remote", isRemote: true, stars: 2 },
+    { gagIndex: 10, damage: 0, rounds: 4, dmgOthers: 75, dmgExpire: 150, image: getExtensionImageUrl('images/remotes.png'), name: "3-Star Remote", isRemote: true, stars: 3 },
   ],
   sound: [
     { gagIndex: 3, damage: 35, image: SOS_BARB, name: "Barbara Seville" },
@@ -100,6 +103,11 @@ interface Cog {
   lureDuration?: number;
   trapDamage?: number;
   isV2?: boolean;
+  remote?: {
+    roundsLeft: number;
+    damageToOthers: number;
+    damageOnExpire: number;
+  };
 }
 
 const STATUS_EFFECTS = [
@@ -186,6 +194,42 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage
 function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, activePopup, setActivePopup }: { track: GagTrack, onSelectGag: any, cogs: Cog[], cogDamages: number[], getHealthColor: any, activePopup: any, setActivePopup: any }) {
   const sosGags = SOS_GAGS[track.id] || [];
 
+  const RemoteStarsPopup = ({ trackId, variant }: { trackId: string; variant: GagVariant }) => {
+    const isOpen = activePopup?.trackId === trackId && activePopup?.variant === variant && activePopup?.subType === 'stars';
+    if (!isOpen) return null;
+
+    const remotes = (SOS_GAGS[trackId] || []).filter(s => s.isRemote);
+
+    return (
+      <div className="absolute bottom-full mb-3 w-max bg-[#0c3622] p-4 rounded-2xl border border-white/10 shadow-2xl z-[70] animate-in fade-in slide-in-from-bottom-2 right-0">
+        <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3 text-center">Select Level</div>
+        <div className="flex gap-3">
+          {remotes.map(rem => (
+            <button
+              key={rem.gagIndex}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActivePopup({ trackId, gagIndex: rem.gagIndex, variant });
+              }}
+              className="group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-emerald-500/20 rounded-xl border border-white/5 hover:border-emerald-500/50 transition-all cursor-pointer min-w-[64px]"
+            >
+              <div className="relative">
+                <img src={rem.image} className="w-10 h-10 object-contain group-hover/star:scale-110 transition-transform" />
+                <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5">
+                  {[...Array(rem.stars)].map((_, i) => (
+                    <span key={i} className="text-yellow-400 text-[10px] drop-shadow-sm">★</span>
+                  ))}
+                </div>
+              </div>
+              <span className="text-[10px] font-black text-white/80">{rem.stars} Star</span>
+            </button>
+          ))}
+        </div>
+        <div className="absolute top-full right-4 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]"></div>
+      </div>
+    );
+  };
+
   const TargetPopup = ({ trackId, gagIndex, variant, alignment = 'center' }: { trackId: string; gagIndex: number; variant: GagVariant; alignment?: 'left' | 'center' | 'right' }) => {
     const isOpen = activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant;
     if (!isOpen) return null;
@@ -224,7 +268,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                   onSelectGag(trackId, gagIndex, variant, cogIdx);
                   setActivePopup(null);
                 }}
-                className={`group/target relative flex flex-col items-center justify-between p-2 w-20 h-24 rounded-xl border border-white/10 transition-all overflow-hidden shadow-lg ${isDisabled ? 'opacity-20 cursor-not-allowed grayscale bg-black/80' : 'bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 cursor-pointer'}`}
+                className={`group/target relative flex flex-col items-center justify-between p-2 w-20 h-24 rounded-xl border border-white/10 transition-all overflow-hidden ${isDisabled ? 'opacity-20 cursor-not-allowed grayscale bg-black/80' : 'bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 cursor-pointer'}`}
               >
                 {choice?.img && (
                   <img
@@ -251,7 +295,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             );
           })}
         </div>
-        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]"></div>
+        <div className={`absolute top-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622] ${alignment === 'left' ? 'left-4' : alignment === 'right' ? 'right-4' : 'left-1/2 -translate-x-1/2'}`}></div>
       </div>
     );
   };
@@ -271,6 +315,11 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
     });
 
     if (!isAllTarget && livingCount === 1 && livingTargetIdx !== -1) {
+      const sosInfo = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
+      if (sosInfo?.isRemote && !activePopup?.gagIndex) {
+         setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
+         return;
+      }
       onSelectGag(trackId, gagIndex, variant, livingTargetIdx);
       setActivePopup(null);
       return;
@@ -280,7 +329,10 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
       onSelectGag(trackId, gagIndex, variant);
       setActivePopup(null);
     } else {
-      if (activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant) {
+      const sosInfo = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
+      if (sosInfo?.isRemote && activePopup?.subType !== 'stars' && activePopup?.gagIndex !== gagIndex) {
+        setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
+      } else if (activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant) {
         setActivePopup(null);
       } else {
         setActivePopup({ trackId, gagIndex, variant });
@@ -340,8 +392,9 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
         {sosGags.length > 0 && (
           <>
             <div className="w-px h-8 bg-white/10 mx-1" />
-            {sosGags.map((sos: any) => {
-              const isAllTarget = sos.isInstaKill !== true;
+            {sosGags.filter(sos => !(sos.isRemote && sos.stars > 1)).map((sos: any, index: number) => {
+              const showSeparator = track.id === 'trap' && sos.name === 'Pink Slip';
+              const isAllTarget = sos.isInstaKill !== true && sos.isRemote !== true;
 
               let gagDisabled = false;
               if (track.id === 'lure') {
@@ -354,21 +407,31 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                   gagDisabled = true;
                 }
               }
-
+              
               return (
-                <GagButton
-                  key={`sos-${sos.gagIndex}`}
-                  imageSrc={sos.image}
-                  imageAlt={sos.name}
-                  color={track.color}
-                  title={`${sos.name} (${sos.damage})`}
-                  damage={sos.damage}
-                  disabled={gagDisabled}
-                  onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
-                  targetPopup={!isAllTarget && (
-                    <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
-                  )}
-                />
+                <React.Fragment key={`sos-${sos.gagIndex}`}>
+                  {showSeparator && <div className="w-px h-8 bg-white/10 mx-1" />}
+                  <GagButton
+                    imageSrc={sos.image}
+                    imageAlt={sos.isRemote ? "Remote" : sos.name}
+                    color={sos.isInstaKill || sos.isRemote ? '#c22c2c' : track.color}
+                    title={sos.isRemote ? "Damage Remote" : `${sos.name} (${sos.damage})`}
+                    damage={sos.damage}
+                    disabled={gagDisabled}
+                    onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
+                    targetPopup={
+                      sos.isRemote ? (
+                        activePopup?.trackId === track.id && activePopup?.variant === 'sos' && activePopup?.subType === 'stars' ? (
+                          <RemoteStarsPopup trackId={track.id} variant="sos" />
+                        ) : activePopup?.trackId === track.id && activePopup?.variant === 'sos' && (SOS_GAGS[track.id] || []).find(s => s.gagIndex === activePopup?.gagIndex)?.isRemote ? (
+                          <TargetPopup trackId={track.id} gagIndex={activePopup.gagIndex} variant="sos" alignment="right" />
+                        ) : null
+                      ) : (
+                        <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
+                      )
+                    }
+                  />
+                </React.Fragment>
               );
             })}
           </>
@@ -406,7 +469,7 @@ export function CogCalculator() {
   ]);
   const [activeRound, setActiveRound] = useState<number>(0);
   const [activeGagSlot, setActiveGagSlot] = useState<number>(0);
-  const [activePopup, setActivePopup] = useState<{ trackId: string; gagIndex: number; variant: GagVariant } | null>(null);
+  const [activePopup, setActivePopup] = useState<{ trackId: string; gagIndex: number; variant: GagVariant, subType?: string } | null>(null);
   const [activeCogSlot, setActiveCogSlot] = useState<number | null>(null);
   const [presetMenuOpen, setPresetMenuOpen] = useState<boolean>(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -416,8 +479,10 @@ export function CogCalculator() {
   }, []);
 
   const handleSelectGag = (trackId: string, gagIndex: number, variant: GagVariant, targetIdx?: number) => {
-    const isSosInstaKill = variant === 'sos' && (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex)?.isInstaKill;
-    const isAllTarget = trackId === 'sound' || (variant === 'sos' && !isSosInstaKill) || (['trap', 'lure', 'drop'].includes(trackId) && gagIndex === 6) || (trackId === 'lure' && [1, 3, 5].includes(gagIndex));
+    const sosData = variant === 'sos' ? (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex) : null;
+    const isSosInstaKill = sosData?.isInstaKill;
+    const isRemote = sosData?.isRemote;
+    const isAllTarget = trackId === 'sound' || (variant === 'sos' && !isSosInstaKill && !isRemote) || (['trap', 'lure', 'drop'].includes(trackId) && gagIndex === 6) || (trackId === 'lure' && [1, 3, 5].includes(gagIndex));
 
     setSelectedGagsByRound(prev => {
       const next = [...prev.map(r => [...r])];
@@ -508,12 +573,23 @@ export function CogCalculator() {
         gagsInTrack.forEach(gag => {
           if (!gag) return;
           let baseDmg = getGagDamage(gag);
-          const isInstaKill = gag.variant === 'sos' && (SOS_GAGS[gag.trackId] || []).find(s => s.gagIndex === gag.gagIndex)?.isInstaKill;
+          const sosData = gag.variant === 'sos' ? (SOS_GAGS[gag.trackId] || []).find(s => s.gagIndex === gag.gagIndex) : null;
+          const isInstaKill = sosData?.isInstaKill;
+          const isRemote = sosData?.isRemote;
           const targets = gag.target === 'all' ? [0, 1, 2, 3] : [gag.targetIdx!];
 
           targets.forEach(cogIdx => {
             const cog = currentCogs[cogIdx];
             let currentDmg = baseDmg;
+
+            if (isRemote && sosData) {
+              cog.isRemoteDmg = true;
+              cog.remote = {
+                roundsLeft: sosData.rounds || 0,
+                damageToOthers: sosData.dmgOthers || 0,
+                damageOnExpire: sosData.dmgExpire || 0,
+              };
+            }
 
             if (isInstaKill) {
               const choice = COG_CHOICES.find(c => c.id === cog.id);
@@ -590,6 +666,29 @@ export function CogCalculator() {
           });
         });
 
+        const resolveDamage = (dmg: number, idx: number) => {
+          const state = cogStates[idx];
+          if (state.layer === 0) return;
+          const remainingHpOnLayer = state.maxHp - state.damageOnCurrentLayer;
+          if (dmg >= remainingHpOnLayer) {
+            state.totalEffectiveDamage += remainingHpOnLayer;
+            cogDamagesThisRound[idx] += remainingHpOnLayer;
+            state.layer -= 1;
+            state.damageOnCurrentLayer = 0;
+            currentCogs[idx].isLured = false;
+            currentCogs[idx].lureDuration = 0;
+            currentCogs[idx].isTrapped = false;
+            currentCogs[idx].trapDamage = 0;
+            currentCogs[idx].remote = undefined;
+            currentCogs[idx].isRemoteDmg = false;
+            trapDamageOnCog[idx] = 0;
+          } else {
+            state.damageOnCurrentLayer += dmg;
+            state.totalEffectiveDamage += dmg;
+            cogDamagesThisRound[idx] += dmg;
+          }
+        };
+
         // Resolve phase damage with v2 layer caps
         phaseDamage.forEach((dmg, idx) => {
           const state = cogStates[idx];
@@ -606,37 +705,89 @@ export function CogCalculator() {
             currentCogs[idx].lureDuration = 0;
             currentCogs[idx].isTrapped = false;
             currentCogs[idx].trapDamage = 0;
+            currentCogs[idx].remote = undefined;
+            currentCogs[idx].isRemoteDmg = false;
             trapDamageOnCog[idx] = 0;
             return;
           }
 
           if (dmg === 0) return;
-
-          const remainingHpOnLayer = state.maxHp - state.damageOnCurrentLayer;
-
-          if (dmg >= remainingHpOnLayer) {
-            // Layer destroyed!
-            const effectiveDmgThisPhase = remainingHpOnLayer;
-            state.totalEffectiveDamage += effectiveDmgThisPhase;
-            cogDamagesThisRound[idx] += effectiveDmgThisPhase;
-            // overkill is discarded!
-            state.layer -= 1;
-            state.damageOnCurrentLayer = 0;
-
-            // clear lure/trap status on death of v1 suit
-            currentCogs[idx].isLured = false;
-            currentCogs[idx].lureDuration = 0;
-            currentCogs[idx].isTrapped = false;
-            currentCogs[idx].trapDamage = 0;
-            trapDamageOnCog[idx] = 0;
-          } else {
-            // Sub-lethal damage to layer
-            state.damageOnCurrentLayer += dmg;
-            state.totalEffectiveDamage += dmg;
-            cogDamagesThisRound[idx] += dmg;
-          }
+          resolveDamage(dmg, idx);
         });
       });
+
+      // NEW: Absolute Final Phase (Remotes)
+      // Process from right to left (4, 3, 2, 1) -> Indices 3, 2, 1, 0
+      for (let i = 3; i >= 0; i--) {
+        const state = cogStates[i];
+        const cog = currentCogs[i];
+        // If cog is dead or doesn't have a remote, skip
+        if (state.layer === 0 || !cog.remote) continue;
+
+        const remote = cog.remote;
+        remote.roundsLeft -= 1;
+
+        // 1. Damage to others
+        const dmgOthers = remote.damageToOthers;
+        if (dmgOthers > 0) {
+          for (let j = 0; j < 4; j++) {
+            if (i === j) continue;
+            const targetState = cogStates[j];
+            if (targetState.layer === 0) continue;
+            
+            // Re-define resolveDamage inside here or make it accessible
+            const applyDmg = (d: number, idx: number) => {
+              const s = cogStates[idx];
+              const rHp = s.maxHp - s.damageOnCurrentLayer;
+              if (d >= rHp) {
+                s.totalEffectiveDamage += rHp;
+                cogDamagesThisRound[idx] += rHp;
+                s.layer -= 1;
+                s.damageOnCurrentLayer = 0;
+                currentCogs[idx].isLured = false;
+                currentCogs[idx].lureDuration = 0;
+                currentCogs[idx].isTrapped = false;
+                currentCogs[idx].trapDamage = 0;
+                currentCogs[idx].remote = undefined;
+                currentCogs[idx].isRemoteDmg = false;
+              } else {
+                s.damageOnCurrentLayer += d;
+                s.totalEffectiveDamage += d;
+                cogDamagesThisRound[idx] += d;
+              }
+            };
+            applyDmg(dmgOthers, j);
+          }
+        }
+
+        // 2. Damage to self on expiry
+        if (remote.roundsLeft <= 0) {
+          const dmgExpire = remote.damageOnExpire;
+          const applyDmg = (d: number, idx: number) => {
+            const s = cogStates[idx];
+            const rHp = s.maxHp - s.damageOnCurrentLayer;
+            if (d >= rHp) {
+              s.totalEffectiveDamage += rHp;
+              cogDamagesThisRound[idx] += rHp;
+              s.layer -= 1;
+              s.damageOnCurrentLayer = 0;
+              currentCogs[idx].isLured = false;
+              currentCogs[idx].lureDuration = 0;
+              currentCogs[idx].isTrapped = false;
+              currentCogs[idx].trapDamage = 0;
+              currentCogs[idx].remote = undefined;
+              currentCogs[idx].isRemoteDmg = false;
+            } else {
+              s.damageOnCurrentLayer += d;
+              s.totalEffectiveDamage += d;
+              cogDamagesThisRound[idx] += d;
+            }
+          };
+          applyDmg(dmgExpire, i);
+          cog.remote = undefined;
+          cog.isRemoteDmg = false;
+        }
+      }
 
       currentCogs.forEach((cog, i) => {
         cog.trapDamage = trapDamageOnCog[i];
@@ -670,7 +821,7 @@ export function CogCalculator() {
   };
 
   return (
-    <div className="grid grid-cols-[30fr_70fr] gap-3 h-full overflow-hidden" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
+    <div className="grid grid-cols-[30fr_70fr] gap-3 h-full overflow-visible" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
       {/* Left Panel: Selected Gags (Rounds) */}
       <div className="bg-[#082416] rounded-xl p-3 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[540px] overflow-hidden">
         <div className="flex items-center justify-between mb-1 flex-shrink-0">
@@ -746,7 +897,7 @@ export function CogCalculator() {
                         className={`w-12 h-12 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
                           gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/10'
                           }`}
-                        style={gag && track ? { backgroundColor: track.color } : {}}
+                        style={gag && track ? { backgroundColor: (sosInfo?.isInstaKill || sosInfo?.isRemote) ? '#c22c2c' : track.color } : {}}
                       >
                         {imgSrc ? (
                           <>
@@ -757,6 +908,13 @@ export function CogCalculator() {
                                 alt="Organic"
                                 className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md"
                               />
+                            )}
+                            {sosInfo?.isRemote && sosInfo.stars && (
+                              <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5 pointer-events-none">
+                                {[...Array(sosInfo.stars)].map((_, i) => (
+                                  <span key={i} className="text-yellow-400 text-[7px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">★</span>
+                                ))}
+                              </div>
                             )}
                           </>
                         ) : (
@@ -773,7 +931,7 @@ export function CogCalculator() {
       </div>
 
       {/* Right Panel: Cogs & Gag Picker */}
-      <div className="flex flex-col gap-3 min-w-0">
+      <div className="flex flex-col gap-3 min-w-0 relative overflow-visible">
         {/* Cogs Panel */}
         <div className="bg-black/40 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -974,6 +1132,10 @@ export function CogCalculator() {
                           let badgeValue: string | number | undefined = undefined;
                           if (effect.id === 'isLured' && activeLocal && finalCog.lureDuration !== undefined) {
                             badgeValue = finalCog.lureDuration;
+                          }
+
+                          if (effect.id === 'isRemoteDmg' && activeLocal && finalCog.remote?.roundsLeft !== undefined) {
+                            badgeValue = finalCog.remote.roundsLeft;
                           }
 
                           if (effect.id === 'isDefenseDown') {
