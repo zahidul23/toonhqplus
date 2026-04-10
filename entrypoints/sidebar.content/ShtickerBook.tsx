@@ -2554,6 +2554,26 @@ export function ShtickerBook() {
     } catch (e) { }
   }, [activeTab, activeFacility]);
 
+  useEffect(() => {
+    const handleOpen = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.tab) {
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details'];
+        if (validTabs.includes(detail.tab)) {
+          setActiveTab(detail.tab as InfoBookTab);
+          if (detail.tab === 'reward_details' && detail.category) {
+            // We'll pass this via a window property or just let the component handle it if it's already using it
+            (window as any)._pendingRewardCategory = detail.category;
+          }
+        }
+      }
+      setIsClosing(false);
+      setIsOpen(true);
+    };
+    window.addEventListener('toonhqplus-open-shtickerbook', handleOpen);
+    return () => window.removeEventListener('toonhqplus-open-shtickerbook', handleOpen);
+  }, []);
+
   const closeBook = () => {
     if (isClosing) return;
     setIsClosing(true);

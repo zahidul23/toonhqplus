@@ -65,9 +65,9 @@ function isRecentlyEarned(timestamp: number): boolean {
 const REWARD_CATEGORIES = [
   { id: 'sos', label: 'SOS Cards', img: 'sos.png' },
   { id: 'unites', label: 'Unites', img: 'unites.png' },
-  { id: 'remotes', label: 'Remotes', img: 'remotes.png' },
   { id: 'summons', label: 'Cog Summons', img: 'summons.png' },
-  { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.png' },
+  { id: 'pinkslips', label: 'Fires', img: 'pinkslips.png' },
+  { id: 'remotes', label: 'Remotes', img: 'remotes.png' },
 ] as const;
 
 type RewardCategory = typeof REWARD_CATEGORIES[number]['id'];
@@ -370,6 +370,22 @@ export function ToonTrackerTab({
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
+  useEffect(() => {
+    const handleOpen = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.tab === 'reward_details' && detail.category) {
+        setActiveCategory(detail.category);
+      }
+    };
+    window.addEventListener('toonhqplus-open-shtickerbook', handleOpen);
+    return () => window.removeEventListener('toonhqplus-open-shtickerbook', handleOpen);
+  }, []);
+  useEffect(() => {
+    if (subView === 'rewards_detail' && (window as any)._pendingRewardCategory) {
+      setActiveCategory((window as any)._pendingRewardCategory);
+      delete (window as any)._pendingRewardCategory;
+    }
+  }, [subView]);
   useEffect(() => { toonDataRef.current = toonTrackerData; }, [toonTrackerData]);
 
   const toggleSection = (section: string) => {
@@ -390,7 +406,7 @@ export function ToonTrackerTab({
   const checkRewards = (prev: any, next: any) => {
     const changes: string[] = [];
     if (!prev || !next || JSON.stringify(prev) === JSON.stringify(next)) return changes;
-    if (next.pinkslips > (prev.pinkslips || 0)) changes.push(`Pink Slips x${next.pinkslips - (prev.pinkslips || 0)}`);
+    if (next.pinkslips > (prev.pinkslips || 0)) changes.push(`Fires x${next.pinkslips - (prev.pinkslips || 0)}`);
     if (next.sos) {
       Object.entries(next.sos).forEach(([name, count]) => {
         const prevCount = prev.sos?.[name] || 0;
@@ -747,9 +763,27 @@ export function ToonTrackerTab({
                         remotes: Object.values(rewards.remotes || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0),
                         summons: Object.values(rewards.summons || {}).reduce((a: number, b: any) => a + (b.single ? 1 : 0) + (b.building ? 1 : 0) + (b.invasion ? 1 : 0), 0),
                       };
-                      const types = [{ id: 'sos', img: 'sos.png', count: totals.sos, color: 'blue' }, { id: 'unites', img: 'unites.png', count: totals.unites, color: 'pink' }, { id: 'remotes', img: 'remotes.png', count: totals.remotes, color: 'emerald' }, { id: 'pinkslips', img: 'pinkslips.png', count: totals.pinkslips, color: 'orange' }, { id: 'summons', img: 'summons.png', count: totals.summons, color: 'purple' }];
+                      const types = [
+                        { id: 'sos', img: 'sos.png', count: totals.sos, color: 'blue' },
+                        { id: 'unites', img: 'unites.png', count: totals.unites, color: 'pink' },
+                        { id: 'summons', img: 'summons.png', count: totals.summons, color: 'purple' },
+                        { id: 'pinkslips', img: 'pinkslips.png', count: totals.pinkslips, color: 'orange' },
+                        { id: 'remotes', img: 'remotes.png', count: totals.remotes, color: 'emerald' }
+                      ] as const;
+
+                      const handleRewardClick = (e: React.MouseEvent, category: RewardCategory) => {
+                        e.stopPropagation();
+                        window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
+                          detail: { tab: 'reward_details', category }
+                        }));
+                      };
+
                       return types.map(rt => (
-                        <div key={rt.id} className="relative group/reward flex flex-col items-center gap-1">
+                        <div
+                          key={rt.id}
+                          onClick={(e) => handleRewardClick(e, rt.id)}
+                          className="relative group/reward flex flex-col items-center gap-1 cursor-pointer"
+                        >
                           <div className={`${isExpanded ? 'w-12 h-12' : 'w-10 h-10'} rounded-full bg-black/40 border border-white/10 p-1.5 flex items-center justify-center relative transition-all group-hover/reward:scale-110 group-hover/reward:border-white/30 group-hover/reward:bg-black/60 shadow-lg`}>
                             <img src={getExtensionImageUrl(`images/${rt.img}`)} alt={rt.id} className="w-full h-full object-contain filter drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]" />
                             {rt.count > 0 && <div className={`${isExpanded ? 'min-w-[20px] h-[20px] text-[11px]' : 'min-w-[18px] h-[18px] text-[10px]'} absolute -top-1 -right-1 px-1 rounded-full flex items-center justify-center font-black text-white border border-white/20 shadow-xl z-10 ${rt.color === 'blue' ? 'bg-blue-600' : rt.color === 'pink' ? 'bg-pink-600' : rt.color === 'emerald' ? 'bg-emerald-600' : rt.color === 'orange' ? 'bg-orange-600' : 'bg-purple-600'}`}>{rt.count}</div>}
@@ -802,28 +836,33 @@ export function ToonTrackerTab({
                       const remaining = suit.promotion ? suit.promotion.target - suit.promotion.current : 0;
                       const progress = suit.promotion ? (suit.promotion.current / suit.promotion.target) * 100 : 0;
                       return (
-                        <div key={id} className={`relative rounded-lg border flex flex-col transition-all hover:brightness-110 shadow-md group/suit ${isMaxed ? 'p-3 gap-0' : 'p-4 gap-3'}`} style={{ backgroundColor: colors.bg, borderColor: `${colors.border}60` }}>
+                        <div key={id} className={`relative rounded-lg border flex flex-col transition-all hover:brightness-110 shadow-md group/suit ${isMaxed && !isExpanded ? 'p-3 gap-0' : 'p-4 gap-3'}`} style={{ backgroundColor: colors.bg, borderColor: `${colors.border}60` }}>
                           <div className="flex justify-between items-center gap-2">
                             <span className="text-[11.5px] font-bold text-white uppercase tracking-widest truncate">{suit.department}</span>
                             <div className="flex items-center shrink-0">
-                              {isMaxed ? <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded border bg-black/20" style={{ color: colors.accent, borderColor: `${colors.border}40` }}>Maxed</div>
-                                : <div className="flex items-center h-5 px-2 rounded border bg-black/20 shadow-sm" style={{ color: colors.text, borderColor: `${colors.border}40` }}>
+                              {isMaxed && !isExpanded ? (
+                                <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded border bg-black/20" style={{ color: colors.accent, borderColor: `${colors.border}40` }}>Maxed</div>
+                              ) : (
+                                <div className="flex items-center h-5 px-2 rounded border bg-black/20 shadow-sm" style={{ color: colors.text, borderColor: `${colors.border}40` }}>
                                   <span className="text-[11.5px] font-bold italic whitespace-nowrap opacity-70">{(suit.suit?.name || 'No Disguise').replace(/\u0003/g, '')}{suit.version === 2 ? ' V2.0' : ''}</span>
-                                  <div className="w-[1px] h-3 bg-white/20 mx-1.5" /><span className="text-[11.5px] font-black whitespace-nowrap">Lv. {suit.level}</span>
-                                </div>}
+                                  <div className="w-[1px] h-3 bg-white/20 mx-1.5" />
+                                  <span className="text-[11.5px] font-black whitespace-nowrap">Lv. {suit.level}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {!isMaxed && (
-                            <div className="flex-1 min-w-0">
-                              {isReady ? <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: '#ffffff', backgroundColor: colors.border, borderColor: colors.border }}>Ready for promotion</div>
-                                : suit.promotion ? (
-                                  <div className="relative h-6 w-full bg-black/30 rounded border overflow-hidden flex items-center justify-center p-[1px]" style={{ borderColor: `${colors.border}40` }}>
-                                    <div className="absolute inset-y-0 left-0 transition-all duration-700 shadow-[0_0_10px_rgba(255,255,255,0.1)]" style={{ width: `${Math.min(100, progress)}%`, backgroundColor: `${colors.border}80` }} />
-                                    <span className="relative z-10 text-[10.5px] font-black uppercase tracking-widest text-center leading-none" style={{ color: colors.text }}>{remaining.toLocaleString()} {statName} remaining</span>
-                                  </div>
-                                ) : null}
-                            </div>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            {isMaxed ? (
+                              isExpanded && <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: colors.accent, backgroundColor: 'rgba(0,0,0,0.3)', borderColor: `${colors.border}40` }}>Maxed</div>
+                            ) : isReady ? (
+                              <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: '#ffffff', backgroundColor: colors.border, borderColor: colors.border }}>Ready for promotion</div>
+                            ) : suit.promotion ? (
+                              <div className="relative h-6 w-full bg-black/30 rounded border overflow-hidden flex items-center justify-center p-[1px]" style={{ borderColor: `${colors.border}40` }}>
+                                <div className="absolute inset-y-0 left-0 transition-all duration-700 shadow-[0_0_10px_rgba(255,255,255,0.1)]" style={{ width: `${Math.min(100, progress)}%`, backgroundColor: `${colors.border}80` }} />
+                                <span className="relative z-10 text-[10.5px] font-black uppercase tracking-widest text-center leading-none" style={{ color: colors.text }}>{remaining.toLocaleString()} {statName} remaining</span>
+                              </div>
+                            ) : null}
+                          </div>
                           {!isMaxed && suit.promotion && remaining > 0 && (
                             <div className="pt-1 mt-1 border-t border-white/10">
                               <button onClick={(e) => { e.stopPropagation(); setExpandedSuitId(expandedSuitId === id ? null : id); }} className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group">
