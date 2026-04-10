@@ -1163,7 +1163,7 @@ export function SidebarApp() {
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col min-h-0 p-2">
+            <div className="flex-1 flex flex-col min-h-0 p-3">
               {activeTab === 'tracker' && <ToonTrackerTab />}
 
               {activeTab === 'toons' && (
