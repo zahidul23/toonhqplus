@@ -89,10 +89,12 @@
     opacity: 0;
     transform: perspective(1400px) rotateY(15deg) translateX(-36px) translateY(20px) scale(0.96);
   }
+
   65% {
     opacity: 1;
     transform: perspective(1400px) rotateY(-2deg) translateX(2px) translateY(0) scale(1.002);
   }
+
   100% {
     opacity: 1;
     transform: perspective(1400px) rotateY(0deg) translateX(0) translateY(0) scale(1);
@@ -104,6 +106,7 @@
     opacity: 1;
     transform: perspective(1400px) rotateY(0deg) translateX(0) translateY(0) scale(1);
   }
+
   100% {
     opacity: 0;
     transform: perspective(1400px) rotateY(11deg) translateX(-28px) translateY(16px) scale(0.965);
@@ -118,7 +121,7 @@
   min-width: 875px;
   max-width: 90em;
 
-  @media (width >= 1500px) {
+  @media (width >=1500px) {
     width: 90em;
   }
 }
@@ -139,24 +142,32 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 14px;
-  background: linear-gradient(
-    90deg,
-    rgba(3, 27, 18, 0.95) 0%,
-    rgba(7, 48, 33, 0.75) 48%,
-    rgba(10, 72, 50, 0.15) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(3, 27, 18, 0.95) 0%,
+      rgba(7, 48, 33, 0.75) 48%,
+      rgba(10, 72, 50, 0.15) 100%);
   border-right: 1px solid rgba(16, 185, 129, 0.15);
   pointer-events: none;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 
@@ -174,7 +185,8 @@
   height: var(--book-size);
   background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_opened.webp');
   background-size: cover;
-  transition: background-image 0.3s ease; /* Smooths the transition */
+  transition: background-image 0.3s ease;
+  /* Smooths the transition */
 }
 
 .book-opened:hover {
@@ -186,7 +198,8 @@
   height: var(--book-size);
   background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_closed.webp');
   background-size: cover;
-  transition: background-image 0.3s ease; /* Smooths the transition */
+  transition: background-image 0.3s ease;
+  /* Smooths the transition */
 }
 
 .book-closed:hover {
@@ -197,4 +210,60 @@
   @media (width < 1300px) {
     flex-direction: column;
   }
+}
+
+@keyframes trackerRewardSweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0.2;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(360%) skewX(-18deg);
+    opacity: 0.2;
+  }
+}
+
+@keyframes trackerRewardPulse {
+
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(250, 204, 21, 0.22),
+      inset 0 0 24px rgba(34, 197, 94, 0.16),
+      0 0 12px rgba(250, 204, 21, 0.08);
+    background-color: rgba(34, 197, 94, 0.08);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(251, 113, 133, 0.45),
+      inset 0 0 32px rgba(250, 204, 21, 0.24),
+      0 0 20px rgba(251, 113, 133, 0.14);
+    background-color: rgba(250, 204, 21, 0.12);
+  }
+}
+
+.tracker-reward-recent {
+  animation: trackerRewardPulse 1.2s ease-in-out infinite;
+}
+
+.tracker-reward-recent__shine {
+  background: linear-gradient(90deg,
+      rgba(34, 197, 94, 0) 0%,
+      rgba(34, 197, 94, 0.95) 18%,
+      rgba(250, 204, 21, 1) 50%,
+      rgba(251, 113, 133, 0.95) 82%,
+      rgba(251, 113, 133, 0) 100%);
+  filter: blur(2px);
+  opacity: 0.95;
+  /* animation: trackerRewardSweep 1.45s linear infinite; */
 }
