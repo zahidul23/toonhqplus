@@ -69,6 +69,14 @@ const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; rounds?
     { gagIndex: 4, damage: 55, image: SOS_SID, name: "Sid Sonata" },
     { gagIndex: 5, damage: 75, image: SOS_MOE, name: "Moe Zart" },
   ],
+  lure: [
+    { gagIndex: 3, damage: 0, image: SOS_STINKY_NED, name: "Stinky Ned" },
+    { gagIndex: 4, damage: 0, image: SOS_NANCY_GAS, name: "Nancy Gas" },
+    { gagIndex: 5, damage: 0, image: SOS_LIL_OLDMAN, name: "Lil Oldman" },
+    { gagIndex: 11, damage: 0, rounds: 2, dmgOthers: 0, dmgExpire: 45, image: getExtensionImageUrl('images/remotesheal.png'), name: "1-Star Heal Remote", isRemote: true, stars: 1, isHeal: true },
+    { gagIndex: 12, damage: 0, rounds: 3, dmgOthers: 0, dmgExpire: 90, image: getExtensionImageUrl('images/remotesheal.png'), name: "2-Star Heal Remote", isRemote: true, stars: 2, isHeal: true },
+    { gagIndex: 13, damage: 0, rounds: 4, dmgOthers: 0, dmgExpire: 150, image: getExtensionImageUrl('images/remotesheal.png'), name: "3-Star Heal Remote", isRemote: true, stars: 3, isHeal: true },
+  ],
   drop: [
     { gagIndex: 3, damage: 60, image: SOS_CLUMSY_NED, name: "Clumsy Ned" },
     { gagIndex: 4, damage: 100, image: SOS_FRANZ_NECKVEIN, name: "Franz Neckvein" },
@@ -99,6 +107,7 @@ interface Cog {
   isImmunity?: boolean;
   isOverpaid?: boolean;
   isRemoteDmg?: boolean;
+  isRemoteHeal?: boolean;
   isTenure?: boolean;
   lureDuration?: number;
   trapDamage?: number;
@@ -117,7 +126,8 @@ const STATUS_EFFECTS = [
   { id: 'isDefenseDown', label: 'Defense Down', icon: 'Statuseffect_defensedown.png', color: 'bg-red-500', shadow: 'rgba(239,68,68,0.4)' },
   { id: 'isImmunity', label: 'Immunity', icon: 'Statuseffect_immunity.png', color: 'bg-gray-500', shadow: 'rgba(107,114,128,0.4)' },
   { id: 'isOverpaid', label: 'Overpaid', icon: 'Statuseffect_overpaid.png', color: 'bg-yellow-500', shadow: 'rgba(234,179,8,0.4)' },
-  { id: 'isRemoteDmg', label: 'Remote DMG', icon: 'Statuseffect_remotedmg.png', color: 'bg-purple-500', shadow: 'rgba(168,85,247,0.4)' },
+  { id: 'isRemoteDmg', label: 'Remote DMG', icon: 'Statuseffect_remotedmg.png', color: 'bg-violet-500', shadow: '#8b5cf6' },
+  { id: 'isRemoteHeal', label: 'Remote HEAL', icon: 'Statuseffect_remotedmg.png', color: 'bg-violet-500', shadow: '#8b5cf6' },
   { id: 'isTenure', label: 'Tenure', icon: 'Statuseffect_tenure.png', color: 'bg-amber-500', shadow: 'rgba(245,158,11,0.4)' },
 ];
 
@@ -303,6 +313,22 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
   const handleGagClick = (e: React.MouseEvent, trackId: string, gagIndex: number, variant: GagVariant, isAllTarget: boolean) => {
     e.stopPropagation();
 
+    const sosInfo = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
+    const isRemote = !!sosInfo?.isRemote;
+
+    // Special case for Remotes: they ALWAYS need star selection before targeting
+    if (isRemote) {
+      // If we are already showing stars for this remote, toggle it off
+      if (activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.subType === 'stars') {
+        setActivePopup(null);
+      } else {
+        // Show stars popup
+        setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
+      }
+      return;
+    }
+
+    // Auto-select for single targets if only one Cog is alive
     let livingTargetIdx = -1;
     let livingCount = 0;
     cogs.forEach((c, i) => {
@@ -315,11 +341,6 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
     });
 
     if (!isAllTarget && livingCount === 1 && livingTargetIdx !== -1) {
-      const sosInfo = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
-      if (sosInfo?.isRemote && !activePopup?.gagIndex) {
-        setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
-        return;
-      }
       onSelectGag(trackId, gagIndex, variant, livingTargetIdx);
       setActivePopup(null);
       return;
@@ -329,10 +350,8 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
       onSelectGag(trackId, gagIndex, variant);
       setActivePopup(null);
     } else {
-      const sosInfo = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
-      if (sosInfo?.isRemote && activePopup?.subType !== 'stars' && activePopup?.gagIndex !== gagIndex) {
-        setActivePopup({ trackId, gagIndex, variant, subType: 'stars' });
-      } else if (activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant) {
+      // Toggle logic for normal single-target gags
+      if (activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant) {
         setActivePopup(null);
       } else {
         setActivePopup({ trackId, gagIndex, variant });
@@ -341,8 +360,8 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex gap-1 items-center">
+    <div className="flex flex-col gap-1">
+      <div className="flex gap-1 items-start">
         {track.gags.map((gag: any, idx: number) => {
           const isAllTarget = track.id === 'sound' || (['trap', 'lure', 'drop'].includes(track.id) && idx === 6) || (track.id === 'lure' && [1, 3, 5].includes(idx));
           const titleText = track.id === 'lure'
@@ -392,48 +411,88 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
         {sosGags.length > 0 && (
           <>
             <div className="w-px h-8 bg-white/10 mx-1" />
-            {sosGags.filter(sos => !(sos.isRemote && sos.stars > 1)).map((sos: any, index: number) => {
-              const showSeparator = track.id === 'trap' && sos.name === 'Pink Slip';
-              const isAllTarget = sos.isInstaKill !== true && sos.isRemote !== true;
+            <div className="flex gap-1 items-start">
+              {/* Regular SOS Cards (indices 3, 4, 5) and Remotes */}
+              {sosGags.filter(s => [3, 4, 5, 7, 8, 11].includes(s.gagIndex)).map((sos: any) => {
+                if (sos.isRemote && sos.stars > 1) return null;
 
-              let gagDisabled = false;
-              if (track.id === 'lure') {
-                const livingCogs = cogs.filter((c, i) => {
-                  const maxHp = getCogMaxHp(c, cogs);
-                  const dmg = cogDamages[i] || 0;
-                  return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
-                });
-                if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
-                  gagDisabled = true;
+                let gagDisabled = false;
+                if (track.id === 'lure') {
+                  const livingCogs = cogs.filter((c, i) => {
+                    const maxHp = getCogMaxHp(c, cogs);
+                    const dmg = cogDamages[i] || 0;
+                    return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
+                  });
+                  if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
+                    gagDisabled = true;
+                  }
                 }
-              }
+                const isAllTarget = [3, 4, 5].includes(sos.gagIndex);
+                const isHealCol = track.id === 'lure' && sos.gagIndex === 11;
 
-              return (
-                <React.Fragment key={`sos-${sos.gagIndex}`}>
-                  {showSeparator && <div className="w-px h-8 bg-white/10 mx-1" />}
-                  <GagButton
-                    imageSrc={sos.image}
-                    imageAlt={sos.isRemote ? "Remote" : sos.name}
-                    color={sos.isInstaKill || sos.isRemote ? '#c22c2c' : track.color}
-                    title={sos.isRemote ? "Damage Remote" : `${sos.name} (${sos.damage})`}
-                    damage={sos.damage}
-                    disabled={gagDisabled}
-                    onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
-                    targetPopup={
-                      sos.isRemote ? (
-                        activePopup?.trackId === track.id && activePopup?.variant === 'sos' && activePopup?.subType === 'stars' ? (
-                          <RemoteStarsPopup trackId={track.id} variant="sos" />
-                        ) : activePopup?.trackId === track.id && activePopup?.variant === 'sos' && (SOS_GAGS[track.id] || []).find(s => s.gagIndex === activePopup?.gagIndex)?.isRemote ? (
-                          <TargetPopup trackId={track.id} gagIndex={activePopup.gagIndex} variant="sos" alignment="right" />
-                        ) : null
-                      ) : (
-                        <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
-                      )
-                    }
-                  />
-                </React.Fragment>
-              );
-            })}
+                return (
+                  <React.Fragment key={`sos-${sos.gagIndex}`}>
+                    {track.id === 'trap' && sos.gagIndex === 7 && <div className="w-px h-8 bg-white/10 mx-1" />}
+                    {isHealCol && <div className="w-px h-8 bg-white/10 mx-1" />}
+                    {isHealCol && <div className="gag-button invisible" />}
+                    <GagButton
+                      imageSrc={sos.image}
+                      imageAlt={sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : sos.name}
+                      color={(sos.isRemote || sos.isInstaKill) ? '#8b5cf6' : track.color}
+                      title={sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : `${sos.name} (${sos.damage})`}
+                      damage={sos.damage}
+                      disabled={gagDisabled}
+                      onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
+                      targetPopup={
+                        sos.isRemote ? (
+                          activePopup?.trackId === track.id && activePopup?.variant === 'sos' && activePopup?.subType === 'stars' && activePopup?.gagIndex === sos.gagIndex ? (
+                            <div className="absolute top-1/2 -translate-y-1/2 right-full mr-3 w-max bg-[#0c3622] p-4 rounded-2xl border border-white/10 shadow-2xl z-[70] animate-in fade-in slide-in-from-right-2">
+                              <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3 text-center">Select Level</div>
+                              <div className="flex gap-3">
+                                {[0, 1, 2].map((off) => {
+                                  const baseIdx = sos.isHeal ? 11 : 8;
+                                  const idx = baseIdx + off;
+                                  const rem = SOS_GAGS[track.id].find(s => s.gagIndex === idx);
+                                  return (
+                                    <button
+                                      key={idx}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActivePopup({ trackId: track.id, gagIndex: idx, variant: 'sos' });
+                                      }}
+                                      className={`group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-violet-500/20 hover:border-violet-500/50 rounded-xl border border-white/5 transition-all cursor-pointer min-w-[64px]`}
+                                    >
+                                      <div className="relative">
+                                        <img src={rem?.image} className="w-10 h-10 object-contain group-hover/star:scale-110 transition-transform" />
+                                        <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5">
+                                          {[...Array(rem?.stars)].map((_, i) => (
+                                            <span key={i} className="text-yellow-400 text-[10px] drop-shadow-sm">★</span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <span className="text-[10px] font-black text-white/80">{rem?.stars} Star</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="absolute top-1/2 -translate-y-1/2 left-full w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-[#0c3622]"></div>
+                            </div>
+                          ) : activePopup?.trackId === track.id && activePopup?.variant === 'sos' && (
+                            activePopup?.gagIndex === sos.gagIndex || 
+                            (sos.gagIndex === 8 && [8, 9, 10].includes(activePopup?.gagIndex)) ||
+                            (sos.gagIndex === 11 && [11, 12, 13].includes(activePopup?.gagIndex))
+                          ) ? (
+                            <TargetPopup trackId={track.id} gagIndex={activePopup.gagIndex} variant="sos" alignment="right" />
+                          ) : null
+                        ) : (
+                          <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
+                        )
+                      }
+                    />
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </>
         )}
       </div>
@@ -583,7 +642,11 @@ export function CogCalculator() {
             let currentDmg = baseDmg;
 
             if (isRemote && sosData) {
-              cog.isRemoteDmg = true;
+              if (trackId === 'lure' || (sosData as any).isHeal) {
+                cog.isRemoteHeal = true;
+              } else {
+                cog.isRemoteDmg = true;
+              }
               cog.remote = {
                 roundsLeft: sosData.rounds || 0,
                 damageToOthers: sosData.dmgOthers || 0,
@@ -681,6 +744,7 @@ export function CogCalculator() {
             currentCogs[idx].trapDamage = 0;
             currentCogs[idx].remote = undefined;
             currentCogs[idx].isRemoteDmg = false;
+            currentCogs[idx].isRemoteHeal = false;
             trapDamageOnCog[idx] = 0;
           } else {
             state.damageOnCurrentLayer += dmg;
@@ -707,6 +771,7 @@ export function CogCalculator() {
             currentCogs[idx].trapDamage = 0;
             currentCogs[idx].remote = undefined;
             currentCogs[idx].isRemoteDmg = false;
+            currentCogs[idx].isRemoteHeal = false;
             trapDamageOnCog[idx] = 0;
             return;
           }
@@ -750,6 +815,7 @@ export function CogCalculator() {
                 currentCogs[idx].trapDamage = 0;
                 currentCogs[idx].remote = undefined;
                 currentCogs[idx].isRemoteDmg = false;
+                currentCogs[idx].isRemoteHeal = false;
               } else {
                 s.damageOnCurrentLayer += d;
                 s.totalEffectiveDamage += d;
@@ -777,6 +843,7 @@ export function CogCalculator() {
               currentCogs[idx].trapDamage = 0;
               currentCogs[idx].remote = undefined;
               currentCogs[idx].isRemoteDmg = false;
+              currentCogs[idx].isRemoteHeal = false;
             } else {
               s.damageOnCurrentLayer += d;
               s.totalEffectiveDamage += d;
@@ -786,6 +853,7 @@ export function CogCalculator() {
           applyDmg(dmgExpire, i);
           cog.remote = undefined;
           cog.isRemoteDmg = false;
+          cog.isRemoteHeal = false;
         }
       }
 
@@ -897,7 +965,7 @@ export function CogCalculator() {
                         className={`w-12 h-12 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
                           gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/10'
                           }`}
-                        style={gag && track ? { backgroundColor: (sosInfo?.isInstaKill || sosInfo?.isRemote) ? '#c22c2c' : track.color } : {}}
+                        style={gag && track ? { backgroundColor: (sosInfo?.isInstaKill || sosInfo?.isRemote) ? '#8b5cf6' : track.color } : {}}
                       >
                         {imgSrc ? (
                           <>
@@ -1186,7 +1254,7 @@ export function CogCalculator() {
         {/* Gag Picker Panel (Now at the bottom) */}
         <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
           <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
-          <div className="bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col gap-4">
+          <div className="bg-black/20 rounded-lg p-3 border border-white/5 flex flex-col gap-3">
             {gagTracks.map(track => (
               <GagTrackPicker
                 key={track.id}
