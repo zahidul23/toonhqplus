@@ -67,6 +67,7 @@ const REWARD_CATEGORIES = [
   { id: 'unites', label: 'Unites', img: 'unites.png' },
   { id: 'remotes', label: 'Remotes', img: 'remotes.png' },
   { id: 'summons', label: 'Cog Summons', img: 'summons.png' },
+  { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.png' },
 ] as const;
 
 type RewardCategory = typeof REWARD_CATEGORIES[number]['id'];
@@ -86,6 +87,101 @@ function SummonIcon({ active, type }: { active: boolean, type: 'cog' | 'bldg' | 
         }`}
     >
       {labels[type]}
+    </div>
+  );
+}
+
+function SOSTableView({ sos }: { sos: Record<string, number> }) {
+  const sosGrid = [
+    ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Rocky'],
+    ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Nancy Gas', 'Barnacle Bessie', 'Baker Bridget'],
+    ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Stinky Ned', 'Moe Zart', 'Franz Neckvein', 'Sofie Squirt'],
+    ['Soggy Bottom', 'Flim Flam', 'Madame Chuckle', 'Clerk Will', 'Sid Sonata', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
+  ];
+
+  // Image mapping from CogCalculator.tsx
+  const sosImages: Record<string, string> = {
+    'Lord Lowden Clear': 'https://rendition.toontownrewritten.com/render/7401010201791b6c1b2c1b02000202010400000000000000000000000000000000/portrait/128x128.webp',
+    'Professor Pete': 'https://rendition.toontownrewritten.com/render/7407010201000400048b0f12001212010400000000000000000000000000000000/portrait/128x128.webp',
+    'Professor Guffaw': 'https://rendition.toontownrewritten.com/render/740005020000060006030704000404010400000000000000000000000000000000/portrait/128x128.webp',
+    'Clerk Ray': 'https://rendition.toontownrewritten.com/render/740e010101010301038b070c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+    'Doctor Drift': 'https://rendition.toontownrewritten.com/render/740902020001040104001b03000303010400000000000000000000000000000000/portrait/128x128.webp',
+    'Melody Wavers': 'https://rendition.toontownrewritten.com/render/740e0201000103010308060e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+    'Shelly Seaweed': 'https://rendition.toontownrewritten.com/render/740c01010001030103191504000404010400000000000000000000000000000000/portrait/128x128.webp',
+    'Rocky': '',
+
+    'Sticky Lou': 'https://rendition.toontownrewritten.com/render/740c02000101080108050d04000404010400000000000000000000000000000000/portrait/128x128.webp',
+    'Julius Wheezer': 'https://rendition.toontownrewritten.com/render/740c01010101010101050e12001212010400000000000000000000000000000000/portrait/128x128.webp',
+    'Flippy': 'https://rendition.toontownrewritten.com/render/740101010103110311092011001111010400000000000000000000000000000000/portrait/128x128.webp',
+    'Clerk Clara': 'https://rendition.toontownrewritten.com/render/741101020001090109171502000202010400000000000000000000000000000000/portrait/128x128.webp',
+    'Lil Oldman': 'https://rendition.toontownrewritten.com/render/7411020101010501058b0915001515010400000000000000000000000000000000/portrait/128x128.webp',
+    'Nancy Gas': 'https://rendition.toontownrewritten.com/render/7412000001010101010e1b08000808010400000000000000000000000000000000/portrait/128x128.webp',
+    'Barnacle Bessie': 'https://rendition.toontownrewritten.com/render/7414050200010c010c01190d000d0d010400000000000000000000000000000000/portrait/128x128.webp',
+    'Baker Bridget': 'https://rendition.toontownrewritten.com/render/740c00020000190019171504000404010400000000000000000000000000000000/portrait/128x128.webp',
+
+    'Soggy Nell': 'https://rendition.toontownrewritten.com/render/740301020001000100040c04000404010400000000000000000000000000000000/portrait/128x128.webp',
+    'Mr. Freeze': 'https://rendition.toontownrewritten.com/render/74000002010101010205070c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+    'Daffy Don': 'https://rendition.toontownrewritten.com/render/740c000201010601068b1104000404010400000000000000000000000000000000/portrait/128x128.webp',
+    'Clerk Penny': 'https://rendition.toontownrewritten.com/render/74120201000019001908050c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+    'Stinky Ned': 'https://rendition.toontownrewritten.com/render/7415000001000000008b0206000606010400000000000000000000000000000000/portrait/128x128.webp',
+    'Moe Zart': 'https://rendition.toontownrewritten.com/render/7401000001000000008b010e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+    'Franz Neckvein': 'https://rendition.toontownrewritten.com/render/740d000101000200028b0607000707010400000000000000000000000000000000/portrait/128x128.webp',
+    'Sofie Squirt': 'https://rendition.toontownrewritten.com/render/7415020200001b001b1a150e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+
+    'Soggy Bottom': 'https://rendition.toontownrewritten.com/render/740b00010100080008050415001515010400000000000000000000000000000000/portrait/128x128.webp',
+    'Flim Flam': 'https://rendition.toontownrewritten.com/render/740102020001170117070110001010010400000000000000000000000000000000/portrait/128x128.webp',
+    'Madame Chuckle': 'https://rendition.toontownrewritten.com/render/740705020000040004040415001515010400000000000000000000000000000000/portrait/128x128.webp',
+    'Clerk Will': 'https://rendition.toontownrewritten.com/render/740f010201000b000b05000a000a0a010400000000000000000000000000000000/portrait/128x128.webp',
+    'Sid Sonata': 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp',
+    'Barbara Seville': 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp',
+    'Clumsy Ned': 'https://rendition.toontownrewritten.com/render/740c020201010701078b0a0c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+    'Loopy Loopenloop': '',
+  };
+
+  return (
+    <div className="flex flex-col gap-3 h-full overflow-y-auto custom-scrollbar pr-2">
+      <div className="grid grid-cols-4 xl:grid-cols-8 gap-3">
+        {sosGrid.flat().map(name => {
+          const count = Object.entries(sos).find(([n, _]) => n.replace(/\u0003/g, '') === name)?.[1] || 0;
+          const image = sosImages[name] || '';
+
+          return (
+            <div
+              key={name}
+              className={`rounded-xl border p-2 flex flex-col gap-2 transition-all group ${count > 0
+                ? 'bg-blue-900/40 border-blue-500/30 shadow-lg hover:brightness-110'
+                : 'bg-black/20 border-white/5 opacity-40 grayscale'
+                }`}
+            >
+              <div className="flex flex-col gap-1">
+                <div className="w-full aspect-square rounded-lg bg-black/40 border border-white/10 p-0.5 shrink-0 overflow-hidden relative group/sosimg">
+                  {image ? (
+                    <img
+                      src={image}
+                      className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                      alt={name}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center opacity-10">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                    </div>
+                  )}
+                  {/* Count Badge */}
+                  <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-black tabular-nums border shadow-sm z-10 transition-all ${count > 0 
+                    ? 'bg-blue-600 border-blue-400 text-white' 
+                    : 'bg-black/60 border-white/10 text-white/30'
+                  }`}>
+                    {count}
+                  </div>
+                </div>
+              </div>
+              <div className={`text-[9.5px] font-black leading-tight text-center flex items-center justify-center min-h-[26px] mt-auto uppercase tracking-tighter ${count > 0 ? 'text-blue-100' : 'text-white/40'}`}>
+                {name}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -141,6 +237,58 @@ function SummonsTableView({ summons }: { summons: any }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PinkSlipsGridView({ count }: { count: number }) {
+  const totalSlots = 200;
+  const slots = Array.from({ length: totalSlots });
+
+  return (
+    <div className="w-full h-full flex items-center justify-center p-4">
+      <div 
+        className="grid gap-x-2 gap-y-3 w-full h-full" 
+        style={{ 
+          gridTemplateColumns: 'repeat(20, minmax(0, 1fr))',
+          gridTemplateRows: 'repeat(10, minmax(0, 1fr))' 
+        }}
+      >
+        {slots.map((_, i) => (
+          <div key={i} className="flex items-center justify-center">
+            <img
+              src={getExtensionImageUrl('images/pinkslips.png')}
+              className={`w-full h-full max-h-8 object-contain transition-all duration-500 ${i >= count ? 'grayscale opacity-5' : 'drop-shadow-[0_0_5px_rgba(251,113,133,0.5)]'}`}
+              alt="Pink Slip"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RemoteCard({ type, level, count }: { type: string, level: string, count: number }) {
+  return (
+    <div className={`rounded-xl border p-3 flex gap-4 transition-all hover:brightness-110 shadow-lg ${count > 0 
+      ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-100' 
+      : 'bg-black/20 border-white/5 text-white/20 opacity-40 grayscale'
+    }`}>
+      <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 p-2 flex items-center justify-center shrink-0 relative overflow-hidden">
+        <img 
+          src={getExtensionImageUrl('images/remotes.png')} 
+          className="w-full h-full object-contain filter drop-shadow-md" 
+          alt={`${level} Star ${type}`}
+        />
+      </div>
+      <div className="flex-1 flex flex-col justify-between items-end min-w-0">
+        <div className={`text-2xl font-black tabular-nums ${count > 0 ? 'text-emerald-400' : ''}`}>
+          x{count}
+        </div>
+        <div className="text-[10px] font-black uppercase tracking-widest truncate w-full text-right opacity-70">
+          {level} Star {type}
+        </div>
+      </div>
     </div>
   );
 }
@@ -242,18 +390,18 @@ export function ToonTrackerTab({
   const checkRewards = (prev: any, next: any) => {
     const changes: string[] = [];
     if (!prev || !next || JSON.stringify(prev) === JSON.stringify(next)) return changes;
-    if (next.pinkslips > (prev.pinkslips || 0)) changes.push(`+${next.pinkslips - (prev.pinkslips || 0)} Pink Slips`);
+    if (next.pinkslips > (prev.pinkslips || 0)) changes.push(`Pink Slips x${next.pinkslips - (prev.pinkslips || 0)}`);
     if (next.sos) {
       Object.entries(next.sos).forEach(([name, count]) => {
         const prevCount = prev.sos?.[name] || 0;
-        if ((count as number) > prevCount) changes.push(`+${(count as number) - prevCount} ${name.replace(/\u0003/g, '')} SOS`);
+        if ((count as number) > prevCount) changes.push(`${name.replace(/\u0003/g, '')} SOS x${(count as number) - prevCount}`);
       });
     }
     if (next.unites) {
       Object.entries(next.unites).forEach(([category, sub]) => {
         Object.entries(sub as any).forEach(([name, count]) => {
           const prevCount = prev.unites?.[category]?.[name] || 0;
-          if ((count as number) > prevCount) changes.push(`+${(count as number) - prevCount} ${name.replace(/\u0003/g, '')} Unite`);
+          if ((count as number) > prevCount) changes.push(`${name.replace(/\u0003/g, '')} Unite x${(count as number) - prevCount}`);
         });
       });
     }
@@ -261,7 +409,7 @@ export function ToonTrackerTab({
       Object.entries(next.remotes).forEach(([type, sub]) => {
         Object.entries(sub as any).forEach(([level, count]) => {
           const prevCount = prev.remotes?.[type]?.[level] || 0;
-          if ((count as number) > prevCount) changes.push(`+${(count as number) - prevCount} ${level} Star ${type}`);
+          if ((count as number) > prevCount) changes.push(`${level} Star ${type} x${(count as number) - prevCount}`);
         });
       });
     }
@@ -470,6 +618,7 @@ export function ToonTrackerTab({
       unites: Object.values(rewards.unites || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0),
       remotes: Object.values(rewards.remotes || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0),
       summons: Object.values(rewards.summons || {}).reduce((a: number, b: any) => a + (b.single ? 1 : 0) + (b.building ? 1 : 0) + (b.invasion ? 1 : 0), 0),
+      pinkslips: rewards.pinkslips || 0,
     };
 
     return (
@@ -516,7 +665,7 @@ export function ToonTrackerTab({
               {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-              {activeCategory === 'sos' && <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(rewards.sos || {}).length > 0 ? Object.entries(rewards.sos || {}).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => <RewardCard key={name} name={name.replace(/\u0003/g, '')} count={count as number} color="blue" img="sos.png" />) : <EmptyRewardState />}</div>}
+              {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} />}
               {activeCategory === 'unites' && (
                 <div className="flex gap-4 overflow-x-auto pb-4 h-full custom-scrollbar">
                   {Object.entries(rewards.unites || {}).length > 0 ? (
@@ -525,16 +674,16 @@ export function ToonTrackerTab({
                         const cleanA = nameA.replace(/\u0003/g, '');
                         const cleanB = nameB.replace(/\u0003/g, '');
 
-                        if (category === 'Laff Restored') {
+                        if (category === 'Toon-Up') {
                           const valA = parseInt(cleanA) || 0;
                           const valB = parseInt(cleanB) || 0;
                           return valB - valA;
                         }
 
-                        if (category === 'Gags Restored') {
+                        if (category === 'Gag-Up') {
                           const order = ['All', 'Sound', 'Throw', 'Squirt', 'Lure', 'Trap', 'Drop'];
-                          const indexA = order.findIndex(o => cleanA.startsWith(o));
-                          const indexB = order.findIndex(o => cleanB.startsWith(o));
+                          const indexA = order.findIndex(o => cleanA.endsWith(o));
+                          const indexB = order.findIndex(o => cleanB.endsWith(o));
                           if (indexA !== -1 && indexB !== -1) return indexA - indexB;
                           if (indexA !== -1) return -1;
                           if (indexB !== -1) return 1;
@@ -565,8 +714,9 @@ export function ToonTrackerTab({
                   )}
                 </div>
               )}
-              {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400/60 border-b border-emerald-500/10 pb-2">{type}</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RewardCard key={level} name={`${level} Star`} count={count as number} color="emerald" img="remotes.png" />)}</div></div>) : <EmptyRewardState />}</div>}
+              {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400/60 border-b border-emerald-500/10 pb-2">{type}</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
               {activeCategory === 'summons' && <SummonsTableView summons={rewards.summons || {}} />}
+              {activeCategory === 'pinkslips' && <PinkSlipsGridView count={rewards.pinkslips || 0} />}
             </div>
           </div>
         </div>
