@@ -167,10 +167,10 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
                     </div>
                   )}
                   {/* Count Badge */}
-                  <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-black tabular-nums border shadow-sm z-10 transition-all ${count > 0 
-                    ? 'bg-blue-600 border-blue-400 text-white' 
+                  <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-black tabular-nums border shadow-sm z-10 transition-all ${count > 0
+                    ? 'bg-blue-600 border-blue-400 text-white'
                     : 'bg-black/60 border-white/10 text-white/30'
-                  }`}>
+                    }`}>
                     {count}
                   </div>
                 </div>
@@ -247,11 +247,11 @@ function PinkSlipsGridView({ count }: { count: number }) {
 
   return (
     <div className="w-full h-full flex items-center justify-center p-4">
-      <div 
-        className="grid gap-x-2 gap-y-3 w-full h-full" 
-        style={{ 
+      <div
+        className="grid gap-x-2 gap-y-3 w-full h-full"
+        style={{
           gridTemplateColumns: 'repeat(20, minmax(0, 1fr))',
-          gridTemplateRows: 'repeat(10, minmax(0, 1fr))' 
+          gridTemplateRows: 'repeat(10, minmax(0, 1fr))'
         }}
       >
         {slots.map((_, i) => (
@@ -270,14 +270,14 @@ function PinkSlipsGridView({ count }: { count: number }) {
 
 function RemoteCard({ type, level, count }: { type: string, level: string, count: number }) {
   return (
-    <div className={`rounded-xl border p-3 flex gap-4 transition-all hover:brightness-110 shadow-lg ${count > 0 
-      ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-100' 
+    <div className={`rounded-xl border p-3 flex gap-4 transition-all hover:brightness-110 shadow-lg ${count > 0
+      ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-100'
       : 'bg-black/20 border-white/5 text-white/20 opacity-40 grayscale'
-    }`}>
+      }`}>
       <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 p-2 flex items-center justify-center shrink-0 relative overflow-hidden">
-        <img 
-          src={getExtensionImageUrl('images/remotes.png')} 
-          className="w-full h-full object-contain filter drop-shadow-md" 
+        <img
+          src={type.includes("Healing") ? getExtensionImageUrl('images/remotesheal.png') : getExtensionImageUrl('images/remotes.png')}
+          className="w-full h-full object-contain filter drop-shadow-md"
           alt={`${level} Star ${type}`}
         />
       </div>
@@ -286,7 +286,7 @@ function RemoteCard({ type, level, count }: { type: string, level: string, count
           x{count}
         </div>
         <div className="text-[10px] font-black uppercase tracking-widest truncate w-full text-right opacity-70">
-          {level} Star {type}
+          {level} Star
         </div>
       </div>
     </div>
@@ -319,8 +319,8 @@ function RewardCard({ name, count, color, img }: { name: string, count: number, 
 function UniteListItem({ name, count }: { name: string, count: number }) {
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-pink-900/20 border border-pink-500/10 hover:border-pink-500/30 transition-all group shadow-sm">
-      <div className="text-[12px] font-bold text-pink-50/90 group-hover:text-white transition-colors truncate">{name}</div>
-      <div className="text-[11px] font-black text-pink-400 tabular-nums shrink-0 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">x{count}</div>
+      <div className="text-[14px] font-bold text-pink-50/90 group-hover:text-white transition-colors truncate">{name}</div>
+      <div className="text-[13px] font-black text-pink-400 tabular-nums shrink-0 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">x{count}</div>
     </div>
   );
 }
@@ -634,23 +634,23 @@ export function ToonTrackerTab({
                     <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${activeCategory === cat.id ? 'bg-emerald-500/20' : 'bg-black/20'}`}>
                       <img src={getExtensionImageUrl(`images/${cat.img}`)} className={`w-5 h-5 object-contain ${activeCategory === cat.id ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
                     </div>
-                    <span className="font-bold text-sm">{cat.label}</span>
-                    <div className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-black transition-colors ${activeCategory === cat.id ? 'bg-emerald-400 text-emerald-900' : 'bg-white/10 text-white/40 group-hover:text-white/60'}`}>{totals[cat.id as keyof typeof totals]}</div>
+                    <span className="font-bold text-base">{cat.label}</span>
+                    <div className={`ml-auto px-2 py-0.5 rounded-full text-[11px] font-black transition-colors ${activeCategory === cat.id ? 'bg-emerald-400 text-emerald-900' : 'bg-white/10 text-white/40 group-hover:text-white/60'}`}>{totals[cat.id as keyof typeof totals]}</div>
                   </button>
                 ))}
               </div>
             </div>
             <div className="flex-1 flex flex-col min-h-0 bg-slate-950/30 rounded-xl border border-sky-200/10 overflow-hidden">
               <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3 shrink-0">
-                <div className="text-[9px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
-                {rewardHistory.length > 0 && <div className="text-[10px] text-white/30">{`${rewardHistory.length} items`}</div>}
+                <div className="text-[10px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
+                {rewardHistory.length > 0 && <div className="text-[11px] text-white/30">{`${rewardHistory.length} items`}</div>}
               </div>
               {rewardHistory.length > 0 ? (
                 <div className="flex-1 divide-y divide-white/5 overflow-y-auto custom-scrollbar">
                   {rewardHistory.map((entry, i) => (
                     <div key={`${entry.timestamp}-${i}`} className={`relative overflow-hidden px-3 py-2.5 flex justify-between items-start gap-4 transition-colors ${isRecentlyEarned(entry.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
-                      <span className="relative z-[1] font-bold text-emerald-300/90 leading-tight text-[11px]">{entry.message}</span>
-                      <span className="relative z-[1] text-[9px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right" title={new Date(entry.timestamp).toLocaleString()}><RelativeRewardTime timestamp={entry.timestamp} /></span>
+                      <span className="relative z-[1] font-bold text-emerald-300/90 leading-tight text-[12px]">{entry.message}</span>
+                      <span className="relative z-[1] text-[10px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right" title={new Date(entry.timestamp).toLocaleString()}><RelativeRewardTime timestamp={entry.timestamp} /></span>
                     </div>
                   ))}
                 </div>
@@ -661,7 +661,7 @@ export function ToonTrackerTab({
           </div>
           <div className="flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-              <h3 className="text-lg font-black text-white uppercase tracking-widest">{REWARD_CATEGORIES.find(c => c.id === activeCategory)?.label}</h3>
+              <h3 className="text-xl font-black text-white uppercase tracking-widest">{REWARD_CATEGORIES.find(c => c.id === activeCategory)?.label}</h3>
               {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
@@ -699,8 +699,8 @@ export function ToonTrackerTab({
                       });
 
                       return (
-                        <div key={category} className="flex-1 min-w-[190px] flex flex-col gap-3">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{category}</h4>
+                        <div key={category} className="w-[200px] shrink-0 flex flex-col gap-3">
+                          <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{category}</h4>
                           <div className="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1">
                             {sortedTypes.map(([name, count]) => (
                               <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} />
