@@ -112,6 +112,7 @@ interface Cog {
   lureDuration?: number;
   trapDamage?: number;
   isV2?: boolean;
+  isDead?: boolean;
   remote?: {
     roundsLeft: number;
     damageToOthers: number;
@@ -263,10 +264,17 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             const isPinkSlip = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex)?.isInstaKill;
             const isSupervisor = choice?.type === 'boss';
             const isTenured = cog.isTenure || isSupervisor;
-            let isDisabled = !!(isPinkSlip && isTenured);
+            let isDisabled = !!(isPinkSlip && isTenured) || !!cog.isDead;
 
-            if (trackId === 'lure' && !isPinkSlip && cog.isLured) {
+            // Prevent Luring already Lured cogs
+            if (trackId === 'lure' && !isPinkSlip && cog.isLured && !cog.isDead) {
               isDisabled = true;
+            }
+
+            // Optimization: if the cog is already dead according to health calculation, disable it too
+            if (remainingTotal <= 0 && !cog.isDead) {
+              // This handles same-round kills from previous gag slots
+              // but we only disable if it's NOT an all-target gag or something
             }
 
             return (
@@ -332,9 +340,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
     let livingTargetIdx = -1;
     let livingCount = 0;
     cogs.forEach((c, i) => {
-      const maxHp = getCogMaxHp(c, cogs);
-      const dmg = cogDamages[i] || 0;
-      if ((c.isV2 ? maxHp * 2 : maxHp) > dmg) {
+      if (!c.isDead) {
         livingCount++;
         livingTargetIdx = i;
       }
@@ -374,13 +380,19 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             : `Organic ${gag.name} (${organicDamage})`;
 
           let gagDisabled = false;
-          if (track.id === 'lure') {
+          const livingAtStartOfRound = cogs.filter(c => !c.isDead);
+          if (livingAtStartOfRound.length === 0) {
+            gagDisabled = true;
+          } else if (track.id === 'lure') {
             const livingCogs = cogs.filter((c, i) => {
               const maxHp = getCogMaxHp(c, cogs);
               const dmg = cogDamages[i] || 0;
               return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
             });
+            // If all living cogs are already lured, disable lure track
             if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
+              gagDisabled = true;
+            } else if (livingCogs.length === 0) {
               gagDisabled = true;
             }
           }
@@ -416,8 +428,16 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
               {sosGags.filter(s => [3, 4, 5, 7, 8, 11].includes(s.gagIndex)).map((sos: any) => {
                 if (sos.isRemote && sos.stars > 1) return null;
 
+                const isAllTarget = [3, 4, 5].includes(sos.gagIndex);
+                const isHealCol = track.id === 'lure' && sos.gagIndex === 11;
+
                 let gagDisabled = false;
-                if (track.id === 'lure') {
+                const livingAtStart = cogs.filter(c => !c.isDead);
+                if (livingAtStart.length === 0 && !isAllTarget) {
+                  gagDisabled = true;
+                }
+                
+                if (track.id === 'lure' && !sos.isHeal) {
                   const livingCogs = cogs.filter((c, i) => {
                     const maxHp = getCogMaxHp(c, cogs);
                     const dmg = cogDamages[i] || 0;
@@ -427,8 +447,6 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                     gagDisabled = true;
                   }
                 }
-                const isAllTarget = [3, 4, 5].includes(sos.gagIndex);
-                const isHealCol = track.id === 'lure' && sos.gagIndex === 11;
 
                 return (
                   <React.Fragment key={`sos-${sos.gagIndex}`}>
@@ -870,7 +888,7 @@ export function CogCalculator() {
       });
 
       results.push({
-        finalCogs: JSON.parse(JSON.stringify(currentCogs)),
+        finalCogs: currentCogs.map((c, i) => ({ ...c, isDead: cogStates[i].layer === 0 })),
         cogDamages: [...cumulativeDamages],
         trackDamages
       });
@@ -1062,8 +1080,13 @@ export function CogCalculator() {
                   <div className="relative group">
                     <button
                       onClick={(e) => { e.stopPropagation(); setActiveCogSlot(activeCogSlot === idx ? null : idx); }}
-                      className="w-full aspect-square relative rounded-xl border border-white/10 bg-black/40 overflow-hidden cursor-pointer hover:border-emerald-400/50 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] transition-all group p-0 m-0"
+                      className={`w-full aspect-square relative rounded-xl border border-white/10 bg-black/40 overflow-hidden cursor-pointer hover:border-emerald-400/50 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] transition-all group p-0 m-0 ${finalCog.isDead ? 'grayscale opacity-40' : ''}`}
                     >
+                      {finalCog.isDead && (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
+                             <span className="text-red-500 font-black text-xs uppercase tracking-tighter shadow-black drop-shadow-lg [text-shadow:_0_1px_4px_rgb(0_0_0_/_100%)]">Defeated</span>
+                        </div>
+                      )}
                       {(() => {
                         if (!choice) return null;
                         if (choice.type === 'normal') {
