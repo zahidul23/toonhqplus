@@ -3,15 +3,13 @@ import { getSetting, setSetting } from './db';
 import type { ToonTrackerData } from './tracker';
 import { browser } from 'wxt/browser';
 import { cogs as cogsData } from './cogs';
-
-type RewardHistoryEntry = {
-  message: string;
-  timestamp: number;
-};
-
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const RECENT_REWARD_LIMIT = 5;
-const REWARD_HIGHLIGHT_MS = 1 * 60 * 1000;
+import { 
+  getRewardHistoryKey, 
+  pruneRewardHistory, 
+  RECENT_REWARD_LIMIT, 
+  REWARD_HIGHLIGHT_MS 
+} from './trackerUtils';
+import type { RewardCategory, RewardHistoryEntry } from './trackerUtils';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -20,18 +18,6 @@ function getExtensionImageUrl(path: string): string {
   } catch (e) {
     return `/${cleanPath}`;
   }
-}
-
-function getRewardHistoryKey(toonId: string): string {
-  return `tracker-reward-history-${toonId}`;
-}
-
-function pruneRewardHistory(entries: RewardHistoryEntry[]): RewardHistoryEntry[] {
-  const cutoff = Date.now() - ONE_WEEK_MS;
-  return entries
-    .filter((entry) => entry.timestamp >= cutoff)
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 100);
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -62,15 +48,58 @@ function isRecentlyEarned(timestamp: number): boolean {
   return Date.now() - timestamp <= REWARD_HIGHLIGHT_MS;
 }
 
-const REWARD_CATEGORIES = [
+const REWARD_CATEGORIES_CONFIG = [
   { id: 'sos', label: 'SOS Cards', img: 'sos.png' },
   { id: 'unites', label: 'Unites', img: 'unites.png' },
   { id: 'summons', label: 'Cog Summons', img: 'summons.png' },
-  { id: 'pinkslips', label: 'Fires', img: 'pinkslips.png' },
+  { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.png' },
   { id: 'remotes', label: 'Remotes', img: 'remotes.png' },
 ] as const;
 
-type RewardCategory = typeof REWARD_CATEGORIES[number]['id'];
+function RewardMessage({ entry }: { entry: RewardHistoryEntry }) {
+  if (entry.message) return <span className="text-white/50 text-[11px] font-bold">{entry.message}</span>;
+
+  const { category, item, amount, metadata } = entry;
+
+  // Colors matched to cog suit departments
+  const tagConfig: Record<string, { label: string; bg: string; text: string }> = {
+    sos:       { label: 'SOS',    bg: '#6b21a8', text: '#f3e8ff' }, // Sellbot purple
+    unites:    { label: 'Unite',  bg: '#14532d', text: '#dcfce7' }, // Cashbot green
+    summons:   { label: 'Summon', bg: '#1e3a5f', text: '#dbeafe' }, // Lawbot navy
+    pinkslips: { label: 'Pink Slip',  bg: '#4a3728', text: '#fafaf9' }, // Bossbot brown
+    remotes:   { label: 'Remote', bg: '#991b1b', text: '#fee2e2' }, // red
+  };
+  const tag = tagConfig[category] ?? { label: category, bg: '#1f2937', text: '#f9fafb' };
+
+  // Build human-readable subtype label
+  let subtype: string | null = item;
+  if (category === 'pinkslips') {
+    subtype = null;
+  } else if (category === 'summons') {
+    subtype = `${item} (${metadata?.summonType ?? 'Cog'})`;
+  } else if (category === 'remotes') {
+    const level = metadata?.remoteLevel ?? item;
+    const type  = (metadata?.remoteType ?? item).replace(/\s*Remote$/i, '').trim();
+    subtype = `${level}★ ${type}`;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap leading-tight">
+      <span
+        className="inline-flex items-center px-1.5 py-[2px] rounded text-[9px] font-black uppercase tracking-wider shrink-0"
+        style={{ backgroundColor: tag.bg, color: tag.text }}
+      >
+        {tag.label}
+      </span>
+      {subtype && (
+        <span className="text-[11px] font-bold text-white/70">{subtype}</span>
+      )}
+      {amount > 1 && (
+        <span className="text-[11px] font-black text-white">x{amount}</span>
+      )}
+    </span>
+  );
+}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -91,12 +120,47 @@ function SummonIcon({ active, type }: { active: boolean, type: 'cog' | 'bldg' | 
   );
 }
 
+const SOS_DATA: Record<string, { type: string; starRating: number }> = {
+  'Lord Lowden Clear': { type: 'Fire', starRating: 5 },
+  'Professor Pete': { type: 'Restock', starRating: 5 },
+  'Professor Guffaw': { type: 'Restock', starRating: 3 },
+  'Clerk Ray': { type: 'Restock', starRating: 3 },
+  'Doctor Drift': { type: 'Restock', starRating: 3 },
+  'Melody Wavers': { type: 'Restock', starRating: 3 },
+  'Shelly Seaweed': { type: 'Restock', starRating: 3 },
+  'Rocky': { type: 'Throw', starRating: 5 },
+  'Sticky Lou': { type: 'Toons Hit', starRating: 5 },
+  'Julius Wheezer': { type: 'Cogs Miss', starRating: 5 },
+  'Flippy': { type: 'Toon Up', starRating: 5 },
+  'Clerk Clara': { type: 'Trap', starRating: 5 },
+  'Lil Oldman': { type: 'Lure', starRating: 5 },
+  'Nancy Gas': { type: 'Lure', starRating: 4 },
+  'Barnacle Bessie': { type: 'Drop', starRating: 5 },
+  'Baker Bridget': { type: 'Restock', starRating: 3 },
+  'Soggy Nell': { type: 'Toons Hit', starRating: 4 },
+  'Mr. Freeze': { type: 'Cogs Miss', starRating: 4 },
+  'Daffy Don': { type: 'Toon Up', starRating: 4 },
+  'Clerk Penny': { type: 'Trap', starRating: 4 },
+  'Stinky Ned': { type: 'Lure', starRating: 3 },
+  'Moe Zart': { type: 'Sound', starRating: 5 },
+  'Franz Neckvein': { type: 'Drop', starRating: 4 },
+  'Sofie Squirt': { type: 'Restock', starRating: 3 },
+  'Soggy Bottom': { type: 'Toons Hit', starRating: 3 },
+  'Flim Flam': { type: 'Cogs Miss', starRating: 3 },
+  'Madame Chuckle': { type: 'Toon Up', starRating: 3 },
+  'Clerk Will': { type: 'Trap', starRating: 3 },
+  'Sid Sonata': { type: 'Sound', starRating: 4 },
+  'Barbara Seville': { type: 'Sound', starRating: 3 },
+  'Clumsy Ned': { type: 'Drop', starRating: 3 },
+  'Loopy Loopenloop': { type: 'Squirt', starRating: 5 },
+};
+
 function SOSTableView({ sos }: { sos: Record<string, number> }) {
   const sosGrid = [
-    ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Rocky'],
-    ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Nancy Gas', 'Barnacle Bessie', 'Baker Bridget'],
-    ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Stinky Ned', 'Moe Zart', 'Franz Neckvein', 'Sofie Squirt'],
-    ['Soggy Bottom', 'Flim Flam', 'Madame Chuckle', 'Clerk Will', 'Sid Sonata', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
+    ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Baker Bridget'],
+    ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
+    ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Rocky'],
+    ['Soggy Bottom', 'Flim Flam', 'Madame Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
   ];
 
   // Image mapping from CogCalculator.tsx
@@ -108,7 +172,7 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
     'Doctor Drift': 'https://rendition.toontownrewritten.com/render/740902020001040104001b03000303010400000000000000000000000000000000/portrait/128x128.webp',
     'Melody Wavers': 'https://rendition.toontownrewritten.com/render/740e0201000103010308060e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
     'Shelly Seaweed': 'https://rendition.toontownrewritten.com/render/740c01010001030103191504000404010400000000000000000000000000000000/portrait/128x128.webp',
-    'Rocky': '',
+    'Rocky': 'https://rendition.toontownrewritten.com/render/7406010101791b6c1b2c1b14001414010400000000000000000000000000000000/portrait/128x128.webp',
 
     'Sticky Lou': 'https://rendition.toontownrewritten.com/render/740c02000101080108050d04000404010400000000000000000000000000000000/portrait/128x128.webp',
     'Julius Wheezer': 'https://rendition.toontownrewritten.com/render/740c01010101010101050e12001212010400000000000000000000000000000000/portrait/128x128.webp',
@@ -135,26 +199,60 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
     'Sid Sonata': 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp',
     'Barbara Seville': 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp',
     'Clumsy Ned': 'https://rendition.toontownrewritten.com/render/740c020201010701078b0a0c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
-    'Loopy Loopenloop': '',
+    'Loopy Loopenloop': 'https://rendition.toontownrewritten.com/render/7412010201791b6c1b2c1b0e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
   };
 
   return (
-    <div className="flex flex-col gap-3 h-full overflow-y-auto custom-scrollbar pr-2">
+    <div className="flex flex-col gap-3 h-full overflow-y-auto custom-scrollbar p-2">
       <div className="grid grid-cols-4 xl:grid-cols-8 gap-3">
         {sosGrid.flat().map(name => {
           const count = Object.entries(sos).find(([n, _]) => n.replace(/\u0003/g, '') === name)?.[1] || 0;
           const image = sosImages[name] || '';
+          const cardData = SOS_DATA[name] || { type: 'Unknown', starRating: 0 };
+          const stars = cardData.starRating;
+
+          let bgClass = 'bg-blue-900/40 border-blue-500/30';
+          let typeColor = 'text-blue-100/70';
+          let nameColor = 'text-blue-100';
+
+          if (count === 0) {
+            bgClass = 'bg-black/20 border-white/5 opacity-40 grayscale';
+            typeColor = 'text-white/30';
+            nameColor = 'text-white/40';
+          } else {
+            typeColor = 'text-white/70';
+            nameColor = 'text-white';
+            if (stars === 5) {
+              bgClass = 'bg-amber-500 border-amber-300 shadow-lg hover:brightness-110';
+            } else if (stars === 4) {
+              bgClass = 'bg-purple-600 border-purple-400 shadow-lg hover:brightness-110';
+            } else if (stars === 3) {
+              bgClass = 'bg-blue-600 border-blue-400 shadow-lg hover:brightness-110';
+            } else {
+              bgClass = 'bg-blue-900 border-blue-500 shadow-lg hover:brightness-110';
+            }
+          }
 
           return (
             <div
               key={name}
-              className={`rounded-xl border p-2 flex flex-col gap-2 transition-all group ${count > 0
-                ? 'bg-blue-900/40 border-blue-500/30 shadow-lg hover:brightness-110'
-                : 'bg-black/20 border-white/5 opacity-40 grayscale'
-                }`}
+              className={`relative rounded-xl border p-1.5 flex flex-col gap-1 transition-all group ${bgClass}`}
             >
+              {/* Count Bubble - Top Right of the CARD */}
+              <div className={`absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tabular-nums border shadow-md z-20 transition-all ${count > 0
+                ? (stars === 5 ? 'bg-amber-700 border-amber-400 text-white' : 'bg-blue-700 border-blue-400 text-white')
+                : 'bg-neutral-800 border-neutral-700 text-white/30'
+                }`}>
+                {count}
+              </div>
+
+              {/* Card Type */}
+              <div className={`text-[7px] font-black uppercase tracking-widest text-center py-0.5 rounded bg-black/40 border border-white/5 ${typeColor}`}>
+                {cardData.type}
+              </div>
+
               <div className="flex flex-col gap-1">
-                <div className="w-full aspect-square rounded-lg bg-black/40 border border-white/10 p-0.5 shrink-0 overflow-hidden relative group/sosimg">
+                <div className="w-full aspect-square rounded bg-black/40 border border-white/10 p-0.5 shrink-0 overflow-hidden relative group/sosimg">
                   {image ? (
                     <img
                       src={image}
@@ -166,17 +264,20 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                     </div>
                   )}
-                  {/* Count Badge */}
-                  <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-black tabular-nums border shadow-sm z-10 transition-all ${count > 0
-                    ? 'bg-blue-600 border-blue-400 text-white'
-                    : 'bg-black/60 border-white/10 text-white/30'
-                    }`}>
-                    {count}
+
+                  {/* Star Rating Overlay */}
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex justify-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 z-10">
+                    {[...Array(5)].map((_, i) => (
+                      <span key={i} className={`text-[8px] leading-none ${i < stars ? 'text-amber-400' : 'text-white/5'}`}>★</span>
+                    ))}
                   </div>
                 </div>
               </div>
-              <div className={`text-[9.5px] font-black leading-tight text-center flex items-center justify-center min-h-[26px] mt-auto uppercase tracking-tighter ${count > 0 ? 'text-blue-100' : 'text-white/40'}`}>
-                {name}
+
+              <div className="mt-auto">
+                <div className={`text-[9px] font-black leading-tight text-center flex items-center justify-center min-h-[22px] px-1 uppercase tracking-tighter rounded bg-black/40 border border-white/5 ${nameColor}`}>
+                  {name}
+                </div>
               </div>
             </div>
           );
@@ -293,29 +394,6 @@ function RemoteCard({ type, level, count }: { type: string, level: string, count
   );
 }
 
-function RewardCard({ name, count, color, img }: { name: string, count: number, color: 'blue' | 'pink' | 'emerald' | 'purple', img: string }) {
-  const colorClasses = {
-    blue: 'bg-blue-900/20 border-blue-500/20 text-blue-300 shadow-blue-500/5',
-    pink: 'bg-pink-900/20 border-pink-500/20 text-pink-300 shadow-pink-500/5',
-    emerald: 'bg-emerald-900/20 border-emerald-500/20 text-emerald-300 shadow-emerald-500/5',
-    purple: 'bg-purple-900/20 border-purple-500/20 text-purple-300 shadow-purple-500/5'
-  };
-
-  return (
-    <div className={`rounded-xl border p-4 flex flex-col gap-3 transition-all hover:brightness-110 shadow-lg ${colorClasses[color]}`}>
-      <div className="flex justify-between items-start gap-2">
-        <div className="w-12 h-12 rounded-lg bg-black/30 border border-white/5 p-2 flex items-center justify-center shrink-0">
-          <img src={getExtensionImageUrl(`images/${img}`)} className="w-full h-full object-contain filter drop-shadow-md" />
-        </div>
-        <div className="text-2xl font-black tabular-nums">x{count}</div>
-      </div>
-      <div className="text-sm font-bold leading-tight line-clamp-2 min-h-[2.5rem] flex items-end">
-        {name}
-      </div>
-    </div>
-  );
-}
-
 function UniteListItem({ name, count }: { name: string, count: number }) {
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-pink-900/20 border border-pink-500/10 hover:border-pink-500/30 transition-all group shadow-sm">
@@ -348,6 +426,7 @@ export function ToonTrackerTab({
   category?: RewardCategory;
 }) {
   const [toonTrackerData, setToonTrackerData] = useState<ToonTrackerData | null>(null);
+  const [selectedToonId, setSelectedToonId] = useState<string | null>(null);
   const [expandedSuitId, setExpandedSuitId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'idle' | 'connecting'>('idle');
@@ -361,15 +440,17 @@ export function ToonTrackerTab({
     suits: true,
     rewards: true
   });
+  const [activeInstances, setActiveInstances] = useState<{ port: string; toonName: string; toonId: string; isPrimary: boolean }[]>([]);
+  const [isInstanceDropdownOpen, setIsInstanceDropdownOpen] = useState(false);
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const lastResponseTime = useRef<number>(0);
-  const toonDataRef = useRef<ToonTrackerData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const instanceDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
+  
   useEffect(() => {
     const handleOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -380,65 +461,97 @@ export function ToonTrackerTab({
     window.addEventListener('toonhqplus-open-shtickerbook', handleOpen);
     return () => window.removeEventListener('toonhqplus-open-shtickerbook', handleOpen);
   }, []);
+
   useEffect(() => {
     if (subView === 'rewards_detail' && (window as any)._pendingRewardCategory) {
       setActiveCategory((window as any)._pendingRewardCategory);
       delete (window as any)._pendingRewardCategory;
     }
   }, [subView]);
-  useEffect(() => { toonDataRef.current = toonTrackerData; }, [toonTrackerData]);
+
+  // Listen for background script updates
+  useEffect(() => {
+    const handleMessage = (message: any) => {
+      if (message.type === 'TRACKER_STATUS_UPDATED') {
+        setIsSyncing(message.isSyncing);
+        if (message.instances) {
+          setActiveInstances(message.instances);
+          const isSelectedToonOnline = message.instances.some((inst: any) => inst.toonId === selectedToonId);
+          setConnectionStatus(isSelectedToonOnline ? 'connected' : 'disconnected');
+        }
+        if (message.savedToons) {
+          setSavedToons(message.savedToons);
+        }
+        
+        // Only overwrite local data if:
+        // 1. It matches our currently selected toon
+        // 2. We don't have a selection yet (first load)
+        if (message.toonTrackerData) {
+          const incomingToonId = message.toonTrackerData.data.toon.id;
+          if (!selectedToonId || selectedToonId === incomingToonId) {
+            setToonTrackerData(message.toonTrackerData);
+            if (!selectedToonId) setSelectedToonId(incomingToonId);
+          }
+        }
+
+        if (message.rewardHistory && (!selectedToonId || message.primaryToonId === selectedToonId)) {
+          setRewardHistory(message.rewardHistory);
+        }
+      }
+    };
+    browser.runtime.onMessage.addListener(handleMessage);
+    
+    browser.runtime.sendMessage({ type: 'GET_TRACKER_STATUS' }).then(response => {
+      if (response) {
+        setIsSyncing(response.isSyncing);
+        if (response.instances) {
+          setActiveInstances(response.instances);
+          const isSelectedOnline = response.instances.some((inst: any) => inst.toonId === selectedToonId);
+          setConnectionStatus(isSelectedOnline ? 'connected' : 'disconnected');
+        }
+        if (response.savedToons) setSavedToons(response.savedToons);
+        
+        if (response.toonTrackerData) {
+          const incomingId = response.toonTrackerData.data.toon.id;
+          if (!selectedToonId || selectedToonId === incomingId) {
+            setToonTrackerData(response.toonTrackerData);
+            if (!selectedToonId) setSelectedToonId(incomingId);
+          }
+        }
+      }
+      setHasLoaded(true);
+    });
+
+    return () => browser.runtime.onMessage.removeListener(handleMessage);
+  }, [selectedToonId]);
+
+  // Listen for IndexedDB changes to keep UI in sync
+  useEffect(() => {
+    const handleDbChange = (e: any) => {
+      const { store, key } = e.detail;
+      if (store === 'settings') {
+        if (key === 'tracker-toon-list') {
+          getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => { if (list) setSavedToons(list); });
+        } else if (key?.startsWith('tracker-data-')) {
+          const toonId = key.replace('tracker-data-', '');
+          if (toonId === selectedToonId) {
+            getSetting<ToonTrackerData>(key).then(data => { if (data) setToonTrackerData(data); });
+          }
+        } else if (key?.startsWith('tracker-reward-history-')) {
+          const toonId = key.replace('tracker-reward-history-', '');
+          if (toonId === selectedToonId) {
+            loadRewardHistory(toonId).catch(console.error);
+          }
+        }
+      }
+    };
+    window.addEventListener('toonhqplus-db-changed', handleDbChange as any);
+    return () => window.removeEventListener('toonhqplus-db-changed', handleDbChange as any);
+  }, [selectedToonId]);
 
   const toggleSection = (section: string) => {
     if (isExpanded) return;
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const addNotification = async (message: string) => {
-    if (!toonDataRef.current?.data.toon.id) return;
-    const toonId = toonDataRef.current.data.toon.id;
-    const historyKey = getRewardHistoryKey(toonId);
-    const history = await getSetting<RewardHistoryEntry[]>(historyKey) || [];
-    const updated = pruneRewardHistory([{ message, timestamp: Date.now() }, ...history]);
-    await setSetting(historyKey, updated);
-    if (toonDataRef.current?.data.toon.id === toonId) setRewardHistory(updated);
-  };
-
-  const checkRewards = (prev: any, next: any) => {
-    const changes: string[] = [];
-    if (!prev || !next || JSON.stringify(prev) === JSON.stringify(next)) return changes;
-    if (next.pinkslips > (prev.pinkslips || 0)) changes.push(`Fires x${next.pinkslips - (prev.pinkslips || 0)}`);
-    if (next.sos) {
-      Object.entries(next.sos).forEach(([name, count]) => {
-        const prevCount = prev.sos?.[name] || 0;
-        if ((count as number) > prevCount) changes.push(`${name.replace(/\u0003/g, '')} SOS x${(count as number) - prevCount}`);
-      });
-    }
-    if (next.unites) {
-      Object.entries(next.unites).forEach(([category, sub]) => {
-        Object.entries(sub as any).forEach(([name, count]) => {
-          const prevCount = prev.unites?.[category]?.[name] || 0;
-          if ((count as number) > prevCount) changes.push(`${name.replace(/\u0003/g, '')} Unite x${(count as number) - prevCount}`);
-        });
-      });
-    }
-    if (next.remotes) {
-      Object.entries(next.remotes).forEach(([type, sub]) => {
-        Object.entries(sub as any).forEach(([level, count]) => {
-          const prevCount = prev.remotes?.[type]?.[level] || 0;
-          if ((count as number) > prevCount) changes.push(`${level} Star ${type} x${(count as number) - prevCount}`);
-        });
-      });
-    }
-    if (next.summons) {
-      Object.entries(next.summons).forEach(([id, summon]: [string, any]) => {
-        const prevSummon = prev.summons?.[id];
-        const pName = summon.name.replace(/\u0003/g, '');
-        if (summon.single && (!prevSummon || !prevSummon.single)) changes.push(`${pName} Summon (Cog)`);
-        if (summon.building && (!prevSummon || !prevSummon.building)) changes.push(`${pName} Summon (Building)`);
-        if (summon.invasion && (!prevSummon || !prevSummon.invasion)) changes.push(`${pName} Summon (Invasion)`);
-      });
-    }
-    return changes;
   };
 
   const loadRewardHistory = async (toonId: string) => {
@@ -449,167 +562,185 @@ export function ToonTrackerTab({
     setRewardHistory(pruned);
   };
 
-  const startSync = (providedKey?: string, silent = false, targetToonId?: string) => {
-    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
-    if (!silent) setIsSyncing(true);
-    setConnectionStatus('idle');
-    const ports = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
-    let primaryFound = false;
-    let portsAttempted = 0;
-    const activeConnections: WebSocket[] = [];
-    const cleanupOthers = (keepWs: WebSocket) => { activeConnections.forEach(ws => { if (ws !== keepWs) { ws.onclose = null; ws.close(); } }); };
-
-    ports.forEach((port) => {
-      const ws = new WebSocket(`ws://localhost:${port}/`);
-      const timeoutId = setTimeout(() => { if (ws.readyState === WebSocket.CONNECTING) ws.close(); }, 1500);
-      ws.onopen = () => {
-        clearTimeout(timeoutId);
-        activeConnections.push(ws);
-        const authKey = providedKey || Math.random().toString(36).substring(2, 11);
-        setSetting('tracker-auth-key', authKey).catch(console.error);
-        ws.send(JSON.stringify({ authorization: authKey, name: "ToonHQ+" }));
-        ws.send(JSON.stringify({ request: "all" }));
-      };
-      ws.onmessage = (event) => {
-        lastResponseTime.current = Date.now();
-        try {
-          const msgData = JSON.parse(event.data);
-          if (msgData.type === 'authorize') ws.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
-          if (msgData.event === 'all' && msgData.data?.toon) {
-            const toonId = msgData.data.toon.id;
-            const updatedToon = { id: toonId, name: msgData.data.toon.name, style: msgData.data.toon.style, laff: msgData.data.laff.max };
-            setSavedToons(prev => {
-              const existingIndex = prev.findIndex(t => t.id === toonId);
-              let updated;
-              if (existingIndex >= 0) {
-                if (prev[existingIndex].laff === updatedToon.laff && prev[existingIndex].style === updatedToon.style) return prev;
-                updated = [...prev]; updated[existingIndex] = updatedToon;
-              } else { updated = [...prev, updatedToon]; }
-              setSetting('tracker-toon-list', updated).catch(console.error);
-              return updated;
-            });
-            const isTarget = targetToonId === toonId;
-            const isFirstAny = !targetToonId && !primaryFound;
-            const isCurrentPrimary = wsRef.current === ws && toonDataRef.current?.data.toon.id === toonId;
-            if (isTarget || isFirstAny || isCurrentPrimary) {
-              const previousRewards = toonDataRef.current?.data.rewards;
-              const nextRewards = msgData.data.rewards;
-              const rewardChanges = checkRewards(previousRewards, nextRewards);
-              primaryFound = true; wsRef.current = ws; setToonTrackerData(msgData); setConnectionStatus('connected'); setIsSyncing(false); cleanupOthers(ws);
-              setSetting(`tracker-data-${toonId}`, msgData).catch(console.error);
-              setSetting('last-tracker-toon-id', toonId).catch(console.error);
-              rewardChanges.forEach((msg) => addNotification(msg).catch(console.error));
-              if (!(ws as any)._heartbeatStarted) {
-                (ws as any)._heartbeatStarted = true;
-                const intervalId = setInterval(() => {
-                  if (ws.readyState === WebSocket.OPEN && (Date.now() - lastResponseTime.current < 25000)) { ws.send(JSON.stringify({ request: "all" })); }
-                  else { clearInterval(intervalId); if (wsRef.current === ws) setConnectionStatus('disconnected'); ws.close(); }
-                }, 15000);
-                const originalOnClose = ws.onclose;
-                ws.onclose = (e) => { clearInterval(intervalId); if (originalOnClose) originalOnClose.call(ws, e); if (wsRef.current === ws) { setConnectionStatus('disconnected'); wsRef.current = null; } };
-              }
-            } else { ws.onclose = null; ws.close(); }
-          }
-        } catch (e) { }
-      };
-      ws.onerror = () => { clearTimeout(timeoutId); ws.close(); };
-      ws.onclose = () => {
-        portsAttempted++;
-        if (portsAttempted === ports.length && !primaryFound) {
-          setIsSyncing(false);
-          if (!silent && connectionStatus !== 'connected') alert('Could not find TTR client. Make sure the game is running and "Companion App Support" is enabled in your settings.');
-        }
-      };
+  const startSync = (providedKey?: string, targetToonId?: string) => {
+    browser.runtime.sendMessage({
+      type: 'START_TRACKER_SYNC',
+      authKey: providedKey,
+      targetToonId: targetToonId
     });
   };
 
   useEffect(() => {
-    let lastId: string | undefined;
     getSetting<string>('last-tracker-toon-id').then(id => {
-      lastId = id;
-      if (id) getSetting<any>(`tracker-data-${id}`).then(data => { if (data) { setToonTrackerData(prev => prev || data); loadRewardHistory(id).catch(console.error); } });
+      if (id && !selectedToonId) {
+        setSelectedToonId(id);
+        getSetting<any>(`tracker-data-${id}`).then(data => { if (data) setToonTrackerData(data); });
+      }
     });
     getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => { if (list) setSavedToons(list); });
-    getSetting<string>('tracker-auth-key').then(key => { if (key) startSync(key, true, lastId); });
+    startSync();
   }, []);
 
   useEffect(() => {
-    const toonId = toonTrackerData?.data.toon.id;
-    if (!toonId) { setRewardHistory([]); return; }
-    loadRewardHistory(toonId).catch(console.error);
-  }, [toonTrackerData?.data.toon.id]);
+    if (!selectedToonId) { setRewardHistory([]); return; }
+    loadRewardHistory(selectedToonId).catch(console.error);
+  }, [selectedToonId]);
 
   const isDropdownOpenRef = useRef(false);
+  const isInstanceDropdownOpenRef = useRef(false);
   useEffect(() => { isDropdownOpenRef.current = isDropdownOpen; }, [isDropdownOpen]);
+  useEffect(() => { isInstanceDropdownOpenRef.current = isInstanceDropdownOpen; }, [isInstanceDropdownOpen]);
   useEffect(() => {
     const handle = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (!isDropdownOpenRef.current || !target.isConnected) return;
-      if (dropdownRef.current && !dropdownRef.current.contains(target)) setIsDropdownOpen(false);
+      if (isDropdownOpenRef.current && dropdownRef.current && !dropdownRef.current.contains(target)) setIsDropdownOpen(false);
+      if (isInstanceDropdownOpenRef.current && instanceDropdownRef.current && !instanceDropdownRef.current.contains(target)) setIsInstanceDropdownOpen(false);
     };
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
   const disconnect = async () => {
-    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
-    setConnectionStatus('idle'); setIsSyncing(false); await setSetting('tracker-auth-key', null);
+    browser.runtime.sendMessage({ type: 'STOP_TRACKER_SYNC' });
+    setConnectionStatus('disconnected');
+    setActiveInstances([]);
+  };
+
+  const removeSavedToon = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSavedToons(prev => {
+      const updated = prev.filter(t => t.id !== id);
+      setSetting('tracker-toon-list', updated).catch(console.error);
+      return updated;
+    });
+    if (selectedToonId === id) {
+      setSelectedToonId(null);
+      setToonTrackerData(null);
+      setSetting('last-tracker-toon-id', null).catch(console.error);
+    }
   };
 
   const selectToon = (id: string) => {
-    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
+    setSelectedToonId(id);
     getSetting<ToonTrackerData>(`tracker-data-${id}`).then(data => {
       if (data) {
-        setToonTrackerData(data); setSetting('last-tracker-toon-id', id).catch(console.error);
-        setConnectionStatus('idle'); setIsSyncing(false);
-        getSetting<string>('tracker-auth-key').then(key => { if (key) startSync(key, true, id); });
+        setToonTrackerData(data); 
+        setSetting('last-tracker-toon-id', id).catch(console.error);
+        startSync(undefined, id); 
       }
     });
     setIsDropdownOpen(false);
   };
 
-  const weeklyRewardHistory = rewardHistory;
-  const visibleRewardHistory = weeklyRewardHistory.slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
+  const switchInstance = (port: string) => {
+    const inst = activeInstances.find(i => i.port === port);
+    if (inst) setSelectedToonId(inst.toonId);
+    browser.runtime.sendMessage({ type: 'SWITCH_PRIMARY_INSTANCE', port });
+    setIsInstanceDropdownOpen(false);
+  };
+
+  // Group entries that share the same timestamp (same checkRewards batch)
+  type RewardGroup = { timestamp: number; entries: RewardHistoryEntry[] };
+  const groupRewardHistory = (entries: RewardHistoryEntry[]): RewardGroup[] => {
+    const groups: RewardGroup[] = [];
+    for (const entry of entries) {
+      const last = groups[groups.length - 1];
+      if (last && last.timestamp === entry.timestamp) {
+        last.entries.push(entry);
+      } else {
+        groups.push({ timestamp: entry.timestamp, entries: [entry] });
+      }
+    }
+    return groups;
+  };
+
+  const allGroups = groupRewardHistory(rewardHistory);
+  const visibleGroups = groupRewardHistory(
+    rewardHistory.slice(0, isExpanded ? 50 : RECENT_REWARD_LIMIT * 4)
+  ).slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
 
   const ToonHeader = () => (
-    <div className={`py-2 flex items-center gap-3 relative ${isExpanded ? 'px-1' : 'px-3'}`} ref={dropdownRef}>
-      <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" onMouseDown={(e) => { e.stopPropagation(); if (savedToons.length > 0) setIsDropdownOpen(!isDropdownOpen); }}>
-        {toonTrackerData ? (
-          <>
-            <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
-              <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
-              {savedToons.length > 1 && (
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                </div>
-              )}
+    <div className={`py-2 flex items-center gap-3 relative ${isExpanded ? 'px-1' : 'px-3'}`}>
+      <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={(e) => { e.stopPropagation(); if (savedToons.length > 0) setIsDropdownOpen(!isDropdownOpen); }}>
+        <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
+          {toonTrackerData ? (
+            <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center opacity-20">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData.data.toon.name}</h3>
-                {savedToons.length > 1 && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>}
-              </div>
-              <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-blue-400' : 'text-red-400/60'}`}>
-                {isSyncing ? 'Syncing...' : connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Requesting...' : 'Disconnected'}
-              </div>
+          )}
+          {savedToons.length > 0 && (
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </div>
-          </>
-        ) : (
-          <div className="flex items-center gap-2">
-            <h3 className="text-[11.5px] font-black text-green-200/30 uppercase tracking-[0.2em]">Toon Tracker</h3>
-            {savedToons.length > 0 && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white/20"><polyline points="6 9 12 15 18 9" /></svg>}
+          )}
+        </div>
+        <div className="flex-1 min-w-0 relative">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
+            {savedToons.length > 0 && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>}
           </div>
-        )}
+          <div className="flex items-center gap-1 group/status" ref={instanceDropdownRef} onMouseDown={(e) => { 
+            if (activeInstances.length > 1 || (savedToons.length > 0 && !toonTrackerData)) {
+              e.stopPropagation();
+              setIsInstanceDropdownOpen(!isInstanceDropdownOpen);
+            }
+          }}>
+            <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-blue-400' : 'text-red-400/60'}`}>
+              {isSyncing ? 'Syncing...' : connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Requesting...' : connectionStatus === 'disconnected' ? 'Disconnected' : 'Idle'}
+            </div>
+            {activeInstances.length > 1 && (
+              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 group-hover/status:text-white/40 transition-all ${isInstanceDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+            )}
+            
+            {isInstanceDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl z-[160] overflow-hidden min-w-[160px] animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-1">
+                  <div className="px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 mb-1">Active Games</div>
+                  {activeInstances.length > 0 ? activeInstances.map((inst) => (
+                    <div 
+                      key={inst.port} 
+                      onMouseDown={(e) => { e.stopPropagation(); switchInstance(inst.port); }}
+                      className={`flex items-center justify-between gap-3 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors ${inst.isPrimary ? 'bg-emerald-500/10' : ''}`}
+                    >
+                      <span className={`text-[10px] font-bold truncate ${inst.isPrimary ? 'text-emerald-400' : 'text-white/70'}`}>{inst.toonName}</span>
+                      <span className="text-[8px] font-black text-white/20 tabular-nums">:{inst.port}</span>
+                    </div>
+                  )) : (
+                    <div className="px-2 py-2 text-[9px] font-bold text-white/20 italic">No active games</div>
+                  )}
+
+                  {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 mt-2 mb-1">Saved Toons</div>
+                      {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
+                        <div 
+                          key={t.id} 
+                          onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }}
+                          className={`flex items-center justify-between gap-3 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors ${toonTrackerData?.data.toon.id === t.id ? 'bg-white/5' : ''}`}
+                        >
+                          <span className={`text-[10px] font-bold truncate ${toonTrackerData?.data.toon.id === t.id ? 'text-white/80' : 'text-white/50'}`}>{t.name}</span>
+                          <span className="text-[8px] font-black text-white/10 uppercase tracking-tighter">Offline</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       {isDropdownOpen && (
         <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
             {savedToons.map((t) => (
-              <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors group/item ${toonTrackerData?.data.toon.id === t.id ? 'bg-emerald-500/10' : ''}`}>
+              <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10' : ''}`}>
                 <div className="w-8 h-8 rounded-full border border-white/5 bg-black/20 overflow-hidden shrink-0 flex items-center justify-center">
                   <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3]" />
                 </div>
-                <span className={`flex-1 text-[11.5px] font-bold truncate ${toonTrackerData?.data.toon.id === t.id ? 'text-emerald-400' : 'text-white/80'}`}>{t.name} <span className="text-[10px] opacity-40 font-black ml-1">({t.laff})</span></span>
+                <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/80'}`}>{t.name} <span className="text-[10px] opacity-40 font-black ml-1">({t.laff})</span></span>
                 <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/40 pointer-events-auto">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>
@@ -618,17 +749,27 @@ export function ToonTrackerTab({
           </div>
         </div>
       )}
-      <button onClick={() => { if (connectionStatus === 'connected' || connectionStatus === 'connecting') disconnect(); else getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined)); }} disabled={isSyncing} className={`w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer border border-white/10 shrink-0 ${isSyncing ? 'bg-emerald-900 opacity-50' : connectionStatus === 'connected' ? 'bg-emerald-600 shadow-[0_0_12px_rgba(16,185,129,0.5)]' : connectionStatus === 'connecting' ? 'bg-blue-600' : 'bg-emerald-600 hover:bg-emerald-500 shadow-md'}`}>
+      <button 
+        title={connectionStatus === 'connected' ? 'Disconnect' : connectionStatus === 'connecting' ? 'Cancel' : 'Connect'}
+        onClick={() => { if (connectionStatus === 'connected' || connectionStatus === 'connecting') disconnect(); else getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined)); }} 
+        disabled={isSyncing} 
+        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer border border-white/10 shrink-0 group/syncbtn ${isSyncing ? 'bg-emerald-900 opacity-50' : connectionStatus === 'connected' ? 'bg-emerald-600 hover:bg-red-600 shadow-[0_0_12px_rgba(16,185,129,0.5)] hover:shadow-red-500/50' : connectionStatus === 'connecting' ? 'bg-blue-600 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-500 shadow-md'}`}>
         {isSyncing ? <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
           : connectionStatus === 'connecting' ? <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            : connectionStatus === 'connected' ? <div className="relative flex items-center justify-center">{showSuccessGlow && <div className="absolute w-full h-full rounded-full bg-white/40 animate-ping scale-150" />}<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white relative z-10"><polyline points="20 6 9 17 4 12" /></svg></div>
+            : connectionStatus === 'connected' ? (
+              <div className="relative flex items-center justify-center">
+                {showSuccessGlow && <div className="absolute w-full h-full rounded-full bg-white/40 animate-ping scale-150" />}
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white relative z-10 transition-opacity group-hover/syncbtn:opacity-0"><polyline points="20 6 9 17 4 12" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white absolute inset-0 m-auto opacity-0 group-hover/syncbtn:opacity-100 transition-opacity"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </div>
+            )
               : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>}
       </button>
     </div>
   );
 
   if (subView === 'rewards_detail' && toonTrackerData) {
-    const rewards = toonTrackerData.data.rewards;
+    const rewards = toonTrackerData.data.rewards || { pinkslips: 0, remotes: {}, sos: {}, summons: {}, unites: {} };
     const totals = {
       sos: Object.values(rewards.sos || {}).reduce((a: number, b) => a + (b as number), 0),
       unites: Object.values(rewards.unites || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0),
@@ -639,13 +780,13 @@ export function ToonTrackerTab({
 
     return (
       <section className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-        <ToonHeader />
-        <div className="flex-1 flex gap-6 overflow-hidden pr-2 pt-2 pb-4">
-          <div className="w-64 flex flex-col gap-4 shrink-0 overflow-hidden">
+        <div className="flex-1 flex gap-6 overflow-hidden pr-2 pt-0 pb-4">
+          <div className="w-80 flex flex-col gap-4 shrink-0 overflow-hidden pt-2">
+            <ToonHeader />
             <div className="flex flex-col gap-1">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2 py-1">Categories</h3>
               <div className="space-y-1">
-                {REWARD_CATEGORIES.map((cat) => (
+                {REWARD_CATEGORIES_CONFIG.map((cat) => (
                   <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${activeCategory === cat.id ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:bg-white/5 border border-transparent'}`}>
                     <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${activeCategory === cat.id ? 'bg-emerald-500/20' : 'bg-black/20'}`}>
                       <img src={getExtensionImageUrl(`images/${cat.img}`)} className={`w-5 h-5 object-contain ${activeCategory === cat.id ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
@@ -661,12 +802,20 @@ export function ToonTrackerTab({
                 <div className="text-[10px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
                 {rewardHistory.length > 0 && <div className="text-[11px] text-white/30">{`${rewardHistory.length} items`}</div>}
               </div>
-              {rewardHistory.length > 0 ? (
-                <div className="flex-1 divide-y divide-white/5 overflow-y-auto custom-scrollbar">
-                  {rewardHistory.map((entry, i) => (
-                    <div key={`${entry.timestamp}-${i}`} className={`relative overflow-hidden px-3 py-2.5 flex justify-between items-start gap-4 transition-colors ${isRecentlyEarned(entry.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
-                      <span className="relative z-[1] font-bold text-emerald-300/90 leading-tight text-[12px]">{entry.message}</span>
-                      <span className="relative z-[1] text-[10px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right" title={new Date(entry.timestamp).toLocaleString()}><RelativeRewardTime timestamp={entry.timestamp} /></span>
+              {allGroups.length > 0 ? (
+                <div className="flex-1 divide-y divide-white/[0.06] overflow-y-auto custom-scrollbar">
+                  {allGroups.map((group) => (
+                    <div key={group.timestamp} className={`relative overflow-hidden px-3 py-2 transition-colors ${isRecentlyEarned(group.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex flex-col gap-1 flex-1 min-w-0 py-0.5">
+                          {group.entries.map((entry, i) => (
+                            <RewardMessage key={i} entry={entry} />
+                          ))}
+                        </div>
+                        <span className="relative z-[1] text-[10px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right pt-0.5" title={new Date(group.timestamp).toLocaleString()}>
+                          <RelativeRewardTime timestamp={group.timestamp} />
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -677,26 +826,53 @@ export function ToonTrackerTab({
           </div>
           <div className="flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-              <h3 className="text-xl font-black text-white uppercase tracking-widest">{REWARD_CATEGORIES.find(c => c.id === activeCategory)?.label}</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">{REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
+                <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>
+              </div>
               {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
               {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} />}
               {activeCategory === 'unites' && (
-                <div className="flex gap-4 overflow-x-auto pb-4 h-full custom-scrollbar">
-                  {Object.entries(rewards.unites || {}).length > 0 ? (
-                    Object.entries(rewards.unites || {}).map(([category, types]) => {
+                <div className="flex gap-x-12 h-full overflow-y-auto custom-scrollbar pr-4">
+                  {/* Left Column: Toon-Up and Jellybeans */}
+                  <div className="flex-1 flex flex-col gap-y-10">
+                    {['Toon-Up', 'Jellybeans'].map((categoryName) => {
+                      const types = (rewards.unites || {})[categoryName] || {};
                       const sortedTypes = Object.entries(types as any).sort(([nameA], [nameB]) => {
                         const cleanA = nameA.replace(/\u0003/g, '');
                         const cleanB = nameB.replace(/\u0003/g, '');
+                        const valA = parseInt(cleanA) || 0;
+                        const valB = parseInt(cleanB) || 0;
+                        return valB - valA;
+                      });
 
-                        if (category === 'Toon-Up') {
-                          const valA = parseInt(cleanA) || 0;
-                          const valB = parseInt(cleanB) || 0;
-                          return valB - valA;
-                        }
+                      return (
+                        <div key={categoryName} className="flex flex-col gap-3">
+                          <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{categoryName}</h4>
+                          <div className="flex flex-col gap-1.5">
+                            {sortedTypes.length > 0 ? (
+                              sortedTypes.map(([name, count]) => (
+                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} />
+                              ))
+                            ) : (
+                              <div className="py-2 text-[10px] font-black uppercase tracking-widest text-white/10 italic">None</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                        if (category === 'Gag-Up') {
+                  {/* Right Column: Gag-Up and Cartoonival */}
+                  <div className="flex-1 flex flex-col gap-y-10">
+                    {['Gag-Up', 'Cartoonival'].map((categoryName) => {
+                      const types = (rewards.unites || {})[categoryName] || {};
+                      const sortedTypes = Object.entries(types as any).sort(([nameA], [nameB]) => {
+                        const cleanA = nameA.replace(/\u0003/g, '');
+                        const cleanB = nameB.replace(/\u0003/g, '');
+                        if (categoryName === 'Gag-Up') {
                           const order = ['All', 'Sound', 'Throw', 'Squirt', 'Lure', 'Trap', 'Drop'];
                           const indexA = order.findIndex(o => cleanA.endsWith(o));
                           const indexB = order.findIndex(o => cleanB.endsWith(o));
@@ -704,30 +880,25 @@ export function ToonTrackerTab({
                           if (indexA !== -1) return -1;
                           if (indexB !== -1) return 1;
                         }
-
-                        if (category === 'Jellybeans') {
-                          const valA = parseInt(cleanA) || 0;
-                          const valB = parseInt(cleanB) || 0;
-                          return valB - valA;
-                        }
-
                         return cleanA.localeCompare(cleanB);
                       });
 
                       return (
-                        <div key={category} className="w-[200px] shrink-0 flex flex-col gap-3">
-                          <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{category}</h4>
-                          <div className="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1">
-                            {sortedTypes.map(([name, count]) => (
-                              <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} />
-                            ))}
+                        <div key={categoryName} className="flex flex-col gap-3">
+                          <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{categoryName}</h4>
+                          <div className="flex flex-col gap-1.5">
+                            {sortedTypes.length > 0 ? (
+                              sortedTypes.map(([name, count]) => (
+                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} />
+                              ))
+                            ) : (
+                              <div className="py-2 text-[10px] font-black uppercase tracking-widest text-white/10 italic">None</div>
+                            )}
                           </div>
                         </div>
                       );
-                    })
-                  ) : (
-                    <EmptyRewardState />
-                  )}
+                    })}
+                  </div>
                 </div>
               )}
               {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400/60 border-b border-emerald-500/10 pb-2">{type}</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
@@ -755,7 +926,7 @@ export function ToonTrackerTab({
                 {toonTrackerData.data.rewards && (
                   <div className={`flex justify-between items-center py-3 ${isExpanded ? 'px-2' : 'px-2'}`}>
                     {(() => {
-                      const rewards = toonTrackerData.data.rewards;
+                      const rewards = toonTrackerData.data.rewards!;
                       const totals = {
                         pinkslips: rewards.pinkslips || 0,
                         sos: Object.values(rewards.sos || {}).reduce((a: number, b) => a + (b as number), 0),
@@ -796,13 +967,36 @@ export function ToonTrackerTab({
                 {expandedSections.rewards && (
                   <div className="animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="bg-slate-950/30 rounded-lg border border-sky-200/10 overflow-hidden">
-                      <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3"><div className="text-[9px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>{rewardHistory.length > 0 && <div className="text-[10px] text-white/30">{`${visibleRewardHistory.length} most recent`}</div>}</div>
-                      {visibleRewardHistory.length > 0 ? (
-                        <div className={`divide-y divide-white/5 overflow-y-auto custom-scrollbar ${isExpanded ? 'max-h-[calc(100vh-350px)]' : 'max-h-56'}`}>
-                          {visibleRewardHistory.map((entry, i) => (
-                            <div key={`${entry.timestamp}-${i}`} className={`relative overflow-hidden px-3 py-2.5 flex justify-between items-start gap-4 transition-colors ${isRecentlyEarned(entry.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
-                              <span className={`relative z-[1] font-bold text-emerald-300/90 leading-tight text-[11px]`}>{entry.message}</span>
-                              <span className="relative z-[1] text-[9px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right" title={new Date(entry.timestamp).toLocaleString()}><RelativeRewardTime timestamp={entry.timestamp} /></span>
+                      <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3">
+                        <div className="text-[9px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
+                        {allGroups.length > 5 && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
+                                detail: { tab: 'reward_details', category: activeCategory }
+                              }));
+                            }}
+                            className="text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors"
+                          >
+                            Show All
+                          </button>
+                        )}
+                      </div>
+                      {visibleGroups.length > 0 ? (
+                        <div className={`divide-y divide-white/[0.06] overflow-y-auto custom-scrollbar ${isExpanded ? 'max-h-[calc(100vh-350px)]' : 'max-h-56'}`}>
+                          {visibleGroups.map((group) => (
+                            <div key={group.timestamp} className={`relative overflow-hidden px-3 py-2 transition-colors ${isRecentlyEarned(group.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
+                              <div className="flex justify-between items-start gap-3">
+                                <div className="flex flex-col gap-1 flex-1 min-w-0 py-0.5">
+                                  {group.entries.map((entry, i) => (
+                                    <RewardMessage key={i} entry={entry} />
+                                  ))}
+                                </div>
+                                <span className="text-[9px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right pt-0.5" title={new Date(group.timestamp).toLocaleString()}>
+                                  <RelativeRewardTime timestamp={group.timestamp} />
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -811,6 +1005,15 @@ export function ToonTrackerTab({
                   </div>
                 )}
               </div>
+              {connectionStatus === 'disconnected' && (
+                <button 
+                  onClick={() => setToonTrackerData(null)}
+                  className="w-full py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white/60 transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  View All Toons
+                </button>
+              )}
             </div>
             <div className={isExpanded ? "flex flex-col gap-4" : "contents"}>
               <div className="space-y-2 rounded-xl border border-fuchsia-300/10 bg-[linear-gradient(180deg,rgba(88,28,135,0.22),rgba(17,24,39,0.5))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -928,9 +1131,67 @@ export function ToonTrackerTab({
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center opacity-20 py-12">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.15" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400/50 mb-4 animate-pulse"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
-            <p className="text-[11.5px] font-black text-green-200 uppercase tracking-[0.3em] text-center px-4 leading-relaxed">Connect to your toon<br />to see stats</p>
+          <div className="h-full flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
+            {hasLoaded && savedToons.length > 0 ? (
+              <div className="w-full max-w-sm space-y-6">
+                <div className="text-center space-y-1">
+                  <h3 className="text-sm font-black text-emerald-400 uppercase tracking-[0.2em]">Your Toons</h3>
+                  <p className="text-[10px] text-white/30 uppercase tracking-widest">Select a toon to view stats offline</p>
+                </div>
+                <div className="grid gap-3">
+                  {savedToons.map(t => {
+                    const isActive = activeInstances.find(inst => inst.toonId === t.id);
+                    return (
+                      <div 
+                        key={t.id} 
+                        onClick={() => selectToon(t.id)}
+                        className={`flex items-center gap-4 p-3 rounded-xl border transition-all cursor-pointer group/tooncard shadow-lg ${isActive ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'}`}
+                      >
+                        <div className="w-12 h-12 rounded-full border border-white/10 bg-black/20 overflow-hidden shrink-0 flex items-center justify-center relative">
+                          <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] group-hover/tooncard:scale-[1.4] transition-transform duration-500" />
+                          {isActive && <div className="absolute inset-0 bg-emerald-500/10 animate-pulse" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-black text-white group-hover/tooncard:text-emerald-400 transition-colors truncate">{t.name}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-tighter">{t.laff} Laff</span>
+                            <span className="w-1 h-1 rounded-full bg-white/10" />
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${isActive ? 'text-emerald-400' : 'text-white/20'}`}>{isActive ? 'Online' : 'Offline'}</span>
+                          </div>
+                        </div>
+                        <div className="opacity-0 group-hover/tooncard:opacity-100 transition-opacity">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white/20"><path d="m9 18 6-6-6-6" /></svg>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="pt-4 text-center">
+                  <button 
+                    onClick={() => getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined))}
+                    className="px-6 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all"
+                  >
+                    Sync Online Toons
+                  </button>
+                </div>
+              </div>
+            ) : hasLoaded ? (
+              <div className="flex flex-col items-center gap-6 opacity-40">
+                <div className="w-20 h-20 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center animate-pulse">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400/50"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-[11.5px] font-black text-green-200 uppercase tracking-[0.3em] leading-relaxed">Connect to your toon<br />to see stats</p>
+                  <p className="text-[9px] text-white/40 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">Enable "Companion App Support" in your TTR settings to get started</p>
+                </div>
+                <button 
+                  onClick={() => getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined))}
+                  className="mt-2 px-8 py-2.5 rounded-full border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 text-[10.5px] font-black uppercase tracking-[0.2em] transition-all"
+                >
+                  Search for Games
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

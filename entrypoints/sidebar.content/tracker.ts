@@ -41,6 +41,12 @@ export interface ToonTrackerData {
         target: number;
       };
     }>;
+    location: Record<string, {
+      district: string;
+      neighborhood: string;
+      instanceId: number;
+      zone: string;
+    }>;
   };
 }
 
@@ -64,19 +70,19 @@ export async function syncToonTracker(): Promise<ToonTrackerData> {
       ws.onopen = () => {
         console.log(`WebSocket connected on port ${port}`);
         const randomKey = Math.random().toString(36).substring(2, 11);
-        
+
         ws.send(JSON.stringify({
           authorization: randomKey,
           name: "ToonHQ+"
         }));
-        
+
         ws.send(JSON.stringify({ request: "all" }));
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'authorize') {
             ws.send(JSON.stringify({ type: 'authorize', id: data.id }));
           }

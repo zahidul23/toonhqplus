@@ -174,7 +174,9 @@ function promisifyTx(t: IDBTransaction): Promise<void> {
 
 /** Dispatch a lightweight change event so listeners can refresh. */
 function notifyChanged(store: string, key?: IDBValidKey) {
-  window.dispatchEvent(new CustomEvent('toonhqplus-db-changed', { detail: { store, key } }));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('toonhqplus-db-changed', { detail: { store, key } }));
+  }
 }
 
 /** IndexedDB valid key for toon ids: non-empty string. */
