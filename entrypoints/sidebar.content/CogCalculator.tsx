@@ -636,10 +636,19 @@ export function CogCalculator() {
         if (gagsInTrack.length === 0) return;
 
         const hitCounts = [0, 0, 0, 0];
+        const trackBaseDamages = [0, 0, 0, 0];
+
         gagsInTrack.forEach(gag => {
           if (!gag) return;
+          const baseDmg = getGagDamage(gag);
           const targets = gag.target === 'all' ? [0, 1, 2, 3] : [gag.targetIdx!];
-          targets.forEach(t => hitCounts[t]++);
+          targets.forEach(t => {
+            hitCounts[t]++;
+            const isPinkSlip = gag.trackId === 'trap' && gag.gagIndex === 7;
+            if (gag.trackId !== 'trap' && gag.trackId !== 'lure' && !isPinkSlip) {
+              trackBaseDamages[t] += baseDmg;
+            }
+          });
         });
 
         const luredAtStartOfPhase = currentCogs.map(c => c.isLured);
@@ -682,10 +691,6 @@ export function CogCalculator() {
               }
             }
 
-            if (hitCounts[cogIdx] >= 2 && !['trap', 'lure'].includes(trackId)) {
-              currentDmg = Math.floor(currentDmg * 1.2);
-            }
-
             const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
             let defenseDownStacks = 0;
             if (isPresident && deadCogsCountAtStart > 0) {
@@ -694,6 +699,7 @@ export function CogCalculator() {
               defenseDownStacks = 1;
             }
 
+            // Apply Multipliers (Defense Down) to the gag damage
             if (defenseDownStacks > 0 && !['trap', 'lure'].includes(trackId)) {
               currentDmg = Math.floor(currentDmg * (1 + 0.20 * defenseDownStacks));
             }
@@ -732,7 +738,8 @@ export function CogCalculator() {
               cog.lureDuration = 0;
             } else if (trackId === 'throw' || trackId === 'squirt') {
               if (luredAtStartOfPhase[cogIdx]) {
-                currentDmg = Math.floor(currentDmg * 1.5);
+                // Lure bonus (knockback) is 50% of the BASE damage, rounded UP
+                currentDmg += Math.ceil(baseDmg * 0.5);
               }
               phaseDamage[cogIdx] += currentDmg;
               trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
@@ -746,6 +753,30 @@ export function CogCalculator() {
             }
           });
         });
+
+        // Apply Combo Bonuses separately based on intervals of 5
+        if (!['trap', 'lure'].includes(trackId)) {
+          trackBaseDamages.forEach((totalBase, idx) => {
+            if (hitCounts[idx] >= 2) {
+              const roundedSum = Math.ceil(totalBase / 5) * 5;
+              const baseBonus = Math.floor(roundedSum * 0.2); // 20% of rounded base
+              
+              const cog = currentCogs[idx];
+              const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
+              let defenseDownStacks = 0;
+              if (isPresident && deadCogsCountAtStart > 0) defenseDownStacks = deadCogsCountAtStart;
+              else if (cog.isDefenseDown) defenseDownStacks = 1;
+
+              let finalBonus = baseBonus;
+              if (defenseDownStacks > 0) {
+                finalBonus = Math.floor(finalBonus * (1 + 0.20 * defenseDownStacks));
+              }
+
+              phaseDamage[idx] += finalBonus;
+              trackDamages[trackId] = (trackDamages[trackId] || 0) + finalBonus;
+            }
+          });
+        }
 
         const resolveDamage = (dmg: number, idx: number) => {
           const state = cogStates[idx];
