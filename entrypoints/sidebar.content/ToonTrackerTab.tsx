@@ -104,18 +104,45 @@ function RewardMessage({ entry }: { entry: RewardHistoryEntry }) {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function SummonIcon({ active, type }: { active: boolean, type: 'cog' | 'bldg' | 'inv' }) {
-  const labels = { cog: 'C', bldg: 'B', inv: 'I' };
   const tooltips = { cog: 'Cog', bldg: 'Building', inv: 'Invasion' };
+
+  const icons = {
+    cog: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
+    bldg: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+        <path d="M9 22v-4h6v4" />
+        <path d="M8 6h.01" />
+        <path d="M16 6h.01" />
+        <path d="M8 10h.01" />
+        <path d="M16 10h.01" />
+        <path d="M8 14h.01" />
+        <path d="M16 14h.01" />
+      </svg>
+    ),
+    inv: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+    )
+  };
 
   return (
     <div
       title={tooltips[type]}
-      className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-black border transition-all ${active
-        ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_5px_rgba(147,51,234,0.5)]'
+      className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${active
+        ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_8px_rgba(147,51,234,0.5)]'
         : 'bg-black/40 border-white/5 text-white/10'
         }`}
     >
-      {labels[type]}
+      {icons[type]}
     </div>
   );
 }
@@ -240,7 +267,7 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
             >
               {/* Count Bubble - Top Right of the CARD */}
               <div className={`absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tabular-nums border shadow-md z-20 transition-all ${count > 0
-                ? (stars === 5 ? 'bg-amber-700 border-amber-400 text-white' : 'bg-blue-700 border-blue-400 text-white')
+                ? 'bg-green-700 border-green-400 text-white'
                 : 'bg-neutral-800 border-neutral-700 text-white/30'
                 }`}>
                 {count}
@@ -312,13 +339,13 @@ function SummonsTableView({ summons }: { summons: any }) {
               return (
                 <div
                   key={cogRank.name}
-                  className={`rounded-xl border p-2 flex flex-col gap-2 transition-all group ${summon
+                  className={`rounded-xl border p-2 flex flex-col gap-2 transition-all group ${summon && (summon.single || summon.building || summon.invasion)
                     ? `${classes.bg} ${classes.border} ${classes.hover} shadow-lg`
                     : 'bg-black/20 border-white/5 opacity-40 grayscale'
                     }`}
                 >
                   <div className="flex flex-col gap-1">
-                    <div className={`text-[10px] font-black truncate leading-tight text-center ${summon ? classes.text : 'text-white/60'}`}>{cogRank.name}</div>
+                    <div className={`text-[10px] font-black truncate leading-tight text-center ${summon && (summon.single || summon.building || summon.invasion) ? classes.text : 'text-white/60'}`}>{cogRank.name}</div>
                     <div className="w-full aspect-square rounded-lg bg-black/40 border border-white/10 p-1 shrink-0 overflow-hidden relative">
                       <img
                         src={`https://toonhq.org/static/assets/cogs/${cogRank.image}`}
@@ -375,7 +402,14 @@ function RemoteCard({ type, level, count }: { type: string, level: string, count
       ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-100'
       : 'bg-black/20 border-white/5 text-white/20 opacity-40 grayscale'
       }`}>
-      <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 p-2 flex items-center justify-center shrink-0 relative overflow-hidden">
+      <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 p-2 flex items-center justify-center shrink-0 relative">
+        {/* Star Rating - Directly above the image card */}
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 flex justify-center gap-0.5 px-2 py-0.5 rounded-full bg-slate-950 border border-white/10 shadow-xl z-20 whitespace-nowrap">
+          {[...Array(parseInt(level) || 0)].map((_, i) => (
+            <span key={i} className="text-[10px] leading-none text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.6)]">★</span>
+          ))}
+        </div>
+
         <img
           src={type.includes("Healing") ? getExtensionImageUrl('images/remotesheal.png') : getExtensionImageUrl('images/remotes.png')}
           className="w-full h-full object-contain filter drop-shadow-md"
@@ -384,7 +418,7 @@ function RemoteCard({ type, level, count }: { type: string, level: string, count
       </div>
       <div className="flex-1 flex flex-col justify-between items-end min-w-0">
         <div className={`text-2xl font-black tabular-nums ${count > 0 ? 'text-emerald-400' : ''}`}>
-          x{count}
+          {count}<span className="text-sm opacity-50 ml-0.5">/100</span>
         </div>
         <div className="text-[10px] font-black uppercase tracking-widest truncate w-full text-right opacity-70">
           {level} Star
@@ -394,11 +428,13 @@ function RemoteCard({ type, level, count }: { type: string, level: string, count
   );
 }
 
-function UniteListItem({ name, count }: { name: string, count: number }) {
+function UniteListItem({ name, count, max = 100 }: { name: string, count: number, max?: number }) {
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-pink-900/20 border border-pink-500/10 hover:border-pink-500/30 transition-all group shadow-sm">
       <div className="text-[14px] font-bold text-pink-50/90 group-hover:text-white transition-colors truncate">{name}</div>
-      <div className="text-[13px] font-black text-pink-400 tabular-nums shrink-0 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">x{count}</div>
+      <div className="text-[13px] font-black text-pink-400 tabular-nums shrink-0 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">
+        {count}<span className="text-[10px] opacity-50 ml-0.5">/{max}</span>
+      </div>
     </div>
   );
 }
@@ -855,7 +891,7 @@ export function ToonTrackerTab({
                           <div className="flex flex-col gap-1.5">
                             {sortedTypes.length > 0 ? (
                               sortedTypes.map(([name, count]) => (
-                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} />
+                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} max={categoryName === 'Cartoonival' ? 5 : 100} />
                               ))
                             ) : (
                               <div className="py-2 text-[10px] font-black uppercase tracking-widest text-white/10 italic">None</div>
@@ -890,7 +926,7 @@ export function ToonTrackerTab({
                           <div className="flex flex-col gap-1.5">
                             {sortedTypes.length > 0 ? (
                               sortedTypes.map(([name, count]) => (
-                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} />
+                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} max={categoryName === 'Cartoonival' ? 5 : 100} />
                               ))
                             ) : (
                               <div className="py-2 text-[10px] font-black uppercase tracking-widest text-white/10 italic">None</div>
@@ -936,11 +972,11 @@ export function ToonTrackerTab({
                         summons: Object.values(rewards.summons || {}).reduce((a: number, b: any) => a + (b.single ? 1 : 0) + (b.building ? 1 : 0) + (b.invasion ? 1 : 0), 0),
                       };
                       const types = [
-                        { id: 'sos', img: 'sos.png', count: totals.sos, color: 'blue' },
-                        { id: 'unites', img: 'unites.png', count: totals.unites, color: 'pink' },
-                        { id: 'summons', img: 'summons.png', count: totals.summons, color: 'purple' },
-                        { id: 'pinkslips', img: 'pinkslips.png', count: totals.pinkslips, color: 'orange' },
-                        { id: 'remotes', img: 'remotes.png', count: totals.remotes, color: 'emerald' }
+                        { id: 'sos', img: 'sos.png', count: totals.sos, bg: '#6b21a8' },
+                        { id: 'unites', img: 'unites.png', count: totals.unites, bg: '#14532d' },
+                        { id: 'summons', img: 'summons.png', count: totals.summons, bg: '#1e3a5f' },
+                        { id: 'pinkslips', img: 'pinkslips.png', count: totals.pinkslips, bg: '#4a3728' },
+                        { id: 'remotes', img: 'remotes.png', count: totals.remotes, bg: '#991b1b' }
                       ] as const;
 
                       const handleRewardClick = (e: React.MouseEvent, category: RewardCategory) => {
@@ -958,7 +994,12 @@ export function ToonTrackerTab({
                         >
                           <div className={`${isExpanded ? 'w-12 h-12' : 'w-10 h-10'} rounded-full bg-black/40 border border-white/10 p-1.5 flex items-center justify-center relative transition-all group-hover/reward:scale-110 group-hover/reward:border-white/30 group-hover/reward:bg-black/60 shadow-lg`}>
                             <img src={getExtensionImageUrl(`images/${rt.img}`)} alt={rt.id} className="w-full h-full object-contain filter drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]" />
-                            {rt.count > 0 && <div className={`${isExpanded ? 'min-w-[20px] h-[20px] text-[11px]' : 'min-w-[18px] h-[18px] text-[10px]'} absolute -top-1 -right-1 px-1 rounded-full flex items-center justify-center font-black text-white border border-white/20 shadow-xl z-10 ${rt.color === 'blue' ? 'bg-blue-600' : rt.color === 'pink' ? 'bg-pink-600' : rt.color === 'emerald' ? 'bg-emerald-600' : rt.color === 'orange' ? 'bg-orange-600' : 'bg-purple-600'}`}>{rt.count}</div>}
+                            {rt.count > 0 && <div
+                              className={`${isExpanded ? 'min-w-[20px] h-[20px] text-[11px]' : 'min-w-[18px] h-[18px] text-[10px]'} absolute -top-1 -right-1 px-1 rounded-full flex items-center justify-center font-black text-white border border-white/20 shadow-xl z-10`}
+                              style={{ backgroundColor: rt.bg }}
+                            >
+                              {rt.count}
+                            </div>}
                           </div>
                         </div>
                       ));
