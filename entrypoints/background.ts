@@ -219,7 +219,7 @@ export default defineBackground(() => {
               break;
             }
           }
-          if (!primaryPort && connections.size > 0) primaryPort = connections.keys().next().value;
+          if (!primaryPort && connections.size > 0) primaryPort = connections.keys().next().value ?? null;
           if (!primaryPort) setStatus('disconnected');
           else broadcastStatus();
         } else {
@@ -228,7 +228,7 @@ export default defineBackground(() => {
 
         portsAttempted++;
         if (portsAttempted === ports.length && connections.size === 0) {
-          if (!isRetry) startSync(providedKey, targetToonId, true);
+          if (!isRetry) startSync(providedKey, targetToonId ?? undefined, true);
           else {
             setIsSyncing(false);
             setStatus('disconnected');
