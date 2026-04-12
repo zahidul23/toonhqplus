@@ -70,9 +70,9 @@ const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; rounds?
     { gagIndex: 5, damage: 75, image: SOS_MOE, name: "Moe Zart" },
   ],
   lure: [
-    { gagIndex: 3, damage: 0, image: SOS_STINKY_NED, name: "Stinky Ned" },
-    { gagIndex: 4, damage: 0, image: SOS_NANCY_GAS, name: "Nancy Gas" },
-    { gagIndex: 5, damage: 0, image: SOS_LIL_OLDMAN, name: "Lil Oldman" },
+    { gagIndex: 3, damage: 0, image: SOS_STINKY_NED, name: "Stinky Ned", rounds: 4 },
+    { gagIndex: 4, damage: 0, image: SOS_NANCY_GAS, name: "Nancy Gas", rounds: 5 },
+    { gagIndex: 5, damage: 0, image: SOS_LIL_OLDMAN, name: "Lil Oldman", rounds: 6 },
     { gagIndex: 11, damage: 0, rounds: 2, dmgOthers: 0, dmgExpire: 45, image: getExtensionImageUrl('images/remotesheal.png'), name: "1-Star Heal Remote", isRemote: true, stars: 1, isHeal: true },
     { gagIndex: 12, damage: 0, rounds: 3, dmgOthers: 0, dmgExpire: 90, image: getExtensionImageUrl('images/remotesheal.png'), name: "2-Star Heal Remote", isRemote: true, stars: 2, isHeal: true },
     { gagIndex: 13, damage: 0, rounds: 4, dmgOthers: 0, dmgExpire: 150, image: getExtensionImageUrl('images/remotesheal.png'), name: "3-Star Heal Remote", isRemote: true, stars: 3, isHeal: true },
@@ -185,7 +185,7 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage
         <button
           type="button"
           onClick={onOrganicClick}
-          className="absolute -bottom-1 -right-1 z-20 w-6 h-6 transition-all hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+          className="absolute -bottom-1 -right-1 z-20 w-6 h-6 transition-all opacity-0 group-hover:opacity-100 grayscale hover:grayscale-0 hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
           title={organicTitle || `Organic ${title}`}
         >
           <img
@@ -365,6 +365,88 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
     }
   };
 
+  // Helper component for rendering individual SOS GagButtons
+  const RenderSosGagButton = ({ sos }: { sos: any }) => {
+    const isAllTarget = [3, 4, 5].includes(sos.gagIndex) || sos.isRemote;
+    const color = (sos.isRemote || sos.isInstaKill) ? '#8b5cf6' : track.color;
+    const title = sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : `${sos.name} (${sos.damage})`;
+
+    let gagDisabled = false;
+    const livingAtStart = cogs.filter(c => !c.isDead);
+    if (livingAtStart.length === 0 && !isAllTarget) {
+      gagDisabled = true;
+    }
+
+    if (track.id === 'lure' && !sos.isHeal) {
+      const livingCogs = cogs.filter((c, i) => {
+        const maxHp = getCogMaxHp(c, cogs);
+        const dmg = cogDamages[i] || 0;
+        return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
+      });
+      if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
+        gagDisabled = true;
+      }
+    }
+
+    return (
+      <GagButton
+        imageSrc={sos.image}
+        imageAlt={sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : sos.name}
+        color={color}
+        title={title}
+        damage={sos.damage}
+        disabled={gagDisabled}
+        onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
+        targetPopup={
+          sos.isRemote ? (
+            activePopup?.trackId === track.id && activePopup?.variant === 'sos' && activePopup?.subType === 'stars' && activePopup?.gagIndex === sos.gagIndex ? (
+              <div className="absolute top-1/2 -translate-y-1/2 right-full mr-3 w-max bg-[#0c3622] p-4 rounded-2xl border border-white/10 shadow-2xl z-[70] animate-in fade-in slide-in-from-right-2">
+                <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3 text-center">Select Level</div>
+                <div className="flex gap-3">
+                  {[0, 1, 2].map((off) => {
+                    const baseIdx = sos.isHeal ? 11 : 8;
+                    const idx = baseIdx + off;
+                    const rem = SOS_GAGS[track.id].find(s => s.gagIndex === idx);
+                    return (
+                      <button
+                        key={idx}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActivePopup({ trackId: track.id, gagIndex: idx, variant: 'sos' });
+                        }}
+                        className={`group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-violet-500/20 hover:border-violet-500/50 rounded-xl border border-white/5 transition-all cursor-pointer min-w-[64px]`}
+                      >
+                        <div className="relative">
+                          <img src={rem?.image} className="w-10 h-10 object-contain group-hover/star:scale-110 transition-transform" />
+                          <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5">
+                            {[...Array(rem?.stars)].map((_, i) => (
+                              <span key={i} className="text-yellow-400 text-[10px] drop-shadow-sm">★</span>
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-black text-white/80">{rem?.stars} Star</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="absolute top-1/2 -translate-y-1/2 left-full w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-[#0c3622]"></div>
+              </div>
+            ) : activePopup?.trackId === track.id && activePopup?.variant === 'sos' && (
+              activePopup?.gagIndex === sos.gagIndex ||
+              (sos.gagIndex === 8 && [8, 9, 10].includes(activePopup?.gagIndex)) ||
+              (sos.gagIndex === 11 && [11, 12, 13].includes(activePopup?.gagIndex))
+            ) ? (
+              <TargetPopup trackId={track.id} gagIndex={activePopup.gagIndex} variant="sos" alignment="right" />
+            ) : null
+          ) : (
+            <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
+          )
+        }
+      />
+    );
+  };
+
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-1 items-start">
@@ -423,93 +505,30 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
         {sosGags.length > 0 && (
           <>
             <div className="w-px h-8 bg-white/10 mx-1" />
+
             <div className="flex gap-1 items-start">
-              {/* Regular SOS Cards (indices 3, 4, 5) and Remotes */}
-              {sosGags.filter(s => [3, 4, 5, 7, 8, 11].includes(s.gagIndex)).map((sos: any) => {
-                if (sos.isRemote && sos.stars > 1) return null;
+              {/* Regular SOS Gags (horizontal, e.g., Moe, Sid, Barb, etc.) */}
+              {sosGags.filter(s => [3, 4, 5].includes(s.gagIndex)).map(sos => (
+                <RenderSosGagButton key={sos.gagIndex} sos={sos} />
+              ))}
 
-                const isAllTarget = [3, 4, 5].includes(sos.gagIndex);
-                const isHealCol = track.id === 'lure' && sos.gagIndex === 11;
+              <div className="w-px h-8 bg-white/10 mx-1" />
 
-                let gagDisabled = false;
-                const livingAtStart = cogs.filter(c => !c.isDead);
-                if (livingAtStart.length === 0 && !isAllTarget) {
-                  gagDisabled = true;
-                }
-                
-                if (track.id === 'lure' && !sos.isHeal) {
-                  const livingCogs = cogs.filter((c, i) => {
-                    const maxHp = getCogMaxHp(c, cogs);
-                    const dmg = cogDamages[i] || 0;
-                    return (c.isV2 ? maxHp * 2 : maxHp) > dmg;
-                  });
-                  if (livingCogs.length > 0 && livingCogs.every(c => c.isLured)) {
-                    gagDisabled = true;
-                  }
-                }
+              {/* Remotes (vertical column) */}
+              <div className="flex flex-col gap-1">
+                {sosGags.filter(s => s.isRemote && s.stars === 1).map(sos => ( // Only show 1-star remotes, popup handles others
+                  <RenderSosGagButton key={sos.gagIndex} sos={sos} />
+                ))}
+              </div>
 
-                return (
-                  <React.Fragment key={`sos-${sos.gagIndex}`}>
-                    {track.id === 'trap' && sos.gagIndex === 7 && <div className="w-px h-8 bg-white/10 mx-1" />}
-                    {isHealCol && <div className="w-px h-8 bg-white/10 mx-1" />}
-                    {isHealCol && <div className="gag-button invisible" />}
-                    <GagButton
-                      imageSrc={sos.image}
-                      imageAlt={sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : sos.name}
-                      color={(sos.isRemote || sos.isInstaKill) ? '#8b5cf6' : track.color}
-                      title={sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : `${sos.name} (${sos.damage})`}
-                      damage={sos.damage}
-                      disabled={gagDisabled}
-                      onClick={(e: any) => handleGagClick(e, track.id, sos.gagIndex, 'sos', isAllTarget)}
-                      targetPopup={
-                        sos.isRemote ? (
-                          activePopup?.trackId === track.id && activePopup?.variant === 'sos' && activePopup?.subType === 'stars' && activePopup?.gagIndex === sos.gagIndex ? (
-                            <div className="absolute top-1/2 -translate-y-1/2 right-full mr-3 w-max bg-[#0c3622] p-4 rounded-2xl border border-white/10 shadow-2xl z-[70] animate-in fade-in slide-in-from-right-2">
-                              <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3 text-center">Select Level</div>
-                              <div className="flex gap-3">
-                                {[0, 1, 2].map((off) => {
-                                  const baseIdx = sos.isHeal ? 11 : 8;
-                                  const idx = baseIdx + off;
-                                  const rem = SOS_GAGS[track.id].find(s => s.gagIndex === idx);
-                                  return (
-                                    <button
-                                      key={idx}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActivePopup({ trackId: track.id, gagIndex: idx, variant: 'sos' });
-                                      }}
-                                      className={`group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-violet-500/20 hover:border-violet-500/50 rounded-xl border border-white/5 transition-all cursor-pointer min-w-[64px]`}
-                                    >
-                                      <div className="relative">
-                                        <img src={rem?.image} className="w-10 h-10 object-contain group-hover/star:scale-110 transition-transform" />
-                                        <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5">
-                                          {[...Array(rem?.stars)].map((_, i) => (
-                                            <span key={i} className="text-yellow-400 text-[10px] drop-shadow-sm">★</span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <span className="text-[10px] font-black text-white/80">{rem?.stars} Star</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              <div className="absolute top-1/2 -translate-y-1/2 left-full w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-[#0c3622]"></div>
-                            </div>
-                          ) : activePopup?.trackId === track.id && activePopup?.variant === 'sos' && (
-                            activePopup?.gagIndex === sos.gagIndex || 
-                            (sos.gagIndex === 8 && [8, 9, 10].includes(activePopup?.gagIndex)) ||
-                            (sos.gagIndex === 11 && [11, 12, 13].includes(activePopup?.gagIndex))
-                          ) ? (
-                            <TargetPopup trackId={track.id} gagIndex={activePopup.gagIndex} variant="sos" alignment="right" />
-                          ) : null
-                        ) : (
-                          <TargetPopup trackId={track.id} gagIndex={sos.gagIndex} variant="sos" alignment="right" />
-                        )
-                      }
-                    />
-                  </React.Fragment>
-                );
-              })}
+              <div className="w-px h-8 bg-white/10 mx-1" />
+
+              {/* Pink Slip (last column, single item) */}
+              <div className="flex flex-col gap-1">
+                {sosGags.filter(s => s.gagIndex === 7).map(sos => (
+                  <RenderSosGagButton key={sos.gagIndex} sos={sos} />
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -723,7 +742,12 @@ export function CogCalculator() {
                 cog.lureDuration = 0;
               } else if (!luredAtStartOfPhase[cogIdx]) {
                 cog.isLured = true;
-                let newDuration = LURE_DURATIONS[gag.gagIndex] || 3;
+                let newDuration;
+                if (gag.variant === 'sos' && sosData?.rounds) {
+                  newDuration = sosData.rounds;
+                } else {
+                  newDuration = LURE_DURATIONS[gag.gagIndex] || 3;
+                }
                 const choice = COG_CHOICES.find(c => c.id === cog.id);
                 const isAttentive = cog.isAttentive || choice?.type === 'boss';
                 if (isAttentive) {
@@ -1188,8 +1212,8 @@ export function CogCalculator() {
                             </button>
                           ))}
                         </div>
-                        <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40">Statuses</div>
-                        <div className="grid grid-cols-4 gap-1">
+                        <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40 hidden">Statuses</div>
+                        <div className="grid grid-cols-4 gap-1 hidden">
                           {STATUS_EFFECTS.map(effect => {
                             const isSupervisor = COG_CHOICES.find(c => c.id === cog.id)?.type === 'boss';
                             const hasMintSupervisor = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');

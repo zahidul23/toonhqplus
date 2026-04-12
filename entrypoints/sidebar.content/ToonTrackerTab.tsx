@@ -147,7 +147,7 @@ const SOS_DATA: Record<string, { type: string; starRating: number }> = {
   'Sofie Squirt': { type: 'Restock', starRating: 3 },
   'Soggy Bottom': { type: 'Toons Hit', starRating: 3 },
   'Flim Flam': { type: 'Cogs Miss', starRating: 3 },
-  'Madame Chuckle': { type: 'Toon Up', starRating: 3 },
+  'Madam Chuckle': { type: 'Toon Up', starRating: 3 },
   'Clerk Will': { type: 'Trap', starRating: 3 },
   'Sid Sonata': { type: 'Sound', starRating: 4 },
   'Barbara Seville': { type: 'Sound', starRating: 3 },
@@ -160,7 +160,7 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
     ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Baker Bridget'],
     ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
     ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Rocky'],
-    ['Soggy Bottom', 'Flim Flam', 'Madame Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
+    ['Soggy Bottom', 'Flim Flam', 'Madam Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
   ];
 
   // Image mapping from CogCalculator.tsx
@@ -194,7 +194,7 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
 
     'Soggy Bottom': 'https://rendition.toontownrewritten.com/render/740b00010100080008050415001515010400000000000000000000000000000000/portrait/128x128.webp',
     'Flim Flam': 'https://rendition.toontownrewritten.com/render/740102020001170117070110001010010400000000000000000000000000000000/portrait/128x128.webp',
-    'Madame Chuckle': 'https://rendition.toontownrewritten.com/render/740705020000040004040415001515010400000000000000000000000000000000/portrait/128x128.webp',
+    'Madam Chuckle': 'https://rendition.toontownrewritten.com/render/740705020000040004040415001515010400000000000000000000000000000000/portrait/128x128.webp',
     'Clerk Will': 'https://rendition.toontownrewritten.com/render/740f010201000b000b05000a000a0a010400000000000000000000000000000000/portrait/128x128.webp',
     'Sid Sonata': 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp',
     'Barbara Seville': 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp',
