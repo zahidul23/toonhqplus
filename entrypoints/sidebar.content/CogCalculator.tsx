@@ -521,7 +521,6 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
                 ))}
               </div>
 
-              <div className="w-px h-8 bg-white/10 mx-1" />
 
               {/* Pink Slip (last column, single item) */}
               <div className="flex flex-col gap-1">
@@ -1097,7 +1096,7 @@ export function CogCalculator() {
                   >
                     Clear Preset
                   </button>
-                  <div className="h-px bg-white/10 my-1" />
+                  <div className="w-px bg-white/10 mx-1 self-center" />
                   {FACILITY_PRESETS.map((preset, i) => (
                     <button
                       key={i}
