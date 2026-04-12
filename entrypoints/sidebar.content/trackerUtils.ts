@@ -34,15 +34,16 @@ export function pruneRewardHistory(entries: RewardHistoryEntry[]): RewardHistory
     .slice(0, 100);
 }
 
-export function checkRewards(prev: any, next: any, zone?: string): RewardChange[] {
+export function checkRewards(prev: any, next: any, zone?: string | number): RewardChange[] {
   const changes: RewardChange[] = [];
   if (!prev || !next || JSON.stringify(prev) === JSON.stringify(next)) return changes;
   
-  const isSellbot = zone?.includes("Sellbot") || zone?.includes("Vice President");
-  const isCashbot = zone?.includes("Cashbot") || zone?.includes("Chief Financial Officer");
-  const isLawbot = zone?.includes("Lawbot") || zone?.includes("Chief Justice");
-  const isBossbot = zone?.includes("Bossbot") || zone?.includes("Chief Executive Officer") || zone?.includes("Clubhouse");
-  const isFieldOffice = zone?.includes("Field Office");
+  const safeZone = String(zone || '');
+  const isSellbot = safeZone.includes("Sellbot") || safeZone.includes("Vice President");
+  const isCashbot = safeZone.includes("Cashbot") || safeZone.includes("Chief Financial Officer");
+  const isLawbot = safeZone.includes("Lawbot") || safeZone.includes("Chief Justice");
+  const isBossbot = safeZone.includes("Bossbot") || safeZone.includes("Chief Executive Officer") || safeZone.includes("Clubhouse");
+  const isFieldOffice = safeZone.includes("Field Office");
 
   if (isSellbot && next.sos) {
     Object.entries(next.sos).forEach(([name, count]) => {

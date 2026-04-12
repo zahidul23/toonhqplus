@@ -4,20 +4,21 @@ import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardHistoryEntry } from './sidebar.content/trackerUtils';
 
 export default defineBackground(() => {
-  const connections = new Map<string, { ws: WebSocket; data: ToonTrackerData | null; lastResponse: number }>();
+  const connections = new Map<string, { ws: WebSocket; data: ToonTrackerData | null; authorized: boolean }>();
   let primaryPort: string | null = null;
-  let targetToonId: string | null = null;
-  let isSyncing = false;
-  let connectionStatus: 'connected' | 'disconnected' | 'idle' | 'connecting' = 'idle';
-  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
+  const failedPorts = new Set<string>();
+  const connectingPorts = new Set<string>();
 
   async function broadcastStatus() {
-    const instances = Array.from(connections.entries()).map(([port, info]) => ({
-      port,
+    const instances = Array.from(connections.entries()).map(([p, info]) => ({
+      port: p,
       toonName: info.data?.data.toon.name || 'Unknown Toon',
       toonId: info.data?.data.toon.id,
-      isPrimary: port === primaryPort
-    })).filter(inst => inst.toonId);
+      isPrimary: p === primaryPort,
+      authorized: info.authorized,
+      connected: info.ws.readyState === WebSocket.OPEN
+    }));
 
     const primaryInfo = primaryPort ? connections.get(primaryPort) : null;
     const primaryData = primaryInfo?.data || null;
@@ -30,12 +31,10 @@ export default defineBackground(() => {
 
     const payload = {
       type: 'TRACKER_STATUS_UPDATED',
-      status: connectionStatus,
-      isSyncing: isSyncing,
+      instances,
       toonTrackerData: primaryData,
-      instances: instances,
-      savedToons: savedToons,
-      rewardHistory: rewardHistory,
+      savedToons,
+      rewardHistory,
       primaryToonId: primaryData?.data.toon.id
     };
 
@@ -48,16 +47,6 @@ export default defineBackground(() => {
         }
       });
     } catch (e) {}
-  }
-
-  function setStatus(status: typeof connectionStatus) {
-    connectionStatus = status;
-    broadcastStatus();
-  }
-
-  function setIsSyncing(syncing: boolean) {
-    isSyncing = syncing;
-    broadcastStatus();
   }
 
   async function addNotifications(data: ToonTrackerData, changes: any[]) {
@@ -83,196 +72,152 @@ export default defineBackground(() => {
     }
   }
 
-  function stopSync() {
-    connections.forEach(info => {
-      info.ws.onclose = null;
-      info.ws.close();
-    });
-    connections.clear();
-    primaryPort = null;
-    targetToonId = null;
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-    setStatus('idle');
-    setIsSyncing(false);
-  }
+  function connectToPort(port: string) {
+    if (connections.has(port)) return; // Already connected or connecting
+    if (failedPorts.has(port)) return; // Only attempt once until explicitly synced
+    if (connectingPorts.has(port)) return; // Prevent duplicate pending WebSockets
 
-  function startHeartbeat() {
-    if (heartbeatInterval) return;
-    console.log('[ToonTracker BG] Starting heartbeat interval (5s)');
-    heartbeatInterval = setInterval(() => {
-      const now = Date.now();
-      if (connections.size === 0) return;
-      
-      connections.forEach((info, port) => {
-        if (info.ws.readyState === WebSocket.OPEN && (now - info.lastResponse < 25000)) {
-          info.ws.send(JSON.stringify({ request: "all" }));
-        } else {
-          info.ws.close();
+    connectingPorts.add(port);
+    const conn = new WebSocket(`ws://localhost:${port}/`);
+
+    conn.onopen = () => {
+      connectingPorts.delete(port);
+      // Only push to state when completely open to stop UI panels from flashing
+      connections.set(port, { ws: conn, data: null, authorized: false });
+      failedPorts.delete(port);
+      broadcastStatus();
+    };
+
+    conn.onmessage = (event) => {
+      const info = connections.get(port);
+      if (!info) return;
+
+      try {
+        const msgData = JSON.parse(event.data);
+
+        if (msgData.type === 'authorize') {
+            conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
         }
-      });
-    }, 5000);
-  }
+        
+        if (msgData.event === 'all' && msgData.data?.toon) {
+          const toonId = msgData.data.toon.id;
+          const previousData = info.data;
+          info.data = msgData;
 
-  async function startSync(providedKey?: string, targetId?: string, isRetry = false) {
-    if (targetId) targetToonId = targetId;
-    
-    if (targetToonId) {
-      for (const [port, info] of connections.entries()) {
-        if (info.data?.data.toon.id === targetToonId) {
-          primaryPort = port;
-          setStatus('connected');
-          setIsSyncing(false);
-          return;
-        }
-      }
-    }
-
-    setIsSyncing(true);
-    startHeartbeat();
-
-    const ports = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
-    let portsAttempted = 0;
-    const agentName = "ToonHQ Plus";
-
-    ports.forEach((port) => {
-      if (connections.has(port)) {
-        portsAttempted++;
-        if (portsAttempted === ports.length) setIsSyncing(false);
-        return;
-      }
-
-      const authKey = Math.random().toString(36).substring(2, 11);
-      const conn = new WebSocket(`ws://localhost:${port}/`);
-      const timeoutId = setTimeout(() => { if (conn.readyState === WebSocket.CONNECTING) conn.close(); }, 1500);
-
-      conn.onopen = () => {
-        clearTimeout(timeoutId);
-        connections.set(port, { ws: conn, data: null, lastResponse: Date.now() });
-        conn.send(JSON.stringify({ authorization: authKey, name: agentName }));
-        conn.send(JSON.stringify({ request: "all" }));
-      };
-
-      conn.onmessage = (event) => {
-        const info = connections.get(port);
-        if (info) info.lastResponse = Date.now();
-
-        try {
-          const msgData = JSON.parse(event.data);
-          if (msgData.type === 'authorize') conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
-          
-          if (msgData.event === 'all' && msgData.data?.toon) {
-            const toonId = msgData.data.toon.id;
-            const previousData = info?.data;
-            if (info) info.data = msgData;
-
-            getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(prev => {
-              const list = prev || [];
-              const updatedToon = { id: toonId, name: msgData.data.toon.name, style: msgData.data.toon.style, laff: msgData.data.laff.max };
-              const existingIndex = list.findIndex(t => t.id === toonId);
-              let updated;
-              if (existingIndex >= 0) {
-                if (list[existingIndex].laff === updatedToon.laff && list[existingIndex].style === updatedToon.style) return;
-                updated = [...list];
-                updated[existingIndex] = updatedToon;
-              } else {
-                updated = [...list, updatedToon];
-              }
-              setSetting('tracker-toon-list', updated).catch(console.error);
-            });
-
-            if (targetToonId === toonId || !primaryPort) {
-              primaryPort = port;
-              setStatus('connected');
-              setIsSyncing(false);
-            }
-
-            const rewardChanges = checkRewards(previousData?.data?.rewards, msgData.data?.rewards, msgData.data?.location?.zone);
-            if (rewardChanges.length > 0) addNotifications(msgData, rewardChanges).catch(console.error);
-
-            setSetting(`tracker-data-${toonId}`, msgData).catch(console.error);
-
-            if (port === primaryPort) {
-              setSetting('last-tracker-toon-id', toonId).catch(console.error);
-              broadcastStatus();
+          getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(prev => {
+            const list = prev || [];
+            const updatedToon = { id: toonId, name: msgData.data.toon.name, style: msgData.data.toon.style, laff: msgData.data.laff.max };
+            const existingIndex = list.findIndex(t => t.id === toonId);
+            let updated;
+            if (existingIndex >= 0) {
+              if (list[existingIndex].laff === updatedToon.laff && list[existingIndex].style === updatedToon.style) return;
+              updated = [...list];
+              updated[existingIndex] = updatedToon;
             } else {
-              broadcastStatus();
+              updated = [...list, updatedToon];
             }
-          }
-        } catch (e) {}
-      };
+            setSetting('tracker-toon-list', updated).catch(console.error);
+          });
 
-      conn.onerror = () => {
-        clearTimeout(timeoutId);
-        conn.close();
-      };
-
-      conn.onclose = () => {
-        connections.delete(port);
-        if (primaryPort === port) {
-          primaryPort = null;
-          for (const [p, info] of connections.entries()) {
-            if (info.data?.data.toon.id === targetToonId) {
-              primaryPort = p;
-              break;
-            }
+          if (!primaryPort) {
+            primaryPort = port;
+            setSetting('last-tracker-toon-id', toonId).catch(console.error);
           }
-          if (!primaryPort && connections.size > 0) primaryPort = connections.keys().next().value ?? null;
-          if (!primaryPort) setStatus('disconnected');
-          else broadcastStatus();
-        } else {
+
+          const rewardChanges = checkRewards(previousData?.data?.rewards, msgData.data?.rewards, msgData.data?.location?.zone);
+          if (rewardChanges.length > 0) addNotifications(msgData, rewardChanges).catch(console.error);
+
+          setSetting(`tracker-data-${toonId}`, msgData).catch(console.error);
           broadcastStatus();
         }
+      } catch (e) {}
+    };
 
-        portsAttempted++;
-        if (portsAttempted === ports.length && connections.size === 0) {
-          if (!isRetry) startSync(providedKey, targetToonId ?? undefined, true);
-          else {
-            setIsSyncing(false);
-            setStatus('disconnected');
-          }
-        } else if (portsAttempted === ports.length) {
-          setIsSyncing(false);
-        }
-      };
-    });
+    conn.onclose = () => {
+      connectingPorts.delete(port);
+      connections.delete(port);
+      failedPorts.add(port);
+      if (primaryPort === port) {
+        primaryPort = connections.size > 0 ? connections.keys().next().value ?? null : null;
+      }
+      broadcastStatus();
+    };
+    
+    conn.onerror = () => {
+      connectingPorts.delete(port);
+      failedPorts.add(port);
+      // Conn will fire onclose afterwards natively
+    };
   }
+
+  setInterval(() => {
+    TRACKED_PORTS.forEach(port => {
+      const info = connections.get(port);
+      if (!info && !failedPorts.has(port)) {
+        connectToPort(port);
+      } else if (info && info.ws.readyState === WebSocket.OPEN && info.authorized) {
+        info.ws.send(JSON.stringify({ request: "all" }));
+      }
+    });
+  }, 5000);
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'START_TRACKER_SYNC') {
-      startSync(message.authKey, message.targetToonId);
-      sendResponse({ started: true });
-    } else if (message.type === 'STOP_TRACKER_SYNC') {
-      stopSync();
-      sendResponse({ stopped: true });
-    } else if (message.type === 'GET_TRACKER_STATUS') {
-      const primaryData = primaryPort ? connections.get(primaryPort)?.data : null;
-      const instances = Array.from(connections.entries()).map(([port, info]) => ({
-        port,
-        toonName: info.data?.data.toon.name || 'Unknown Toon',
-        toonId: info.data?.data.toon.id,
-        isPrimary: port === primaryPort
-      })).filter(inst => inst.toonId);
-
-      sendResponse({
-        status: connectionStatus,
-        isSyncing: isSyncing,
-        toonTrackerData: primaryData,
-        instances: instances,
-        primaryToonId: primaryData?.data.toon.id
-      });
-    } else if (message.type === 'SWITCH_PRIMARY_INSTANCE') {
-      for (const [port, info] of connections.entries()) {
-        if (info.data?.data.toon.id === message.toonId || port === message.port) {
-          primaryPort = port;
-          targetToonId = info.data?.data.toon.id || null;
-          broadcastStatus();
-          break;
+    if (message.type === 'SYNC_GAMES') {
+      const portsToSync = message.port ? [message.port] : TRACKED_PORTS;
+      
+      portsToSync.forEach(port => {
+        failedPorts.delete(port);
+        const info = connections.get(port);
+        if (info && info.ws.readyState === WebSocket.OPEN) {
+          const authKey = Math.random().toString(36).substring(2, 11);
+          info.authorized = true;
+          info.ws.send(JSON.stringify({ authorization: authKey, name: "ToonHQ Plus" }));
+        } else if (!info) {
+          connectToPort(port);
         }
+      });
+      broadcastStatus();
+      sendResponse({ sync: true });
+    } else if (message.type === 'DISCOVER_GAMES') {
+      TRACKED_PORTS.forEach(port => {
+        if (!connections.has(port)) {
+          failedPorts.delete(port);
+          connectToPort(port);
+        }
+      });
+      sendResponse({ discovered: true });
+    } else if (message.type === 'GET_TRACKER_STATUS') {
+      broadcastStatus();
+      sendResponse({ statusSent: true });
+    } else if (message.type === 'SWITCH_PRIMARY_INSTANCE') {
+      if (connections.has(message.port)) {
+          primaryPort = message.port;
+          broadcastStatus();
       }
       sendResponse({ switched: true });
+    } else if (message.type === 'GET_TOON_DATA') {
+      if (message.toonId === 'list') {
+        getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => {
+          sendResponse({ list: list || [] });
+        });
+      } else if (message.toonId === 'last-id') {
+        getSetting<string>('last-tracker-toon-id').then(lastId => {
+          sendResponse({ lastId });
+        });
+      } else {
+        Promise.all([
+          getSetting<ToonTrackerData>(`tracker-data-${message.toonId}`),
+          getSetting<RewardHistoryEntry[]>(getRewardHistoryKey(message.toonId))
+        ]).then(([data, history]) => {
+          sendResponse({ data, history: history || [] });
+        });
+      }
+      return true;
+    } else if (message.type === 'SET_LAST_TOON') {
+      setSetting('last-tracker-toon-id', message.toonId).catch(console.error);
+      sendResponse({ success: true });
     }
   });
+
+  TRACKED_PORTS.forEach(port => connectToPort(port));
 });

@@ -3,11 +3,11 @@ import { getSetting, setSetting } from './db';
 import type { ToonTrackerData } from './tracker';
 import { browser } from 'wxt/browser';
 import { cogs as cogsData } from './cogs';
-import { 
-  getRewardHistoryKey, 
-  pruneRewardHistory, 
-  RECENT_REWARD_LIMIT, 
-  REWARD_HIGHLIGHT_MS 
+import {
+  getRewardHistoryKey,
+  pruneRewardHistory,
+  RECENT_REWARD_LIMIT,
+  REWARD_HIGHLIGHT_MS
 } from './trackerUtils';
 import type { RewardCategory, RewardHistoryEntry } from './trackerUtils';
 
@@ -63,11 +63,11 @@ function RewardMessage({ entry }: { entry: RewardHistoryEntry }) {
 
   // Colors matched to cog suit departments
   const tagConfig: Record<string, { label: string; bg: string; text: string }> = {
-    sos:       { label: 'SOS',    bg: '#6b21a8', text: '#f3e8ff' }, // Sellbot purple
-    unites:    { label: 'Unite',  bg: '#14532d', text: '#dcfce7' }, // Cashbot green
-    summons:   { label: 'Summon', bg: '#1e3a5f', text: '#dbeafe' }, // Lawbot navy
-    pinkslips: { label: 'Pink Slip',  bg: '#4a3728', text: '#fafaf9' }, // Bossbot brown
-    remotes:   { label: 'Remote', bg: '#991b1b', text: '#fee2e2' }, // red
+    sos: { label: 'SOS', bg: '#6b21a8', text: '#f3e8ff' }, // Sellbot purple
+    unites: { label: 'Unite', bg: '#14532d', text: '#dcfce7' }, // Cashbot green
+    summons: { label: 'Summon', bg: '#1e3a5f', text: '#dbeafe' }, // Lawbot navy
+    pinkslips: { label: 'Pink Slip', bg: '#4a3728', text: '#fafaf9' }, // Bossbot brown
+    remotes: { label: 'Remote', bg: '#991b1b', text: '#fee2e2' }, // red
   };
   const tag = tagConfig[category] ?? { label: category, bg: '#1f2937', text: '#f9fafb' };
 
@@ -79,7 +79,7 @@ function RewardMessage({ entry }: { entry: RewardHistoryEntry }) {
     subtype = `${item} (${metadata?.summonType ?? 'Cog'})`;
   } else if (category === 'remotes') {
     const level = metadata?.remoteLevel ?? item;
-    const type  = (metadata?.remoteType ?? item).replace(/\s*Remote$/i, '').trim();
+    const type = (metadata?.remoteType ?? item).replace(/\s*Remote$/i, '').trim();
     subtype = `${level}★ ${type}`;
   }
 
@@ -427,10 +427,8 @@ export function ToonTrackerTab({
 }) {
   const [toonTrackerData, setToonTrackerData] = useState<ToonTrackerData | null>(null);
   const [selectedToonId, setSelectedToonId] = useState<string | null>(null);
+  const selectedToonIdRef = useRef<string | null>(null);
   const [expandedSuitId, setExpandedSuitId] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'idle' | 'connecting'>('idle');
-  const [showSuccessGlow, setShowSuccessGlow] = useState(false);
   const [savedToons, setSavedToons] = useState<{ id: string; name: string; style: string; laff: number }[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [subView, setSubView] = useState<'main' | 'rewards_detail'>(initialSubView);
@@ -440,17 +438,15 @@ export function ToonTrackerTab({
     suits: true,
     rewards: true
   });
-  const [activeInstances, setActiveInstances] = useState<{ port: string; toonName: string; toonId: string; isPrimary: boolean }[]>([]);
-  const [isInstanceDropdownOpen, setIsInstanceDropdownOpen] = useState(false);
+  const [activeInstances, setActiveInstances] = useState<{ port: string; toonName: string; toonId: string; isPrimary: boolean, connected: boolean, authorized: boolean }[]>([]);
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const instanceDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
-  
+
   useEffect(() => {
     const handleOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -473,49 +469,49 @@ export function ToonTrackerTab({
   useEffect(() => {
     const handleMessage = (message: any) => {
       if (message.type === 'TRACKER_STATUS_UPDATED') {
-        setIsSyncing(message.isSyncing);
         if (message.instances) {
           setActiveInstances(message.instances);
-          const isSelectedToonOnline = message.instances.some((inst: any) => inst.toonId === selectedToonId);
-          setConnectionStatus(isSelectedToonOnline ? 'connected' : 'disconnected');
         }
         if (message.savedToons) {
           setSavedToons(message.savedToons);
         }
-        
+
         // Only overwrite local data if:
         // 1. It matches our currently selected toon
         // 2. We don't have a selection yet (first load)
         if (message.toonTrackerData) {
-          const incomingToonId = message.toonTrackerData.data.toon.id;
-          if (!selectedToonId || selectedToonId === incomingToonId) {
+          const incomingToonId = String(message.toonTrackerData.data.toon.id);
+          if (!selectedToonIdRef.current || String(selectedToonIdRef.current) === incomingToonId) {
             setToonTrackerData(message.toonTrackerData);
-            if (!selectedToonId) setSelectedToonId(incomingToonId);
+            if (!selectedToonIdRef.current) {
+              setSelectedToonId(incomingToonId);
+              selectedToonIdRef.current = incomingToonId;
+            }
           }
         }
 
-        if (message.rewardHistory && (!selectedToonId || message.primaryToonId === selectedToonId)) {
+        if (message.rewardHistory && (!selectedToonIdRef.current || String(message.primaryToonId) === String(selectedToonIdRef.current))) {
           setRewardHistory(message.rewardHistory);
         }
       }
     };
     browser.runtime.onMessage.addListener(handleMessage);
-    
+
     browser.runtime.sendMessage({ type: 'GET_TRACKER_STATUS' }).then(response => {
       if (response) {
-        setIsSyncing(response.isSyncing);
         if (response.instances) {
           setActiveInstances(response.instances);
-          const isSelectedOnline = response.instances.some((inst: any) => inst.toonId === selectedToonId);
-          setConnectionStatus(isSelectedOnline ? 'connected' : 'disconnected');
         }
         if (response.savedToons) setSavedToons(response.savedToons);
-        
+
         if (response.toonTrackerData) {
-          const incomingId = response.toonTrackerData.data.toon.id;
-          if (!selectedToonId || selectedToonId === incomingId) {
+          const incomingId = String(response.toonTrackerData.data.toon.id);
+          if (!selectedToonIdRef.current || String(selectedToonIdRef.current) === incomingId) {
             setToonTrackerData(response.toonTrackerData);
-            if (!selectedToonId) setSelectedToonId(incomingId);
+            if (!selectedToonIdRef.current) {
+              setSelectedToonId(incomingId);
+              selectedToonIdRef.current = incomingId;
+            }
           }
         }
       }
@@ -531,15 +527,19 @@ export function ToonTrackerTab({
       const { store, key } = e.detail;
       if (store === 'settings') {
         if (key === 'tracker-toon-list') {
-          getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => { if (list) setSavedToons(list); });
+          browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'list' }).then(response => {
+            if (response?.list) setSavedToons(response.list);
+          });
         } else if (key?.startsWith('tracker-data-')) {
-          const toonId = key.replace('tracker-data-', '');
-          if (toonId === selectedToonId) {
-            getSetting<ToonTrackerData>(key).then(data => { if (data) setToonTrackerData(data); });
+          const toonId = String(key.replace('tracker-data-', ''));
+          if (toonId === String(selectedToonIdRef.current)) {
+            browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId }).then(response => {
+              if (response?.data && toonId === String(selectedToonIdRef.current)) setToonTrackerData(response.data);
+            });
           }
         } else if (key?.startsWith('tracker-reward-history-')) {
-          const toonId = key.replace('tracker-reward-history-', '');
-          if (toonId === selectedToonId) {
+          const toonId = String(key.replace('tracker-reward-history-', ''));
+          if (toonId === String(selectedToonIdRef.current)) {
             loadRewardHistory(toonId).catch(console.error);
           }
         }
@@ -555,29 +555,30 @@ export function ToonTrackerTab({
   };
 
   const loadRewardHistory = async (toonId: string) => {
-    const key = getRewardHistoryKey(toonId);
-    const stored = await getSetting<RewardHistoryEntry[]>(key) || [];
-    const pruned = pruneRewardHistory(stored);
-    if (pruned.length !== stored.length) await setSetting(key, pruned);
-    setRewardHistory(pruned);
+    const response = await browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(toonId) });
+    setRewardHistory(response?.history || []);
   };
 
-  const startSync = (providedKey?: string, targetToonId?: string) => {
+  const startSync = (port?: string) => {
     browser.runtime.sendMessage({
-      type: 'START_TRACKER_SYNC',
-      authKey: providedKey,
-      targetToonId: targetToonId
+      type: 'SYNC_GAMES',
+      port: port
     });
   };
 
   useEffect(() => {
-    getSetting<string>('last-tracker-toon-id').then(id => {
-      if (id && !selectedToonId) {
-        setSelectedToonId(id);
-        getSetting<any>(`tracker-data-${id}`).then(data => { if (data) setToonTrackerData(data); });
+    browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'list' }).then(res => {
+      if (res?.list) setSavedToons(res.list);
+    });
+    browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'last-id' }).then(res => {
+      if (res?.lastId && !selectedToonIdRef.current) {
+        setSelectedToonId(String(res.lastId));
+        selectedToonIdRef.current = String(res.lastId);
+        browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(res.lastId) }).then(out => {
+          if (out?.data) setToonTrackerData(out.data);
+        });
       }
     });
-    getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => { if (list) setSavedToons(list); });
     startSync();
   }, []);
 
@@ -587,23 +588,24 @@ export function ToonTrackerTab({
   }, [selectedToonId]);
 
   const isDropdownOpenRef = useRef(false);
-  const isInstanceDropdownOpenRef = useRef(false);
   useEffect(() => { isDropdownOpenRef.current = isDropdownOpen; }, [isDropdownOpen]);
-  useEffect(() => { isInstanceDropdownOpenRef.current = isInstanceDropdownOpen; }, [isInstanceDropdownOpen]);
   useEffect(() => {
     const handle = (event: MouseEvent) => {
       const target = event.target as Node;
       if (isDropdownOpenRef.current && dropdownRef.current && !dropdownRef.current.contains(target)) setIsDropdownOpen(false);
-      if (isInstanceDropdownOpenRef.current && instanceDropdownRef.current && !instanceDropdownRef.current.contains(target)) setIsInstanceDropdownOpen(false);
     };
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const disconnect = async () => {
-    browser.runtime.sendMessage({ type: 'STOP_TRACKER_SYNC' });
-    setConnectionStatus('disconnected');
-    setActiveInstances([]);
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isDropdownOpen) {
+      browser.runtime.sendMessage({ type: 'DISCOVER_GAMES' });
+      setIsDropdownOpen(true);
+    } else {
+      setIsDropdownOpen(false);
+    }
   };
 
   const removeSavedToon = (e: React.MouseEvent, id: string) => {
@@ -620,23 +622,24 @@ export function ToonTrackerTab({
     }
   };
 
-  const selectToon = (id: string) => {
-    setSelectedToonId(id);
-    getSetting<ToonTrackerData>(`tracker-data-${id}`).then(data => {
-      if (data) {
-        setToonTrackerData(data); 
-        setSetting('last-tracker-toon-id', id).catch(console.error);
-        startSync(undefined, id); 
+  const selectToon = (id: string | number) => {
+    const stringId = String(id);
+    setSelectedToonId(stringId);
+    selectedToonIdRef.current = stringId;
+    browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: stringId }).then(response => {
+      if (response?.data && selectedToonIdRef.current === stringId) {
+        setToonTrackerData(response.data);
+        browser.runtime.sendMessage({ type: 'SET_LAST_TOON', toonId: stringId });
+      }
+      if (response?.history && selectedToonIdRef.current === stringId) {
+        setRewardHistory(response.history);
       }
     });
     setIsDropdownOpen(false);
-  };
-
-  const switchInstance = (port: string) => {
-    const inst = activeInstances.find(i => i.port === port);
-    if (inst) setSelectedToonId(inst.toonId);
-    browser.runtime.sendMessage({ type: 'SWITCH_PRIMARY_INSTANCE', port });
-    setIsInstanceDropdownOpen(false);
+    const inst = activeInstances.find(i => String(i.toonId) === stringId);
+    if (inst) {
+      browser.runtime.sendMessage({ type: 'SWITCH_PRIMARY_INSTANCE', port: inst.port });
+    }
   };
 
   // Group entries that share the same timestamp (same checkRewards batch)
@@ -660,111 +663,109 @@ export function ToonTrackerTab({
   ).slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
 
   const ToonHeader = () => (
-    <div className={`py-2 flex items-center gap-3 relative ${isExpanded ? 'px-1' : 'px-3'}`}>
-      <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={(e) => { e.stopPropagation(); if (savedToons.length > 0) setIsDropdownOpen(!isDropdownOpen); }}>
+    <div className={`py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
+      <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={toggleDropdown}>
         <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
           {toonTrackerData ? (
             <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
           ) : (
             <div className="w-full h-full flex items-center justify-center opacity-20">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
             </div>
           )}
-          {savedToons.length > 0 && (
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-            </div>
-          )}
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+          </div>
         </div>
         <div className="flex-1 min-w-0 relative">
           <div className="flex items-center gap-1.5 min-w-0">
             <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
-            {savedToons.length > 0 && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>}
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
           </div>
-          <div className="flex items-center gap-1 group/status" ref={instanceDropdownRef} onMouseDown={(e) => { 
-            if (activeInstances.length > 1 || (savedToons.length > 0 && !toonTrackerData)) {
-              e.stopPropagation();
-              setIsInstanceDropdownOpen(!isInstanceDropdownOpen);
-            }
-          }}>
-            <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-blue-400' : 'text-red-400/60'}`}>
-              {isSyncing ? 'Syncing...' : connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Requesting...' : connectionStatus === 'disconnected' ? 'Disconnected' : 'Idle'}
-            </div>
-            {activeInstances.length > 1 && (
-              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 group-hover/status:text-white/40 transition-all ${isInstanceDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
-            )}
-            
-            {isInstanceDropdownOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl z-[160] overflow-hidden min-w-[160px] animate-in fade-in zoom-in-95 duration-150">
-                <div className="p-1">
-                  <div className="px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 mb-1">Active Games</div>
-                  {activeInstances.length > 0 ? activeInstances.map((inst) => (
-                    <div 
-                      key={inst.port} 
-                      onMouseDown={(e) => { e.stopPropagation(); switchInstance(inst.port); }}
-                      className={`flex items-center justify-between gap-3 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors ${inst.isPrimary ? 'bg-emerald-500/10' : ''}`}
-                    >
-                      <span className={`text-[10px] font-bold truncate ${inst.isPrimary ? 'text-emerald-400' : 'text-white/70'}`}>{inst.toonName}</span>
-                      <span className="text-[8px] font-black text-white/20 tabular-nums">:{inst.port}</span>
-                    </div>
-                  )) : (
-                    <div className="px-2 py-2 text-[9px] font-bold text-white/20 italic">No active games</div>
-                  )}
-
-                  {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
-                    <>
-                      <div className="px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 mt-2 mb-1">Saved Toons</div>
-                      {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
-                        <div 
-                          key={t.id} 
-                          onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }}
-                          className={`flex items-center justify-between gap-3 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors ${toonTrackerData?.data.toon.id === t.id ? 'bg-white/5' : ''}`}
-                        >
-                          <span className={`text-[10px] font-bold truncate ${toonTrackerData?.data.toon.id === t.id ? 'text-white/80' : 'text-white/50'}`}>{t.name}</span>
-                          <span className="text-[8px] font-black text-white/10 uppercase tracking-tighter">Offline</span>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+          <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
+            {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
           </div>
         </div>
       </div>
+
       {isDropdownOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-          <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
-            {savedToons.map((t) => (
-              <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 rounded hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10' : ''}`}>
-                <div className="w-8 h-8 rounded-full border border-white/5 bg-black/20 overflow-hidden shrink-0 flex items-center justify-center">
-                  <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3]" />
+        <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+            {activeInstances.length > 0 && (
+              <div className="mb-2">
+                <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
+                  Active Games
                 </div>
-                <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/80'}`}>{t.name} <span className="text-[10px] opacity-40 font-black ml-1">({t.laff})</span></span>
-                <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/40 pointer-events-auto">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
+                {activeInstances.sort((a, b) => parseInt(a.port) - parseInt(b.port)).map((inst) => {
+                  const gameNum = parseInt(inst.port) - 1546;
+                  return (
+                    <div
+                      key={inst.port}
+                      onMouseDown={(e) => { e.stopPropagation(); if (inst.authorized) selectToon(inst.toonId); }}
+                      className={`flex items-center justify-between gap-3 p-2 mx-1 mt-1 rounded-lg ${inst.authorized ? 'hover:bg-white/5 cursor-pointer' : 'opacity-80'} transition-all group/item ${selectedToonId === inst.toonId ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {inst.authorized && inst.toonName && inst.toonName !== 'Unknown Toon' ? (
+                          <>
+                            <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
+                            <span className={`text-[11.5px] font-bold truncate ${selectedToonId === inst.toonId ? 'text-emerald-300' : 'text-white/90'}`}>{inst.toonName}</span>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-white/10 text-white/50 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
+                            <span className="text-[11px] font-bold truncate text-white/40 italic">Waiting...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {!inst.authorized ? (
+                        <button
+                          onMouseDown={(e) => { e.stopPropagation(); startSync(inst.port); }}
+                          className="w-7 h-7 rounded-md bg-emerald-600/90 hover:bg-emerald-500 flex items-center justify-center transition-all text-white shadow hover:shadow-emerald-500/20 active:scale-95 shrink-0 border border-emerald-400/30"
+                          title="Authorize Game"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>
+                        </button>
+                      ) : (
+                        selectedToonId === inst.toonId && (
+                          <div className="w-5 h-5 flex items-center justify-center opacity-100 shrink-0">
+                            <span className="flex w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
+
+            {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
+              <div>
+                <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
+                  Saved Toons
+                </div>
+                {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
+                  <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 mx-1 mt-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}>
+                    <div className="w-8 h-8 rounded-full border border-white/5 bg-black/40 overflow-hidden shrink-0 flex items-center justify-center">
+                      <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
+                    </div>
+                    <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/60'}`}>{t.name}</span>
+                    <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeInstances.length === 0 && savedToons.length === 0 && (
+              <div className="px-2 py-6 text-[10px] font-bold text-white/30 text-center uppercase tracking-widest">
+                No active games or saved toons
+              </div>
+            )}
           </div>
         </div>
       )}
-      <button 
-        title={connectionStatus === 'connected' ? 'Disconnect' : connectionStatus === 'connecting' ? 'Cancel' : 'Connect'}
-        onClick={() => { if (connectionStatus === 'connected' || connectionStatus === 'connecting') disconnect(); else getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined)); }} 
-        disabled={isSyncing} 
-        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer border border-white/10 shrink-0 group/syncbtn ${isSyncing ? 'bg-emerald-900 opacity-50' : connectionStatus === 'connected' ? 'bg-emerald-600 hover:bg-red-600 shadow-[0_0_12px_rgba(16,185,129,0.5)] hover:shadow-red-500/50' : connectionStatus === 'connecting' ? 'bg-blue-600 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-500 shadow-md'}`}>
-        {isSyncing ? <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-          : connectionStatus === 'connecting' ? <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            : connectionStatus === 'connected' ? (
-              <div className="relative flex items-center justify-center">
-                {showSuccessGlow && <div className="absolute w-full h-full rounded-full bg-white/40 animate-ping scale-150" />}
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white relative z-10 transition-opacity group-hover/syncbtn:opacity-0"><polyline points="20 6 9 17 4 12" /></svg>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white absolute inset-0 m-auto opacity-0 group-hover/syncbtn:opacity-100 transition-opacity"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-              </div>
-            )
-              : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>}
-      </button>
     </div>
   );
 
@@ -970,7 +971,7 @@ export function ToonTrackerTab({
                       <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3">
                         <div className="text-[9px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
                         {allGroups.length > 5 && (
-                          <button 
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
@@ -1005,12 +1006,12 @@ export function ToonTrackerTab({
                   </div>
                 )}
               </div>
-              {connectionStatus === 'disconnected' && (
-                <button 
+              {!activeInstances.some(inst => inst.toonId === selectedToonId) && (
+                <button
                   onClick={() => setToonTrackerData(null)}
                   className="w-full py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white/60 transition-all shadow-sm flex items-center justify-center gap-2"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
                   View All Toons
                 </button>
               )}
@@ -1142,8 +1143,8 @@ export function ToonTrackerTab({
                   {savedToons.map(t => {
                     const isActive = activeInstances.find(inst => inst.toonId === t.id);
                     return (
-                      <div 
-                        key={t.id} 
+                      <div
+                        key={t.id}
                         onClick={() => selectToon(t.id)}
                         className={`flex items-center gap-4 p-3 rounded-xl border transition-all cursor-pointer group/tooncard shadow-lg ${isActive ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'}`}
                       >
@@ -1167,7 +1168,7 @@ export function ToonTrackerTab({
                   })}
                 </div>
                 <div className="pt-4 text-center">
-                  <button 
+                  <button
                     onClick={() => getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined))}
                     className="px-6 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all"
                   >
@@ -1184,7 +1185,7 @@ export function ToonTrackerTab({
                   <p className="text-[11.5px] font-black text-green-200 uppercase tracking-[0.3em] leading-relaxed">Connect to your toon<br />to see stats</p>
                   <p className="text-[9px] text-white/40 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">Enable "Companion App Support" in your TTR settings to get started</p>
                 </div>
-                <button 
+                <button
                   onClick={() => getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined))}
                   className="mt-2 px-8 py-2.5 rounded-full border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 text-[10.5px] font-black uppercase tracking-[0.2em] transition-all"
                 >
