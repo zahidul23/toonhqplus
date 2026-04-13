@@ -184,10 +184,14 @@ const SOS_DATA: Record<string, { type: string; starRating: number }> = {
 
 function SOSTableView({ sos }: { sos: Record<string, number> }) {
   const sosGrid = [
-    ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Baker Bridget'],
-    ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
-    ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Rocky'],
-    ['Soggy Bottom', 'Flim Flam', 'Madam Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
+    // ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Baker Bridget'],
+    // ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
+    // ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Rocky'],
+    // ['Soggy Bottom', 'Flim Flam', 'Madam Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
+    ['Professor Pete', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sticky Lou', "Julius Wheezer"],
+    ['Baker Bridget', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Soggy Nell', 'Mr. Freeze'],
+    ['Sofie Squirt', 'Madam Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Soggy Bottom', 'Flim Flam'],
+    ['Lord Lowden Clear', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Rocky', 'Loopy Loopenloop']
   ];
 
   // Image mapping from CogCalculator.tsx
@@ -882,7 +886,7 @@ export function ToonTrackerTab({
                         const cleanB = nameB.replace(/\u0003/g, '');
                         const valA = parseInt(cleanA) || 0;
                         const valB = parseInt(cleanB) || 0;
-                        return valB - valA;
+                        return valA - valB;
                       });
 
                       return (
@@ -910,7 +914,8 @@ export function ToonTrackerTab({
                         const cleanA = nameA.replace(/\u0003/g, '');
                         const cleanB = nameB.replace(/\u0003/g, '');
                         if (categoryName === 'Gag-Up') {
-                          const order = ['All', 'Sound', 'Throw', 'Squirt', 'Lure', 'Trap', 'Drop'];
+                          // const order = ['All', 'Sound', 'Throw', 'Squirt', 'Lure', 'Trap', 'Drop', 'Toon-Up']; // Preferred order
+                          const order = ['Toon-Up', 'Trap', 'Lure', 'Sound', 'Throw', 'Squirt', 'Drop', 'All']; // In-game order
                           const indexA = order.findIndex(o => cleanA.endsWith(o));
                           const indexB = order.findIndex(o => cleanB.endsWith(o));
                           if (indexA !== -1 && indexB !== -1) return indexA - indexB;
