@@ -185,7 +185,7 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage
         <button
           type="button"
           onClick={onOrganicClick}
-          className="absolute -bottom-1 -right-1 z-20 w-6 h-6 transition-all opacity-0 group-hover:opacity-100 grayscale hover:grayscale-0 hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+          className="absolute -top-1 -right-1 z-20 w-6 h-6 transition-all opacity-0 group-hover:opacity-100 grayscale hover:grayscale-0 hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
           title={organicTitle || `Organic ${title}`}
         >
           <img
@@ -451,7 +451,7 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
     <div className="flex flex-col gap-1">
       <div className="flex gap-1 items-start">
         {track.gags.map((gag: any, idx: number) => {
-          const isAllTarget = track.id === 'sound' || (['trap', 'lure', 'drop'].includes(track.id) && idx === 6) || (track.id === 'lure' && [1, 3, 5].includes(idx));
+          const isAllTarget = track.id === 'sound' || (['trap', 'lure', 'drop', 'throw', 'squirt'].includes(track.id) && idx === 6) || (track.id === 'lure' && [1, 3, 5].includes(idx));
           const titleText = track.id === 'lure'
             ? `${gag.name} (${LURE_DURATIONS[idx]} rounds)`
             : `${gag.name} (${gag.base})`;
@@ -577,7 +577,7 @@ export function CogCalculator() {
     const sosData = variant === 'sos' ? (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex) : null;
     const isSosInstaKill = sosData?.isInstaKill;
     const isRemote = sosData?.isRemote;
-    const isAllTarget = trackId === 'sound' || (variant === 'sos' && !isSosInstaKill && !isRemote) || (['trap', 'lure', 'drop'].includes(trackId) && gagIndex === 6) || (trackId === 'lure' && [1, 3, 5].includes(gagIndex));
+    const isAllTarget = trackId === 'sound' || (variant === 'sos' && !isSosInstaKill && !isRemote) || (['trap', 'lure', 'drop', 'throw', 'squirt'].includes(trackId) && gagIndex === 6) || (trackId === 'lure' && [1, 3, 5].includes(gagIndex));
 
     setSelectedGagsByRound(prev => {
       const next = [...prev.map(r => [...r])];
@@ -1018,7 +1018,7 @@ export function CogCalculator() {
                             const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
 
                             return (
-                              <span key={cIdx} className={`text-[8px] font-black w-1.5 text-center transition-colors ${gagData ? 'text-emerald-400' : 'text-white/10'}`}>
+                              <span key={cIdx} className={`text-[8px] font-black w-1.5 text-center transition-colors ${gag ? 'text-emerald-400' : 'text-white/10'}`}>
                                 {isTargeted ? 'X' : '-'}
                               </span>
                             );
@@ -1046,7 +1046,7 @@ export function CogCalculator() {
                               <img
                                 src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
                                 alt="Organic"
-                                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md"
+                                className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md"
                               />
                             )}
                             {sosInfo?.isRemote && sosInfo.stars && (
