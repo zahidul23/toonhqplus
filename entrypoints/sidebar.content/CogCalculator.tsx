@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo, memo, useEffect, useRef, useLayoutEffect } from 'react';
 import { gags as gagsConfig } from './gags';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
@@ -125,6 +125,7 @@ const STATUS_EFFECTS = [
   { id: 'isLured', label: 'Lured', icon: 'Statuseffect_lured.png', color: 'bg-emerald-500', shadow: 'rgba(16,185,129,0.4)' },
   { id: 'isAttentive', label: 'Attentive', icon: 'Statuseffect_attentive.png', color: 'bg-blue-500', shadow: 'rgba(59,130,246,0.4)' },
   { id: 'isDefenseDown', label: 'Defense Down', icon: 'Statuseffect_defensedown.png', color: 'bg-red-500', shadow: 'rgba(239,68,68,0.4)' },
+  { id: 'isDefenseUp', label: 'Defense Up', icon: 'Statuseffect_defenseup_Cog.png', color: 'bg-blue-600', shadow: 'rgba(37,99,235,0.4)' },
   { id: 'isImmunity', label: 'Immunity', icon: 'Statuseffect_immunity.png', color: 'bg-gray-500', shadow: 'rgba(107,114,128,0.4)' },
   { id: 'isOverpaid', label: 'Overpaid', icon: 'Statuseffect_overpaid.png', color: 'bg-yellow-500', shadow: 'rgba(234,179,8,0.4)' },
   { id: 'isRemoteDmg', label: 'Remote DMG', icon: 'Statuseffect_remotedmg.png', color: 'bg-violet-500', shadow: '#8b5cf6' },
@@ -171,7 +172,7 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage
             src={imageSrc}
             alt={imageAlt}
             draggable="false"
-            className="h-8 w-8 rounded-sm drop-shadow-md"
+            className="h-8 w-8 rounded-sm drop-shadow-md object-contain"
           />
         </div>
         {overlayBottom && (
@@ -185,7 +186,7 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage
         <button
           type="button"
           onClick={onOrganicClick}
-          className="absolute -top-1 -right-1 z-20 w-6 h-6 transition-all opacity-0 group-hover:opacity-100 grayscale hover:grayscale-0 hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+          className="absolute -top-2 -right-2 z-20 w-6 h-6 transition-all opacity-0 group-hover:opacity-100 grayscale hover:grayscale-0 hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
           title={organicTitle || `Organic ${title}`}
         >
           <img
@@ -243,12 +244,60 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
 
   const TargetPopup = ({ trackId, gagIndex, variant, alignment = 'center' }: { trackId: string; gagIndex: number; variant: GagVariant; alignment?: 'left' | 'center' | 'right' }) => {
     const isOpen = activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant;
+    const popupRef = useRef<HTMLDivElement>(null);
+    const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ left: '50%', transform: 'translateX(-50%)', visibility: 'hidden' });
+    const [arrowStyle, setArrowStyle] = useState<React.CSSProperties>({ left: '50%', transform: 'translateX(-50%)' });
+
+    useLayoutEffect(() => {
+      if (isOpen && popupRef.current) {
+        const popupRect = popupRef.current.getBoundingClientRect();
+        const container = popupRef.current.closest('.gag-picker-container') || document.body;
+        const containerRect = container.getBoundingClientRect();
+
+        const button = popupRef.current.parentElement;
+        if (!button) return;
+        const buttonRect = button.getBoundingClientRect();
+
+        // Desired center: button center
+        const buttonCenter = buttonRect.left + buttonRect.width / 2;
+
+        // Ideal left position to be centered on button
+        let targetLeft = buttonCenter - popupRect.width / 2;
+
+        // Clamp to container bounds (with small margin)
+        const margin = 8;
+        if (targetLeft < containerRect.left + margin) {
+          targetLeft = containerRect.left + margin;
+        } else if (targetLeft + popupRect.width > containerRect.right - margin) {
+          targetLeft = containerRect.right - margin - popupRect.width;
+        }
+
+        // Relative to the button's left (since button is relative)
+        const relativeLeft = targetLeft - buttonRect.left;
+
+        setPopupStyle({
+          left: `${relativeLeft}px`,
+          transform: 'none',
+          visibility: 'visible'
+        });
+
+        // Arrow should point at the button center relative to the popup's left
+        const relativeArrowLeft = buttonCenter - targetLeft;
+        setArrowStyle({
+          left: `${relativeArrowLeft}px`,
+          transform: 'translateX(-50%)'
+        });
+      }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
-    const alignClass = alignment === 'left' ? 'left-0' : alignment === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2';
-
     return (
-      <div className={`absolute bottom-full mb-3 w-max bg-[#0c3622] p-2 rounded-2xl border border-white/10 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 ${alignClass}`}>
+      <div
+        ref={popupRef}
+        style={popupStyle}
+        className={`absolute bottom-full mb-3 w-max bg-[#0c3622] p-2 rounded-2xl border border-white/10 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2`}
+      >
         <div className="flex gap-2">
           {[0, 1, 2, 3].map(cogIdx => {
             const cog = cogs[cogIdx];
@@ -261,13 +310,16 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             const pInner = (innerHp / maxHp) * 100;
             const pOuter = (outerHp / maxHp) * 100;
             const labelStr = choice?.type === 'boss' ? choice.label.split(' ')[1] : `Level ${cog.id}`;
-            const isPinkSlip = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex)?.isInstaKill;
+            const gagData = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex);
+            const isPinkSlip = gagData?.isInstaKill;
+            const isRemote = gagData?.isRemote;
             const isSupervisor = choice?.type === 'boss';
-            const isTenured = cog.isTenure || isSupervisor;
-            let isDisabled = !!(isPinkSlip && isTenured) || !!cog.isDead;
+            const hasMintSupervisor = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+            const isTenured = cog.isTenure || isSupervisor || hasMintSupervisor;
+            let isDisabled = !!((isPinkSlip || isRemote) && isTenured) || !!cog.isDead;
 
             // Prevent Luring already Lured cogs
-            if (trackId === 'lure' && !isPinkSlip && cog.isLured && !cog.isDead) {
+            if (trackId === 'lure' && !isPinkSlip && !isRemote && cog.isLured && !cog.isDead) {
               isDisabled = true;
             }
 
@@ -319,7 +371,10 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
             );
           })}
         </div>
-        <div className={`absolute top-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622] ${alignment === 'left' ? 'left-4' : alignment === 'right' ? 'right-4' : 'left-1/2 -translate-x-1/2'}`}></div>
+        <div
+          style={arrowStyle}
+          className={`absolute top-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]`}
+        ></div>
       </div>
     );
   };
@@ -375,7 +430,16 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
   const RenderSosGagButton = ({ sos }: { sos: any }) => {
     const isAllTarget = [3, 4, 5].includes(sos.gagIndex) || sos.isRemote;
     const color = (sos.isRemote || sos.isInstaKill) ? '#8b5cf6' : track.color;
-    const title = sos.isRemote ? (sos.isHeal ? "Heal Remote" : "Damage Remote") : `${sos.name} (${sos.damage})`;
+    let title = "";
+    if (sos.isRemote) {
+      title = sos.isHeal ? `Healing Remote` : `Damage Remote`;
+    } else if (sos.isInstaKill) {
+      title = sos.name;
+    } else if (track.id === 'lure') {
+      title = `${sos.name} (${sos.rounds} rounds)`;
+    } else {
+      title = `${sos.name} (${sos.damage})`;
+    }
 
     let gagDisabled = false;
     const livingAtStart = cogs.filter(c => !c.isDead);
@@ -509,33 +573,41 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
         })}
 
         {sosGags.length > 0 && (
-          <>
-            <div className="w-px h-8 bg-white/10 mx-1" />
-
-            <div className="flex gap-1 items-start">
-              {/* Regular SOS Gags (horizontal, e.g., Moe, Sid, Barb, etc.) */}
-              {sosGags.filter(s => [3, 4, 5].includes(s.gagIndex)).map(sos => (
-                <RenderSosGagButton key={sos.gagIndex} sos={sos} />
-              ))}
-
-              <div className="w-px h-8 bg-white/10 mx-1" />
-
-              {/* Remotes (vertical column) */}
-              <div className="flex flex-col gap-1">
-                {sosGags.filter(s => s.isRemote && s.stars === 1).map(sos => ( // Only show 1-star remotes, popup handles others
+          <div className="flex gap-1 items-start">
+            {/* Regular SOS Gags (indices 3, 4, 5 - Lv 3 to Lv 5) */}
+            {sosGags.some(s => [3, 4, 5].includes(s.gagIndex)) && (
+              <>
+                <div className="w-px h-8 bg-white/10 mx-1" />
+                {sosGags.filter(s => [3, 4, 5].includes(s.gagIndex)).map(sos => (
                   <RenderSosGagButton key={sos.gagIndex} sos={sos} />
                 ))}
-              </div>
+              </>
+            )}
 
+            {/* Remotes with divider */}
+            {sosGags.some(s => s.isRemote) && (
+              <>
+                <div className="w-px h-8 bg-white/10 mx-1" />
+                <div className="flex flex-col gap-1">
+                  {sosGags.filter(s => s.isRemote && s.stars === 1).map(sos => (
+                    <RenderSosGagButton key={sos.gagIndex} sos={sos} />
+                  ))}
+                </div>
+              </>
+            )}
 
-              {/* Pink Slip (last column, single item) */}
-              <div className="flex flex-col gap-1">
-                {sosGags.filter(s => s.gagIndex === 7).map(sos => (
-                  <RenderSosGagButton key={sos.gagIndex} sos={sos} />
-                ))}
-              </div>
-            </div>
-          </>
+            {/* Pink Slip with divider */}
+            {sosGags.some(s => s.gagIndex === 7) && (
+              <>
+                <div className="w-px h-8 bg-white/10 mx-1" />
+                <div className="flex flex-col gap-1">
+                  {sosGags.filter(s => s.gagIndex === 7).map(sos => (
+                    <RenderSosGagButton key={sos.gagIndex} sos={sos} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -543,37 +615,78 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
 }
 
 const FACILITY_PRESETS = [
-  { name: "Scrap Factory", cogs: [{ id: 'factory_scrap', isV2: false }, { id: '5', isV2: false }, { id: '5', isV2: false }, { id: '6', isV2: false }] },
-  { name: "Steel Factory", cogs: [{ id: 'factory_steel', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }, { id: '12', isV2: false }] },
-  { name: "Coin Mint", cogs: [{ id: 'mint_coin', isV2: false }, { id: '10', isV2: false }, { id: '10', isV2: false }, { id: '9', isV2: false }] },
-  { name: "Bullion Mint", cogs: [{ id: 'mint_bullion', isV2: false }, { id: '12', isV2: false }, { id: '12', isV2: false }, { id: '11', isV2: false }] },
-  { name: "Junior Office", cogs: [{ id: '11', isV2: false }, { id: 'office_junior', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }] },
-  { name: "Senior Office", cogs: [{ id: '13', isV2: false }, { id: 'office_senior', isV2: false }, { id: '12', isV2: false }, { id: '13', isV2: false }] },
-  { name: "Fairway Course", cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: true }, { id: '10', isV2: true }] },
-  { name: "Fringe Course", cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: true }, { id: '12', isV2: true }] },
+  { name: "Scrap Factory", bossId: 'factory_scrap', cogs: [{ id: 'factory_scrap', isV2: false }, { id: '5', isV2: false }, { id: '5', isV2: false }, { id: '6', isV2: false }] },
+  { name: "Steel Factory", bossId: 'factory_steel', cogs: [{ id: 'factory_steel', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }, { id: '12', isV2: false }] },
+  { name: "Coin Mint", bossId: 'mint_coin', cogs: [{ id: 'mint_coin', isV2: false }, { id: '10', isV2: false }, { id: '10', isV2: false }, { id: '9', isV2: false }] },
+  { name: "Bullion Mint", bossId: 'mint_bullion', cogs: [{ id: 'mint_bullion', isV2: false }, { id: '12', isV2: false }, { id: '12', isV2: false }, { id: '11', isV2: false }] },
+  { name: "Junior Office", bossId: 'office_junior', cogs: [{ id: '11', isV2: false }, { id: 'office_junior', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }] },
+  { name: "Senior Office", bossId: 'office_senior', cogs: [{ id: '13', isV2: false }, { id: 'office_senior', isV2: false }, { id: '12', isV2: false }, { id: '13', isV2: false }] },
+  { name: "Fairway Course", bossId: 'golf_fairway', cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: true }, { id: '10', isV2: true }] },
+  { name: "Fringe Course", bossId: 'golf_fringe', cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: true }, { id: '12', isV2: true }] },
 ];
 
 export function CogCalculator() {
-  const [cogs, setCogs] = useState<Cog[]>([
-    { id: '12', isTrapped: false, isLured: false, isV2: false },
-    { id: '12', isTrapped: false, isLured: false, isV2: false },
-    { id: '12', isTrapped: false, isLured: false, isV2: false },
-    { id: '12', isTrapped: false, isLured: false, isV2: false },
-  ]);
-  const [selectedGagsByRound, setSelectedGagsByRound] = useState<SelectedGag[][]>([
-    [null, null, null, null],
-    [null, null, null, null],
-    [null, null, null, null],
-    [null, null, null, null],
-    [null, null, null, null],
-    [null, null, null, null],
-  ]);
+  const [cogs, setCogs] = useState<Cog[]>(() => {
+    const saved = localStorage.getItem('cog-calc-cogs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse saved cogs", e);
+      }
+    }
+    return [
+      { id: '12', isTrapped: false, isLured: false, isV2: false },
+      { id: '12', isTrapped: false, isLured: false, isV2: false },
+      { id: '12', isTrapped: false, isLured: false, isV2: false },
+      { id: '12', isTrapped: false, isLured: false, isV2: false },
+    ];
+  });
+
+  const [selectedGagsByRound, setSelectedGagsByRound] = useState<SelectedGag[][]>(() => {
+    const saved = localStorage.getItem('cog-calc-gags');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 9) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error("Failed to parse saved gags", e);
+      }
+    }
+    return [
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+      [null, null, null, null],
+    ];
+  });
+
   const [activeRound, setActiveRound] = useState<number>(0);
   const [activeGagSlot, setActiveGagSlot] = useState<number>(0);
   const [activePopup, setActivePopup] = useState<{ trackId: string; gagIndex: number; variant: GagVariant, subType?: string } | null>(null);
   const [activeCogSlot, setActiveCogSlot] = useState<number | null>(null);
   const [presetMenuOpen, setPresetMenuOpen] = useState<boolean>(false);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(localStorage.getItem('cog-calc-preset') || null);
+
+  useEffect(() => {
+    localStorage.setItem('cog-calc-cogs', JSON.stringify(cogs));
+  }, [cogs]);
+
+  useEffect(() => {
+    localStorage.setItem('cog-calc-gags', JSON.stringify(selectedGagsByRound));
+  }, [selectedGagsByRound]);
+
+  useEffect(() => {
+    if (activePreset) localStorage.setItem('cog-calc-preset', activePreset);
+    else localStorage.removeItem('cog-calc-preset');
+  }, [activePreset]);
 
   const gagTracks = useMemo(() => {
     return (gagsConfig as GagTrack[]).filter(t => t.id !== 'toonup');
@@ -599,7 +712,7 @@ export function CogCalculator() {
     setActiveGagSlot(prev => {
       const nextSlot = (prev + 1) % 4;
       if (nextSlot === 0) {
-        setActiveRound(r => Math.min(r + 1, 5));
+        setActiveRound(r => Math.min(r + 1, 8));
       }
       return nextSlot;
     });
@@ -645,11 +758,16 @@ export function CogCalculator() {
     let cumulativeDamages = [0, 0, 0, 0];
     const results = [];
 
-    for (let r = 0; r < 6; r++) {
+    for (let r = 0; r < 9; r++) {
       const selectedGags = selectedGagsByRound[r];
       const cogDamagesThisRound = [0, 0, 0, 0];
       const trackDamages: Record<string, number> = {};
       const trapDamageOnCog = currentCogs.map(c => c.trapDamage || 0);
+
+      const hasForeman = currentCogs.some(c => c.id === 'factory_scrap' || c.id === 'factory_steel');
+      const hasBullionAuditor = currentCogs.some(c => c.id === 'mint_bullion');
+      const deadNonAuditorsAtStart = currentCogs.filter((c, i) => c.id !== 'mint_bullion' && cogStates[i].layer === 0).length;
+      const isBullionVulnerable = hasBullionAuditor && (deadNonAuditorsAtStart % 2 !== 0);
 
       const deadCogsCountAtStart = cogStates.filter(s => s.layer === 0).length;
 
@@ -692,7 +810,11 @@ export function CogCalculator() {
             const cog = currentCogs[cogIdx];
             let currentDmg = baseDmg;
 
-            if (isRemote && sosData) {
+            const choice = COG_CHOICES.find(c => c.id === cog.id);
+            const hasMintSup = currentCogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+            const isTenured = cog.isTenure || choice?.type === 'boss' || hasMintSup;
+
+            if (isRemote && sosData && !isTenured) {
               if (trackId === 'lure' || (sosData as any).isHeal) {
                 cog.isRemoteHeal = true;
               } else {
@@ -705,14 +827,9 @@ export function CogCalculator() {
               };
             }
 
-            if (isInstaKill) {
-              const choice = COG_CHOICES.find(c => c.id === cog.id);
-              const hasMintSup = currentCogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
-              const isTenured = cog.isTenure || choice?.type === 'boss' || hasMintSup;
-              if (!isTenured) {
-                instaKillThisPhase[cogIdx] = true;
-                return;
-              }
+            if (isInstaKill && !isTenured) {
+              instaKillThisPhase[cogIdx] = true;
+              return;
             }
 
             const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
@@ -720,12 +837,21 @@ export function CogCalculator() {
             if (isPresident && deadCogsCountAtStart > 0) {
               defenseDownStacks = deadCogsCountAtStart;
             } else if (cog.isDefenseDown) {
-              defenseDownStacks = 1;
+              defenseDownStacks = 3;
             }
 
             // Apply Multipliers (Defense Down) to the gag damage
             if (defenseDownStacks > 0 && !['trap', 'lure'].includes(trackId)) {
               currentDmg = Math.floor(currentDmg * (1 + 0.20 * defenseDownStacks));
+            }
+
+            const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
+            if (hasForeman && !isForeman && !['trap', 'lure'].includes(trackId)) {
+              currentDmg = Math.floor(currentDmg * 0.75);
+            }
+
+            if (isBullionVulnerable && !['trap', 'lure'].includes(trackId)) {
+              currentDmg = Math.floor(currentDmg * 1.5);
             }
 
             if (trackId === 'trap') {
@@ -809,11 +935,20 @@ export function CogCalculator() {
               const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
               let defenseDownStacks = 0;
               if (isPresident && deadCogsCountAtStart > 0) defenseDownStacks = deadCogsCountAtStart;
-              else if (cog.isDefenseDown) defenseDownStacks = 1;
+              else if (cog.isDefenseDown) defenseDownStacks = 3;
 
               let finalBonus = baseBonus;
               if (defenseDownStacks > 0) {
                 finalBonus = Math.floor(finalBonus * (1 + 0.20 * defenseDownStacks));
+              }
+
+              const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
+              if (hasForeman && !isForeman) {
+                finalBonus = Math.floor(finalBonus * 0.75);
+              }
+
+              if (isBullionVulnerable) {
+                finalBonus = Math.floor(finalBonus * 1.5);
               }
 
               phaseDamage[idx] += finalBonus;
@@ -965,7 +1100,8 @@ export function CogCalculator() {
       results.push({
         finalCogs: currentCogs.map((c, i) => ({ ...c, isDead: cogStates[i].layer === 0 })),
         cogDamages: [...cumulativeDamages],
-        trackDamages
+        trackDamages,
+        isBullionVulnerable
       });
     }
 
@@ -996,6 +1132,9 @@ export function CogCalculator() {
                 [null, null, null, null],
                 [null, null, null, null],
                 [null, null, null, null],
+                [null, null, null, null],
+                [null, null, null, null],
+                [null, null, null, null],
               ]);
               setActiveRound(0);
               setActiveGagSlot(0);
@@ -1007,16 +1146,17 @@ export function CogCalculator() {
         </div>
 
         <div className="flex-1 flex flex-col gap-1 overflow-y-auto pr-0.5 custom-scrollbar">
-          {[0, 1, 2, 3, 4, 5].map(rIdx => (
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(rIdx => (
             <div
               key={rIdx}
               onClick={() => {
                 setActiveRound(rIdx);
                 setActiveGagSlot(0);
               }}
-              className={`flex items-center gap-1.5 p-1.5 rounded-lg border transition-all cursor-pointer ${activeRound === rIdx
-                ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
-                : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'
+              className={`flex items-center gap-1.5 p-1.5 rounded-lg border transition-all 
+                cursor-pointer ${activeRound === rIdx
+                  ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                  : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'
                 }`}
             >
               <div className="w-8 flex flex-col items-center flex-shrink-0">
@@ -1055,7 +1195,7 @@ export function CogCalculator() {
                             setActiveGagSlot(gIdx);
                           }
                         }}
-                        className={`w-12 h-12 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
+                        className={`w-14 h-10 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
                           gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/10'
                           }`}
                         style={gag && track ? { backgroundColor: (sosInfo?.isInstaKill || sosInfo?.isRemote) ? '#8b5cf6' : track.color } : {}}
@@ -1067,7 +1207,7 @@ export function CogCalculator() {
                               <img
                                 src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
                                 alt="Organic"
-                                className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md"
+                                className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md object-contain"
                               />
                             )}
                             {sosInfo?.isRemote && sosInfo.stars && (
@@ -1106,32 +1246,44 @@ export function CogCalculator() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 flex-shrink-0"><path d="m6 9 6 6 6-6" /></svg>
               </button>
               {presetMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 p-2 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-max flex flex-col gap-1">
+                <div className="absolute top-full right-0 mt-2 p-3 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-[320px] flex flex-col gap-3">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setActivePreset(null);
                       setPresetMenuOpen(false);
                     }}
-                    className={`text-left px-3 py-2 text-sm font-bold text-white/50 hover:text-white hover:bg-emerald-500/30 rounded-lg transition-colors cursor-pointer ${activePreset === null ? 'bg-black/40 text-white' : ''}`}
+                    className={`text-center px-3 py-2 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors cursor-pointer border border-white/5 ${activePreset === null ? 'bg-black/40 text-white' : ''}`}
                   >
                     Clear Preset
                   </button>
-                  <div className="w-px bg-white/10 mx-1 self-center" />
-                  {FACILITY_PRESETS.map((preset, i) => (
-                    <button
-                      key={i}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCogs(preset.cogs.map(c => ({ id: c.id, isTrapped: false, isLured: false, isV2: c.isV2 })));
-                        setActivePreset(preset.name);
-                        setPresetMenuOpen(false);
-                      }}
-                      className={`text-left px-3 py-2 text-sm font-bold text-white/80 hover:text-white hover:bg-emerald-500/30 rounded-lg transition-colors cursor-pointer ${activePreset === preset.name ? 'bg-emerald-500/50 text-white border border-emerald-400' : ''}`}
-                    >
-                      {preset.name}
-                    </button>
-                  ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    {FACILITY_PRESETS.map((preset, i) => {
+                      const boss = COG_CHOICES.find(c => c.id === preset.bossId);
+                      return (
+                        <button
+                          key={i}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCogs(preset.cogs.map(c => ({ id: c.id, isTrapped: false, isLured: false, isV2: c.isV2 })));
+                            setActivePreset(preset.name);
+                            setPresetMenuOpen(false);
+                          }}
+                          className={`flex flex-col items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer group/preset ${activePreset === preset.name ? 'bg-emerald-500/20 border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.1)]' : 'bg-black/30 border-white/5 hover:bg-black/50 hover:border-white/20'}`}
+                        >
+                          <div className="w-16 h-16 relative overflow-hidden rounded-lg bg-black/40 border border-white/5 flex items-center justify-center">
+                            {boss?.img && (
+                              <img src={boss.img as string} alt={preset.name} className="w-full h-full object-cover opacity-60 group-hover/preset:opacity-100 group-hover/preset:scale-110 transition-all duration-500" />
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
+                          </div>
+                          <span className={`text-[10px] font-bold text-center leading-tight transition-colors ${activePreset === preset.name ? 'text-emerald-300' : 'text-white/70 group-hover/preset:text-white'}`}>
+                            {preset.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -1232,17 +1384,33 @@ export function CogCalculator() {
                             </button>
                           ))}
                         </div>
-                        <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40 hidden">Statuses</div>
-                        <div className="grid grid-cols-4 gap-1 hidden">
+                        {/* 
+                         * STATUS PICKER HIDDEN: 
+                         * Manual status effects are currently disabled to prevent confusion 
+                         * as most are now automatically derived from facility presets and boss presence.
+                        <div className="text-[10px] uppercase tracking-widest font-bold mb-2 ml-1 text-white/40">Status Effects</div>
+                        <div className="grid grid-cols-4 gap-1">
                           {STATUS_EFFECTS.map(effect => {
                             const isSupervisor = COG_CHOICES.find(c => c.id === cog.id)?.type === 'boss';
                             const hasMintSupervisor = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+                            const hasForeman = cogs.some(c => c.id === 'factory_scrap' || c.id === 'factory_steel');
                             const isAuditor = cog.id === 'mint_coin' || cog.id === 'mint_bullion';
+
                             let isForced = false;
                             if (effect.id === 'isTenure' && (isSupervisor || hasMintSupervisor)) isForced = true;
                             if (effect.id === 'isAttentive' && isSupervisor) isForced = true;
-                            if (effect.id === 'isOverpaid' && (!isAuditor && hasMintSupervisor)) isForced = true;
+                            if (effect.id === 'isOverpaid') pickerTitle = 'Overpaid: +150 Max HP';
+                            const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
+                            if (effect.id === 'isDefenseUp' && hasForeman && !isForeman) isForced = true;
+
                             const isActive = !!(cog as any)[effect.id] || isForced;
+
+                            let pickerTitle = effect.label;
+                            if (effect.id === 'isTenure') pickerTitle = 'Tenure: Immune to Pink Slips and Remotes';
+                            if (effect.id === 'isAttentive') pickerTitle = 'Attentive: Lure Reduced to 1 Round';
+                            if (effect.id === 'isDefenseUp') pickerTitle = 'Defense Up: 25%';
+                            if (effect.id === 'isDefenseDown') pickerTitle = 'Defense Down: 60%';
+
                             return (
                               <button
                                 key={effect.id}
@@ -1254,7 +1422,7 @@ export function CogCalculator() {
                                   setCogs(next);
                                 }}
                                 className={`relative w-[60px] h-[60px] rounded-md border flex flex-col items-center justify-center gap-1 transition-all p-1 ${isForced ? 'cursor-not-allowed' : 'cursor-pointer'} ${isActive ? `${effect.color}/30 border-white/40 shadow-[0_0_10px_${effect.shadow}]` : 'bg-black/30 border-white/5 opacity-40 hover:opacity-100 hover:bg-black/50'}`}
-                                title={effect.label}
+                                title={pickerTitle}
                               >
                                 <img src={getExtensionImageUrl(`images/statuses/${effect.icon}`)} alt={effect.label} className="w-8 h-8 object-contain" />
                                 <span className="text-[8px] font-bold text-center leading-tight text-white/80">{effect.label}</span>
@@ -1262,6 +1430,7 @@ export function CogCalculator() {
                             );
                           })}
                         </div>
+                        */}
                       </div>
                     )}
                   </div>
@@ -1286,12 +1455,15 @@ export function CogCalculator() {
                         {STATUS_EFFECTS.map(effect => {
                           const isSupervisor = COG_CHOICES.find(c => c.id === finalCog.id)?.type === 'boss';
                           const hasMintSupervisorAny = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+                          const hasForeman = cogs.some(c => c.id === 'factory_scrap' || c.id === 'factory_steel');
                           const isAuditor = finalCog.id === 'mint_coin' || finalCog.id === 'mint_bullion';
+                          const isForeman = finalCog.id === 'factory_scrap' || finalCog.id === 'factory_steel';
 
                           let isForced = false;
                           if (effect.id === 'isTenure' && (isSupervisor || hasMintSupervisorAny)) isForced = true;
                           if (effect.id === 'isAttentive' && isSupervisor) isForced = true;
                           if (effect.id === 'isOverpaid' && (!isAuditor && hasMintSupervisorAny)) isForced = true;
+                          if (effect.id === 'isDefenseUp' && hasForeman && !isForeman) isForced = true;
 
                           let activeLocal = !!(finalCog as any)[effect.id] || isForced;
 
@@ -1304,6 +1476,7 @@ export function CogCalculator() {
                             badgeValue = finalCog.remote.roundsLeft;
                           }
 
+                          let currentDefenseDownStacks = 0;
                           if (effect.id === 'isDefenseDown') {
                             const isPresident = finalCog.id === 'golf_fairway' || finalCog.id === 'golf_fringe';
                             const deadCogsCount = activeStats.finalCogs.filter((c: Cog, i: number) => {
@@ -1312,12 +1485,32 @@ export function CogCalculator() {
                               return (c.isV2 ? maxHp * 2 : maxHp) <= cdmg;
                             }).length;
 
-                            if (isPresident && deadCogsCount > 0) {
+                            if (activeStats.isBullionVulnerable) {
                               activeLocal = true;
+                              badgeValue = undefined;
+                            } else if (isPresident && deadCogsCount > 0) {
+                              activeLocal = true;
+                              currentDefenseDownStacks = deadCogsCount;
                               badgeValue = deadCogsCount;
                             } else if (activeLocal) {
+                              currentDefenseDownStacks = 3;
                               badgeValue = 1;
                             }
+                          }
+
+                          // Dynamic Title logic
+                          let statusTitle = effect.label;
+                          if (effect.id === 'isTenure' && activeLocal) statusTitle = 'Tenure: Immune to Pink Slips and Remotes';
+                          if (effect.id === 'isAttentive' && activeLocal) statusTitle = 'Attentive: Lure Reduced to 1 Round';
+                          if (effect.id === 'isDefenseUp' && activeLocal) statusTitle = 'Defense Up: 25%';
+                          if (effect.id === 'isDefenseDown' && activeLocal) {
+                            if (activeStats.isBullionVulnerable) statusTitle = 'Defense Down: 50%';
+                            else statusTitle = `Defense Down: ${currentDefenseDownStacks * 20}%`;
+                          }
+                          if (effect.id === 'isLured' && activeLocal && finalCog.lureDuration !== undefined) statusTitle = `Lured: ${finalCog.lureDuration} Turns Remaining`;
+                          if (effect.id === 'isOverpaid' && activeLocal) {
+                            const hasBullionAny = cogs.some(c => c.id === 'mint_bullion');
+                            statusTitle = `Overpaid: +${hasBullionAny ? '200' : '150'} Max HP`;
                           }
 
                           return (
@@ -1325,7 +1518,7 @@ export function CogCalculator() {
                               key={effect.id}
                               className={`transition-all relative flex items-center justify-center ${activeLocal ? 'opacity-100' : 'hidden'}`}
                               style={activeLocal ? { filter: `drop-shadow(0 0 4px ${effect.shadow})` } : {}}
-                              title={effect.label}
+                              title={statusTitle}
                             >
                               <img
                                 src={getExtensionImageUrl(`images/statuses/${effect.icon}`)}
@@ -1352,7 +1545,7 @@ export function CogCalculator() {
         {/* Gag Picker Panel (Now at the bottom) */}
         <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
           <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
-          <div className="bg-black/20 rounded-lg p-3 border border-white/5 flex flex-col gap-3">
+          <div className="bg-black/20 rounded-lg p-3 border border-white/5 flex flex-col gap-3 gag-picker-container">
             {gagTracks.map(track => (
               <GagTrackPicker
                 key={track.id}

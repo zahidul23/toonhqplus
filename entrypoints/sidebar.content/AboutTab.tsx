@@ -2,6 +2,19 @@ import React from 'react';
 import { BookIcon } from './ShtickerBook';
 import { changelog } from './changelog';
 
+const contributors: { name: string; image: string; color: string }[] = [
+  // {
+  //   name: "Toony Hoque",
+  //   image: "https://rendition.toontownrewritten.com/render/7414000001501b451bba1b25002525010400010000000000000000010000032c00/waving/256x256.webp",
+  //   color: "from-purple-500/20"
+  // },
+  {
+    name: "Holland",
+    image: "https://rendition.toontownrewritten.com/render/7405010101b31ba51bbc1b10001f10010400123f00000000000000000000000000/portrait-grin/256x256.webp",
+    color: "from-purple-500/20"
+  },
+];
+
 export function AboutTabContent() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 text-white pb-10">
@@ -14,7 +27,7 @@ export function AboutTabContent() {
             </div>
           </div>
 
-          <div className="space-y-6 text-green-100/70 leading-relaxed">
+          <div className="space-y-4 text-green-100/70 leading-relaxed">
             <p>
               ToonHQ Plus is an independently developed browser extension designed to enhance your Toontown Rewritten experience by providing quick access to essential game information, calculators, and tools.
             </p>
@@ -50,7 +63,7 @@ export function AboutTabContent() {
             </div>
 
             <div className="pt-4 border-t border-white/5">
-              <h5 className="text-sm font-black uppercase tracking-widest text-blue-400 mb-3">Feedback & Support</h5>
+              <h5 className="text-sm font-black uppercase tracking-widest text-blue-400 mb-1">Feedback & Support</h5>
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="flex-1 space-y-3">
                   <p className="text-sm text-white/60">
@@ -76,6 +89,27 @@ export function AboutTabContent() {
                 </div>
               </div>
             </div>
+
+            {contributors.length > 0 && <div className="pt-4 border-t border-white/5">
+              <h5 className="text-sm font-black uppercase tracking-widest text-purple-400 mb-2">Developers</h5>
+              <div className="flex flex-wrap gap-10">
+                {contributors.map((contributor, i) => (
+                  <div key={i} className="flex flex-col items-center gap-0 group cursor-default">
+                    <div className="relative">
+                      <div className={`absolute inset-0 bg-gradient-to-b ${contributor.color} to-transparent blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+                      <img
+                        src={contributor.image}
+                        alt={contributor.name}
+                        className="w-24 h-24 object-contain relative z-10 filter brightness-75 group-hover:brightness-110 group-hover:scale-105 transition-all duration-500"
+                      />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/30 group-hover:text-purple-400 transition-colors duration-300">
+                      {contributor.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>}
           </div>
 
           <div className="mt-auto pt-6 border-t border-white/5 text-center space-y-4">

@@ -270,9 +270,10 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
               className={`relative rounded-xl border p-1.5 flex flex-col gap-1 transition-all group ${bgClass}`}
             >
               {/* Count Bubble - Top Right of the CARD */}
-              <div className={`absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tabular-nums border shadow-md z-20 transition-all ${count > 0
-                ? 'bg-green-700 border-green-400 text-white'
-                : 'bg-neutral-800 border-neutral-700 text-white/30'
+              <div className={`absolute top-[-8px] right-[-8px] px-2 py-0.5 rounded-full text-[10px] 
+              font-black tabular-nums border shadow-md z-20 transition-all ${count > 0
+                  ? 'bg-green-700 border-green-400 text-white'
+                  : 'bg-neutral-800 border-neutral-700 text-white/30'
                 }`}>
                 {count}
               </div>
@@ -1123,16 +1124,26 @@ export function ToonTrackerTab({
                                 <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-2 space-y-1.5 pb-1">
                                   {(() => {
                                     const facilities: any = {
-                                      sell: { items: [{ name: 'Long Steel', val: 1630 }, { name: 'Short Steel, +5 Battles', val: 1503 }, { name: 'Short Steel, +4 Battles', val: 1376 }, { name: 'Short Steel, +3 Battles', val: 1249 }, { name: 'Short Steel, +2 Battles', val: 1121 }, { name: 'Short Steel, +1 Battle', val: 994 }, { name: 'Short Steel', val: 867 }, { name: 'Long Scrap', val: 638 }, { name: 'Short Scrap, +5 Battles', val: 590 }, { name: 'Short Scrap, +4 Battles', val: 542 }, { name: 'Short Scrap, +3 Battles', val: 494 }, { name: 'Short Scrap, +2 Battles', val: 446 }, { name: 'Short Scrap, +1 Battle', val: 398 }, { name: 'Short Scrap', val: 350 }] },
-                                      cash: { items: [{ name: 'Bullion Mint', val: 1850 }, { name: 'Bullion Mint, 1 Skip', val: 1738 }, { name: 'Bullion Mint, 2 Skips', val: 1626 }, { name: 'Coin Mint', val: 807 }, { name: 'Coin Mint, 1 Skip', val: 755 }, { name: 'Coin Mint, 2 Skips', val: 702 }] },
-                                      law: { items: [{ name: 'Senior Wing', val: 2082 }, { name: 'Senior Wing, 1 Skip', val: 1968 }, { name: 'Senior Wing, 2 Skips', val: 1854 }, { name: 'Junior Wing', val: 889 }, { name: 'Junior Wing, 1 Skip', val: 835 }, { name: 'Junior Wing, 2 Skips', val: 781 }] },
-                                      boss: { items: [{ name: 'Final Fringe', val: 2305 }, { name: 'Final Fringe, 1 Skip', val: 2201 }, { name: 'Final Fringe, 2 Skips', val: 2097 }, { name: 'First Fairway', val: 975 }, { name: 'First Fairway, 1 Skip', val: 929 }, { name: 'First Fairway, 2 Skips', val: 882 }] }
+                                      sell: { items: [{ name: 'Long Steel', val: 1630 }, { name: 'Short Steel, +5 Battles', val: 1503 }, { name: 'Short Steel, +4 Battles', val: 1376 }, { name: 'Short Steel, +3 Battles', val: 1249 }, { name: 'Short Steel, +2 Battles', val: 1121 }, { name: 'Short Steel, +1 Battle', val: 994 }, { name: 'Short Steel', val: 867 }, { name: 'Long Scrap', val: 638 }, { name: 'Short Scrap, +5 Battles', val: 590 }, { name: 'Short Scrap, +4 Battles', val: 542 }, { name: 'Short Scrap, +3 Battles', val: 494 }, { name: 'Short Scrap, +2 Battles', val: 446 }, { name: 'Short Scrap, +1 Battle', val: 398 }, { name: 'Short Scrap', val: 350 }, { name: 'Cog Building', val: 300 }] },
+                                      cash: { items: [{ name: 'Bullion Mint', val: 1850 }, { name: 'Bullion Mint, Minimal', val: 1626 }, { name: 'Coin Mint', val: 807 }, { name: 'Coin Mint, Minimal', val: 702 }, { name: 'Cog Building', val: 300 }] },
+                                      law: { items: [{ name: 'Senior Wing', val: 2082 }, { name: 'Senior Wing, Minimal', val: 1854 }, { name: 'Junior Wing', val: 889 }, { name: 'Junior Wing, Minimal', val: 781 }, { name: 'Cog Building', val: 300 }] },
+                                      boss: { items: [{ name: 'Final Fringe', val: 2305 }, { name: 'Final Fringe, Minimal', val: 2097 }, { name: 'First Fairway', val: 975 }, { name: 'First Fairway, Minimal', val: 882 }, { name: 'Cog Building', val: 300 }] }
                                     };
                                     const items = facilities[dept].items;
-                                    const highest = items[0]; const lowest = items[items.length - 1];
-                                    let highestCount = Math.floor(remaining / highest.val); let rem = remaining - (highestCount * highest.val); let lowestCount = rem > 0 ? Math.ceil(rem / lowest.val) : 0;
-                                    const rows = []; for (let c = 0; c < highestCount; c++) rows.push(highest); for (let c = 0; c < lowestCount; c++) rows.push(lowest);
-                                    const total = (highestCount * highest.val) + (lowestCount * lowest.val);
+                                    const highest = items[0];
+                                    const highestCount = Math.floor(remaining / highest.val);
+                                    const rem = remaining % highest.val;
+                                    const rows = [];
+                                    for (let c = 0; c < highestCount; c++) rows.push(highest);
+                                    if (rem > 0) {
+                                      // Find the smallest single item that covers the remainder
+                                      const bestFit = items.reduce((prev: any, curr: any) =>
+                                        (curr.val >= rem && curr.val < prev.val) ? curr : prev,
+                                        highest
+                                      );
+                                      rows.push(bestFit);
+                                    }
+                                    const total = rows.reduce((acc: number, row: any) => acc + row.val, 0);
                                     return (
                                       <div className="bg-black/10 rounded p-2 border border-white/5 flex flex-col gap-1.5">
                                         {rows.map((row: any, i: number) => <div key={i} className="flex justify-between items-center text-[10.5px] font-medium opacity-80" style={{ color: colors.text }}><span className="truncate">{row.name}</span><span className="shrink-0 ml-2">~ {row.val} {statName}</span></div>)}

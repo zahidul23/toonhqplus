@@ -116,6 +116,34 @@ const SOS_SOUND_GAGS: Array<{ gagIndex: number; damage: number; image: string; n
 ];
 const BOSSES_INFO = [
   {
+    id: 'vp',
+    title: 'Vice President (VP)',
+    fullName: 'Vice President',
+    shortName: 'VP',
+    rewardLabel: 'SOS Cards',
+    image: 'https://toonhq.org/static/assets/groups/large/vp.jpg',
+    bossImage: 'https://toonhq.org/static/assets/groups/square/vp.jpg',
+    cardBg: '#7b00ae',
+    cardBorder: '#9d4edd',
+    department: 'Sellbot',
+    clickable: false,
+    tiers: [],
+  },
+  {
+    id: 'cfo',
+    title: 'Chief Financial Officer (CFO)',
+    fullName: 'Chief Financial Officer',
+    shortName: 'CFO',
+    rewardLabel: 'Unites',
+    image: 'https://toonhq.org/static/assets/groups/large/cfo.jpg',
+    bossImage: 'https://toonhq.org/static/assets/groups/square/cfo.jpg',
+    cardBg: '#238b39',
+    cardBorder: '#22c55e',
+    department: 'Cashbot',
+    clickable: false,
+    tiers: [],
+  },
+  {
     id: 'cj',
     title: 'Chief Justice (CJ)',
     fullName: 'Chief Justice',
@@ -1529,16 +1557,20 @@ function FacilityDetailPage({ facility, onBack }: { facility: FacilityInfo; onBa
 function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
   const { color, dot } = getFacilityColorConfig(facility.id);
   const skipRows = useMemo(() => {
-    const rows = [];
+    const allRows = [];
     for (let i = 0; i <= facility.maxSkips; i++) {
       const values = facility.subtypes.map(s => {
         const range = s.maxReward - s.minReward;
-        const step = range / facility.maxSkips;
+        const step = range / (facility.maxSkips || 1);
         return Math.round(s.maxReward - (i * step));
       });
-      rows.push({ skips: i, values });
+      allRows.push({ skips: i, values });
     }
-    return rows;
+
+    if (facility.id !== 'sellbot') {
+      return allRows.filter(r => r.skips === 0 || r.skips === facility.maxSkips);
+    }
+    return allRows;
   }, [facility]);
 
   return (
@@ -1565,9 +1597,8 @@ function RewardSkipTable({ facility }: { facility: FacilityInfo }) {
 
               if (isFull) {
                 label = facility.id === 'sellbot' ? "Long" : "Full";
-              } else if (isMinimal && facility.id === 'sellbot') {
-                label = "Short";
-                // label = facility.id === 'sellbot' ? "Short" : "Minimal";
+              } else if (isMinimal) {
+                label = facility.id === 'sellbot' ? "Short" : "Minimal";
               }
 
               return (
@@ -2071,11 +2102,12 @@ function FieldOfficeTabContent() {
 // ─── Bosses tab subcomponents ────────────────────────────────────────────────
 
 function BossCard({ boss, idx, onOpen }: { boss: any; idx: number; onOpen: (idx: number) => void }) {
+  const isClickable = boss.clickable !== false;
   return (
     <button
       type="button"
-      onClick={() => onOpen(idx)}
-      className="group relative flex flex-col rounded-xl border p-3 text-white transition-all hover:brightness-110 hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left w-full shadow-lg"
+      onClick={() => isClickable && onOpen(idx)}
+      className={`group relative flex flex-col rounded-xl border p-3 text-white transition-all shadow-lg text-left w-full ${isClickable ? 'hover:brightness-110 hover:scale-[1.01] active:scale-[0.99] cursor-pointer' : 'cursor-default opacity-80'}`}
       style={{
         background: `linear-gradient(180deg, ${boss.cardBg}ee 0%, ${boss.cardBg}c8 55%, #0f172abf 100%)`,
         borderColor: boss.cardBorder,
@@ -2083,21 +2115,26 @@ function BossCard({ boss, idx, onOpen }: { boss: any; idx: number; onOpen: (idx:
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h4 className="text-sm font-black uppercase tracking-tight">{boss.title}</h4>
-        <div className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:bg-white/20 group-hover:text-white transition-colors">
-          View Tiers
-        </div>
+        {isClickable && (
+          <div className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:bg-white/20 group-hover:text-white transition-colors">
+            Show Details
+          </div>
+        )}
       </div>
       <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
         <img src={boss.image} alt={boss.title} className="h-[200px] w-full rounded-md border border-white/20 object-cover" />
         <img src={boss.bossImage} alt={boss.title} className="h-[200px] w-[200px] rounded-md border border-white/20 bg-black/30 object-contain" />
       </div>
       <div className="mt-2 w-full text-center py-2 bg-black/20 rounded-lg border border-white/5">
-        <p className="text-xs font-bold text-white/60 uppercase tracking-widest">Department: {boss.department}</p>
-        <p className="text-sm font-black text-emerald-400">{boss.tiers.length} Difficulty Tiers</p>
+        <p className="text-sm font-black text-emerald-400">
+          {isClickable ? `${boss.tiers.length} Difficulty Tiers` : '1 Difficulty Tier'}
+        </p>
       </div>
     </button>
   );
 }
+
+
 
 function BossTierTable({ boss }: { boss: any }) {
   if (boss.id === 'cj') {
@@ -2403,18 +2440,23 @@ function BookSidebar({
         </button>
 
         <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
-          {BOSSES_INFO.map((boss, idx) => (
-            <button
-              key={boss.title}
-              type="button"
-              onClick={() => { onTabChange('bosses'); onFacilityChange(idx); }}
-              className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'bosses' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
-                }`}
-            >
-              {(boss as any).fullName || boss.title}
-            </button>
-          ))}
+          {BOSSES_INFO.map((boss, idx) => {
+            const isClickable = (boss as any).clickable !== false;
+            if (!isClickable) return null;
+            return (
+              <button
+                key={boss.title}
+                type="button"
+                onClick={() => { onTabChange('bosses'); onFacilityChange(idx); }}
+                className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeFacility === idx && activeTab === 'bosses' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+                  }`}
+              >
+                {(boss as any).fullName || boss.title}
+              </button>
+            );
+          })}
         </div>
+
 
         <button
           type="button"

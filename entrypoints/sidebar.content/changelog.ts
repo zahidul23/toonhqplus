@@ -7,8 +7,10 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.1.9',
-    date: 'Apr 5, 2026',
+    date: 'Apr 13, 2026',
     changes: [
+      // '[Major Update] Toon Tracker Implementation!',
+      // '[New Feature] Sync ToonHQ+ with your game and track your toons tasks, suits and rewards in real time',
       '[New Feature] Cog Battle Calculator',
       '[UI] Boss tier info in Shticker Book',
       '[UI] About section in Shticker Book'
