@@ -271,6 +271,12 @@ function GagTrackPicker({ track, onSelectGag, cogs, cogDamages, getHealthColor, 
               isDisabled = true;
             }
 
+            // Prevent Trapping already Trapped or Lured cogs (unless it's a Railroad)
+            const isRailroadTargeting = trackId === 'trap' && gagIndex === 6;
+            if (trackId === 'trap' && !isPinkSlip && !isRailroadTargeting && (cog.isTrapped || cog.isLured) && !cog.isDead) {
+              isDisabled = true;
+            }
+
             // Optimization: if the cog is already dead according to health calculation, disable it too
             if (remainingTotal <= 0 && !cog.isDead) {
               // This handles same-round kills from previous gag slots
@@ -723,7 +729,19 @@ export function CogCalculator() {
             }
 
             if (trackId === 'trap') {
-              if (!luredAtStartOfPhase[cogIdx]) {
+              const isRailroad = gag.gagIndex === 6;
+              if (hitCounts[cogIdx] > 1) {
+                // More than 1 trap on the same turn cancels everything out (including previous traps)
+                cog.isTrapped = false;
+                trapDamageOnCog[cogIdx] = 0;
+              } else if (isRailroad) {
+                // Railroad overrides existing trap and lure statuses
+                cog.isTrapped = true;
+                cog.isLured = false;
+                cog.lureDuration = 0;
+                trapDamageOnCog[cogIdx] = currentDmg;
+              } else if (!luredAtStartOfPhase[cogIdx] && !trappedAtStartOfPhase[cogIdx]) {
+                // Regular traps only apply if not lured and not already trapped
                 cog.isTrapped = true;
                 trapDamageOnCog[cogIdx] = currentDmg;
               }
@@ -781,9 +799,12 @@ export function CogCalculator() {
         if (!['trap', 'lure'].includes(trackId)) {
           trackBaseDamages.forEach((totalBase, idx) => {
             if (hitCounts[idx] >= 2) {
+              // If drop hits a lured cog, it does 0 damage including bonus
+              if (trackId === 'drop' && luredAtStartOfPhase[idx]) return;
+
               const roundedSum = Math.ceil(totalBase / 5) * 5;
               const baseBonus = Math.floor(roundedSum * 0.2); // 20% of rounded base
-              
+
               const cog = currentCogs[idx];
               const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
               let defenseDownStacks = 0;
@@ -1138,7 +1159,7 @@ export function CogCalculator() {
                     >
                       {finalCog.isDead && (
                         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
-                             <span className="text-red-500 font-black text-xs uppercase tracking-tighter shadow-black drop-shadow-lg [text-shadow:_0_1px_4px_rgb(0_0_0_/_100%)]">Defeated</span>
+                          <span className="text-red-500 font-black text-xs uppercase tracking-tighter shadow-black drop-shadow-lg [text-shadow:_0_1px_4px_rgb(0_0_0_/_100%)]">Defeated</span>
                         </div>
                       )}
                       {(() => {
