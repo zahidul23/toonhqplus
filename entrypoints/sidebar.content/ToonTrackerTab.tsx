@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getSetting, setSetting } from './db';
 import type { ToonTrackerData } from './tracker';
 import { browser } from 'wxt/browser';
 import { cogs as cogsData } from './cogs';
 import {
-  getRewardHistoryKey,
-  pruneRewardHistory,
+  REWARD_HIGHLIGHT_MS,
   RECENT_REWARD_LIMIT,
-  REWARD_HIGHLIGHT_MS
+  groupRewardHistory,
+  isDeepEqual
 } from './trackerUtils';
-import type { RewardCategory, RewardHistoryEntry } from './trackerUtils';
+import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerUtils';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -31,7 +31,7 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(diffSeconds / 86400)}d ago`;
 }
 
-function RelativeRewardTime({ timestamp }: { timestamp: number }) {
+const RelativeRewardTime = React.memo(({ timestamp }: { timestamp: number }) => {
   const [display, setDisplay] = useState(() => formatRelativeTime(timestamp));
 
   useEffect(() => {
@@ -42,7 +42,37 @@ function RelativeRewardTime({ timestamp }: { timestamp: number }) {
   }, [timestamp]);
 
   return <span>{display}</span>;
-}
+});
+
+const RewardHistoryGroup = React.memo(({ group }: { group: RewardGroup }) => {
+  const [isRecent, setIsRecent] = useState(() => isRecentlyEarned(group.timestamp));
+
+  useEffect(() => {
+    if (!isRecent) return;
+    const remaining = REWARD_HIGHLIGHT_MS - (Date.now() - group.timestamp);
+    if (remaining <= 0) {
+      setIsRecent(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsRecent(false), remaining + 100);
+    return () => clearTimeout(timer);
+  }, [group.timestamp, isRecent]);
+
+  return (
+    <div className={`relative overflow-hidden px-3 py-2 transition-colors ${isRecent ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
+      <div className="flex justify-between items-start gap-3">
+        <div className="flex flex-col gap-1 flex-1 min-w-0 py-0.5">
+          {group.entries.map((entry, i) => (
+            <RewardMessage key={i} entry={entry} />
+          ))}
+        </div>
+        <span className="relative z-[1] text-[10px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right pt-0.5" title={new Date(group.timestamp).toLocaleString()}>
+          <RelativeRewardTime timestamp={group.timestamp} />
+        </span>
+      </div>
+    </div>
+  );
+});
 
 function isRecentlyEarned(timestamp: number): boolean {
   return Date.now() - timestamp <= REWARD_HIGHLIGHT_MS;
@@ -56,7 +86,7 @@ const REWARD_CATEGORIES_CONFIG = [
   { id: 'remotes', label: 'Remotes', img: 'remotes.png' },
 ] as const;
 
-function RewardMessage({ entry }: { entry: RewardHistoryEntry }) {
+const RewardMessage = React.memo(({ entry }: { entry: RewardHistoryEntry }) => {
   if (entry.message) return <span className="text-white/50 text-[11px] font-bold">{entry.message}</span>;
 
   const { category, item, amount, metadata } = entry;
@@ -99,7 +129,7 @@ function RewardMessage({ entry }: { entry: RewardHistoryEntry }) {
       )}
     </span>
   );
-}
+});
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -182,7 +212,141 @@ const SOS_DATA: Record<string, { type: string; starRating: number }> = {
   'Loopy Loopenloop': { type: 'Squirt', starRating: 5 },
 };
 
-function SOSTableView({ sos }: { sos: Record<string, number> }) {
+const FACILITIES_DATA: Record<string, { items: { name: string; val: number }[] }> = {
+  sell: { items: [{ name: 'Long Steel', val: 1630 }, { name: 'Short Steel, +5 Battles', val: 1503 }, { name: 'Short Steel, +4 Battles', val: 1376 }, { name: 'Short Steel, +3 Battles', val: 1249 }, { name: 'Short Steel, +2 Battles', val: 1121 }, { name: 'Short Steel, +1 Battle', val: 994 }, { name: 'Short Steel', val: 867 }, { name: 'Long Scrap', val: 638 }, { name: 'Short Scrap, +5 Battles', val: 590 }, { name: 'Short Scrap, +4 Battles', val: 542 }, { name: 'Short Scrap, +3 Battles', val: 494 }, { name: 'Short Scrap, +2 Battles', val: 446 }, { name: 'Short Scrap, +1 Battle', val: 398 }, { name: 'Short Scrap', val: 350 }, { name: 'Cog Building', val: 300 }] },
+  cash: { items: [{ name: 'Bullion Mint', val: 1850 }, { name: 'Bullion Mint, Minimal', val: 1626 }, { name: 'Coin Mint', val: 807 }, { name: 'Coin Mint, Minimal', val: 702 }, { name: 'Cog Building', val: 300 }] },
+  law: { items: [{ name: 'Senior Wing', val: 2082 }, { name: 'Senior Wing, Minimal', val: 1854 }, { name: 'Junior Wing', val: 889 }, { name: 'Junior Wing, Minimal', val: 781 }, { name: 'Cog Building', val: 300 }] },
+  boss: { items: [{ name: 'Final Fringe', val: 2305 }, { name: 'Final Fringe, Minimal', val: 2097 }, { name: 'First Fairway', val: 975 }, { name: 'First Fairway, Minimal', val: 882 }, { name: 'Cog Building', val: 300 }] }
+};
+
+interface ToonHeaderProps {
+  isExpanded: boolean;
+  toonTrackerData: ToonTrackerData | null;
+  activeInstances: any[];
+  savedToons: any[];
+  selectedToonId: string | null;
+  isDropdownOpen: boolean;
+  dropdownRef: React.Ref<HTMLDivElement>;
+  toggleDropdown: (e: React.MouseEvent) => void;
+  selectToon: (id: string | number) => void;
+  removeSavedToon: (e: React.MouseEvent, id: string) => void;
+  startSync: (port?: string) => void;
+}
+
+const ToonHeader = React.memo(({
+  isExpanded,
+  toonTrackerData,
+  activeInstances,
+  savedToons,
+  selectedToonId,
+  isDropdownOpen,
+  dropdownRef,
+  toggleDropdown,
+  selectToon,
+  removeSavedToon,
+  startSync
+}: ToonHeaderProps) => (
+  <div className={`py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
+    <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={toggleDropdown}>
+      <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
+        {toonTrackerData ? (
+          <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center opacity-20">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+        </div>
+      </div>
+      <div className="flex-1 min-w-0 relative">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+        </div>
+        <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
+          {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
+        </div>
+      </div>
+    </div>
+
+    {isDropdownOpen && (
+      <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+          {activeInstances.length > 0 && (
+            <div className="mb-2">
+              <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
+                Active Games
+              </div>
+              {activeInstances.sort((a, b) => parseInt(a.port) - parseInt(b.port)).map((inst) => {
+                const gameNum = parseInt(inst.port) - 1546;
+                return (
+                  <div
+                    key={inst.port}
+                    onMouseDown={(e) => { e.stopPropagation(); if (inst.authorized) selectToon(inst.toonId); }}
+                    className={`flex items-center justify-between gap-3 p-2 mx-1 mt-1 rounded-lg ${inst.authorized ? 'hover:bg-white/5 cursor-pointer' : 'opacity-80'} transition-all group/item ${selectedToonId === inst.toonId ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {inst.authorized && inst.toonName && inst.toonName !== 'Unknown Toon' ? (
+                        <>
+                          <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
+                          <span className={`text-[11.5px] font-bold truncate ${selectedToonId === inst.toonId ? 'text-emerald-300' : 'text-white/90'}`}>{inst.toonName}</span>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-white/10 text-white/50 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
+                          <span className="text-[11px] font-bold truncate text-white/40 italic">Waiting...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {!inst.authorized ? (
+                      <button
+                        onMouseDown={(e) => { e.stopPropagation(); startSync(inst.port); }}
+                        className="w-7 h-7 rounded-md bg-emerald-600/90 hover:bg-emerald-500 flex items-center justify-center transition-all text-white shadow hover:shadow-emerald-500/20 active:scale-95 shrink-0 border border-emerald-400/30"
+                        title="Authorize Game"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>
+                      </button>
+                    ) : (
+                      selectedToonId === inst.toonId && (
+                        <div className="w-5 h-5 flex items-center justify-center opacity-100 shrink-0">
+                          <span className="flex w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></span>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
+            <div>
+              <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
+                Saved Toons
+              </div>
+              {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
+                <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 mx-1 mt-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}>
+                  <div className="w-8 h-8 rounded-full border border-white/5 bg-black/40 overflow-hidden shrink-0 flex items-center justify-center">
+                    <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
+                  </div>
+                  <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/60'}`}>{t.name}</span>
+                  <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+));
+
+const SOSTableView = React.memo(({ sos }: { sos: Record<string, number> }) => {
   const sosGrid = [
     // ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Baker Bridget'],
     // ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
@@ -298,9 +462,9 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
                   )}
 
                   {/* Star Rating Overlay */}
-                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex justify-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 z-10">
-                    {[...Array(5)].map((_, i) => (
-                      <span key={i} className={`text-[8px] leading-none ${i < stars ? 'text-amber-400' : 'text-white/5'}`}>★</span>
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full flex justify-center gap-0.5 px-1.5 py-0.5  bg-black/40 backdrop-blur-sm border border-white/10 z-10">
+                    {[...Array(stars)].map((_, i) => (
+                      <span key={i} className="text-[8px] leading-none text-amber-400">★</span>
                     ))}
                   </div>
                 </div>
@@ -317,9 +481,8 @@ function SOSTableView({ sos }: { sos: Record<string, number> }) {
       </div>
     </div>
   );
-}
-
-function SummonsTableView({ summons }: { summons: any }) {
+});
+const SummonsTableView = React.memo(({ summons }: { summons: any }) => {
   const suits = ['Bossbot', 'Lawbot', 'Cashbot', 'Sellbot'];
   const suitClasses: Record<string, { bg: string, border: string, text: string, hover: string }> = {
     Bossbot: { bg: 'bg-[#4a3728]', border: 'border-amber-500/30', text: 'text-amber-100', hover: 'hover:brightness-110' },
@@ -372,9 +535,8 @@ function SummonsTableView({ summons }: { summons: any }) {
       })}
     </div>
   );
-}
-
-function PinkSlipsGridView({ count }: { count: number }) {
+});
+const PinkSlipsGridView = React.memo(({ count }: { count: number }) => {
   const totalSlots = 200;
   const slots = Array.from({ length: totalSlots });
 
@@ -399,9 +561,8 @@ function PinkSlipsGridView({ count }: { count: number }) {
       </div>
     </div>
   );
-}
-
-function RemoteCard({ type, level, count }: { type: string, level: string, count: number }) {
+});
+const RemoteCard = React.memo(({ type, level, count }: { type: string, level: string, count: number }) => {
   return (
     <div className={`rounded-xl border p-3 flex gap-4 transition-all hover:brightness-110 shadow-lg ${count > 0
       ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-100'
@@ -431,9 +592,8 @@ function RemoteCard({ type, level, count }: { type: string, level: string, count
       </div>
     </div>
   );
-}
-
-function UniteListItem({ name, count, max = 100 }: { name: string, count: number, max?: number }) {
+});
+const UniteListItem = React.memo(({ name, count, max = 100 }: { name: string, count: number, max?: number }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-pink-900/20 border border-pink-500/10 hover:border-pink-500/30 transition-all group shadow-sm">
       <div className="text-[14px] font-bold text-pink-50/90 group-hover:text-white transition-colors truncate">{name}</div>
@@ -442,9 +602,8 @@ function UniteListItem({ name, count, max = 100 }: { name: string, count: number
       </div>
     </div>
   );
-}
-
-function EmptyRewardState() {
+});
+const EmptyRewardState = React.memo(() => {
   return (
     <div className="flex flex-col items-center justify-center py-20 opacity-20 gap-4 w-full">
       <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center">
@@ -453,11 +612,10 @@ function EmptyRewardState() {
       <p className="text-xs font-black uppercase tracking-[0.3em]">No items obtained</p>
     </div>
   );
-}
-
+});
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-export function ToonTrackerTab({
+export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   isExpanded = false,
   initialSubView = 'main',
   category: propCategory
@@ -506,24 +664,26 @@ export function ToonTrackerTab({
     }
   }, [subView]);
 
+  useEffect(() => {
+    const port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
+    return () => port.disconnect();
+  }, []);
+
   // Listen for background script updates
   useEffect(() => {
     const handleMessage = (message: any) => {
       if (message.type === 'TRACKER_STATUS_UPDATED') {
         if (message.instances) {
-          setActiveInstances(message.instances);
+          setActiveInstances(current => isDeepEqual(current, message.instances) ? current : message.instances);
         }
         if (message.savedToons) {
-          setSavedToons(message.savedToons);
+          setSavedToons(current => isDeepEqual(current, message.savedToons) ? current : message.savedToons);
         }
 
-        // Only overwrite local data if:
-        // 1. It matches our currently selected toon
-        // 2. We don't have a selection yet (first load)
         if (message.toonTrackerData) {
           const incomingToonId = String(message.toonTrackerData.data.toon.id);
           if (!selectedToonIdRef.current || String(selectedToonIdRef.current) === incomingToonId) {
-            setToonTrackerData(message.toonTrackerData);
+            setToonTrackerData(current => isDeepEqual(current, message.toonTrackerData) ? current : message.toonTrackerData);
             if (!selectedToonIdRef.current) {
               setSelectedToonId(incomingToonId);
               selectedToonIdRef.current = incomingToonId;
@@ -532,7 +692,7 @@ export function ToonTrackerTab({
         }
 
         if (message.rewardHistory && (!selectedToonIdRef.current || String(message.primaryToonId) === String(selectedToonIdRef.current))) {
-          setRewardHistory(message.rewardHistory);
+          setRewardHistory(current => isDeepEqual(current, message.rewardHistory) ? current : message.rewardHistory);
         }
       }
     };
@@ -541,14 +701,16 @@ export function ToonTrackerTab({
     browser.runtime.sendMessage({ type: 'GET_TRACKER_STATUS' }).then(response => {
       if (response) {
         if (response.instances) {
-          setActiveInstances(response.instances);
+          setActiveInstances(current => isDeepEqual(current, response.instances) ? current : response.instances);
         }
-        if (response.savedToons) setSavedToons(response.savedToons);
+        if (response.savedToons) {
+          setSavedToons(current => isDeepEqual(current, response.savedToons) ? current : response.savedToons);
+        }
 
         if (response.toonTrackerData) {
           const incomingId = String(response.toonTrackerData.data.toon.id);
           if (!selectedToonIdRef.current || String(selectedToonIdRef.current) === incomingId) {
-            setToonTrackerData(response.toonTrackerData);
+            setToonTrackerData(current => isDeepEqual(current, response.toonTrackerData) ? current : response.toonTrackerData);
             if (!selectedToonIdRef.current) {
               setSelectedToonId(incomingId);
               selectedToonIdRef.current = incomingId;
@@ -569,13 +731,13 @@ export function ToonTrackerTab({
       if (store === 'settings') {
         if (key === 'tracker-toon-list') {
           browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'list' }).then(response => {
-            if (response?.list) setSavedToons(response.list);
+            if (response?.list) setSavedToons(current => isDeepEqual(current, response.list) ? current : response.list);
           });
         } else if (key?.startsWith('tracker-data-')) {
           const toonId = String(key.replace('tracker-data-', ''));
           if (toonId === String(selectedToonIdRef.current)) {
             browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId }).then(response => {
-              if (response?.data && toonId === String(selectedToonIdRef.current)) setToonTrackerData(response.data);
+              if (response?.data && toonId === String(selectedToonIdRef.current)) setToonTrackerData(current => isDeepEqual(current, response.data) ? current : response.data);
             });
           }
         } else if (key?.startsWith('tracker-reward-history-')) {
@@ -590,43 +752,65 @@ export function ToonTrackerTab({
     return () => window.removeEventListener('toonhqplus-db-changed', handleDbChange as any);
   }, [selectedToonId]);
 
-  const toggleSection = (section: string) => {
+  useEffect(() => {
+    if (selectedToonId) {
+      getSetting<Record<string, boolean>>(`tracker-expanded-sections-${selectedToonId}`).then(stored => {
+        if (stored) {
+          setExpandedSections(stored);
+        } else {
+          setExpandedSections({
+            tasks: true,
+            suits: true,
+            rewards: true
+          });
+        }
+      });
+    }
+  }, [selectedToonId]);
+
+  const toggleSection = useCallback((section: string) => {
     if (isExpanded) return;
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
+    setExpandedSections(prev => {
+      const next = { ...prev, [section]: !prev[section] };
+      if (selectedToonId) {
+        setSetting(`tracker-expanded-sections-${selectedToonId}`, next);
+      }
+      return next;
+    });
+  }, [isExpanded, selectedToonId]);
 
-  const loadRewardHistory = async (toonId: string) => {
+  const loadRewardHistory = useCallback(async (toonId: string) => {
     const response = await browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(toonId) });
-    setRewardHistory(response?.history || []);
-  };
+    setRewardHistory(current => isDeepEqual(current, response?.history || []) ? current : (response?.history || []));
+  }, []);
 
-  const startSync = (port?: string) => {
+  const startSync = useCallback((port?: string) => {
     browser.runtime.sendMessage({
       type: 'SYNC_GAMES',
       port: port
     });
-  };
+  }, []);
 
   useEffect(() => {
     browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'list' }).then(res => {
-      if (res?.list) setSavedToons(res.list);
+      if (res?.list) setSavedToons(current => isDeepEqual(current, res.list) ? current : res.list);
     });
     browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'last-id' }).then(res => {
       if (res?.lastId && !selectedToonIdRef.current) {
         setSelectedToonId(String(res.lastId));
         selectedToonIdRef.current = String(res.lastId);
         browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(res.lastId) }).then(out => {
-          if (out?.data) setToonTrackerData(out.data);
+          if (out?.data) setToonTrackerData(current => isDeepEqual(current, out.data) ? current : out.data);
         });
       }
     });
     startSync();
-  }, []);
+  }, [startSync]);
 
   useEffect(() => {
     if (!selectedToonId) { setRewardHistory([]); return; }
     loadRewardHistory(selectedToonId).catch(console.error);
-  }, [selectedToonId]);
+  }, [selectedToonId, loadRewardHistory]);
 
   const isDropdownOpenRef = useRef(false);
   useEffect(() => { isDropdownOpenRef.current = isDropdownOpen; }, [isDropdownOpen]);
@@ -639,7 +823,7 @@ export function ToonTrackerTab({
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const toggleDropdown = (e: React.MouseEvent) => {
+  const toggleDropdown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isDropdownOpen) {
       browser.runtime.sendMessage({ type: 'DISCOVER_GAMES' });
@@ -647,33 +831,34 @@ export function ToonTrackerTab({
     } else {
       setIsDropdownOpen(false);
     }
-  };
+  }, [isDropdownOpen]);
 
-  const removeSavedToon = (e: React.MouseEvent, id: string) => {
+  const removeSavedToon = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setSavedToons(prev => {
-      const updated = prev.filter(t => t.id !== id);
-      setSetting('tracker-toon-list', updated).catch(console.error);
-      return updated;
-    });
-    if (selectedToonId === id) {
-      setSelectedToonId(null);
-      setToonTrackerData(null);
-      setSetting('last-tracker-toon-id', null).catch(console.error);
-    }
-  };
 
-  const selectToon = (id: string | number) => {
+    // Update local state immediately for snappy UI
+    setSavedToons(prev => prev.filter(t => t.id !== id));
+
+    // Explicitly update via background to avoid race conditions with status broadcasts
+    browser.runtime.sendMessage({ type: 'REMOVE_TOON', toonId: id }).then(res => {
+      if (res?.success && selectedToonId === id) {
+        setSelectedToonId(null);
+        setToonTrackerData(null);
+      }
+    });
+  }, [selectedToonId]);
+
+  const selectToon = useCallback((id: string | number) => {
     const stringId = String(id);
     setSelectedToonId(stringId);
     selectedToonIdRef.current = stringId;
     browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: stringId }).then(response => {
       if (response?.data && selectedToonIdRef.current === stringId) {
-        setToonTrackerData(response.data);
+        setToonTrackerData(current => isDeepEqual(current, response.data) ? current : response.data);
         browser.runtime.sendMessage({ type: 'SET_LAST_TOON', toonId: stringId });
       }
       if (response?.history && selectedToonIdRef.current === stringId) {
-        setRewardHistory(response.history);
+        setRewardHistory(current => isDeepEqual(current, response.history) ? current : response.history);
       }
     });
     setIsDropdownOpen(false);
@@ -681,134 +866,16 @@ export function ToonTrackerTab({
     if (inst) {
       browser.runtime.sendMessage({ type: 'SWITCH_PRIMARY_INSTANCE', port: inst.port });
     }
-  };
+  }, [activeInstances]);
 
-  // Group entries that share the same timestamp (same checkRewards batch)
-  type RewardGroup = { timestamp: number; entries: RewardHistoryEntry[] };
-  const groupRewardHistory = (entries: RewardHistoryEntry[]): RewardGroup[] => {
-    const groups: RewardGroup[] = [];
-    for (const entry of entries) {
-      const last = groups[groups.length - 1];
-      if (last && last.timestamp === entry.timestamp) {
-        last.entries.push(entry);
-      } else {
-        groups.push({ timestamp: entry.timestamp, entries: [entry] });
-      }
-    }
-    return groups;
-  };
+  const allGroups = useMemo(() => groupRewardHistory(rewardHistory), [rewardHistory]);
+  const visibleGroups = useMemo(() => {
+    const limit = isExpanded ? 50 : RECENT_REWARD_LIMIT * 4;
+    const items = rewardHistory.slice(0, limit);
+    const groups = groupRewardHistory(items);
+    return groups.slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
+  }, [rewardHistory, isExpanded]);
 
-  const allGroups = groupRewardHistory(rewardHistory);
-  const visibleGroups = groupRewardHistory(
-    rewardHistory.slice(0, isExpanded ? 50 : RECENT_REWARD_LIMIT * 4)
-  ).slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
-
-  const ToonHeader = () => (
-    <div className={`py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
-      <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={toggleDropdown}>
-        <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
-          {toonTrackerData ? (
-            <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center opacity-20">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-            </div>
-          )}
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-          </div>
-        </div>
-        <div className="flex-1 min-w-0 relative">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
-          </div>
-          <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
-            {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
-          </div>
-        </div>
-      </div>
-
-      {isDropdownOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-          <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
-            {activeInstances.length > 0 && (
-              <div className="mb-2">
-                <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
-                  Active Games
-                </div>
-                {activeInstances.sort((a, b) => parseInt(a.port) - parseInt(b.port)).map((inst) => {
-                  const gameNum = parseInt(inst.port) - 1546;
-                  return (
-                    <div
-                      key={inst.port}
-                      onMouseDown={(e) => { e.stopPropagation(); if (inst.authorized) selectToon(inst.toonId); }}
-                      className={`flex items-center justify-between gap-3 p-2 mx-1 mt-1 rounded-lg ${inst.authorized ? 'hover:bg-white/5 cursor-pointer' : 'opacity-80'} transition-all group/item ${selectedToonId === inst.toonId ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {inst.authorized && inst.toonName && inst.toonName !== 'Unknown Toon' ? (
-                          <>
-                            <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
-                            <span className={`text-[11.5px] font-bold truncate ${selectedToonId === inst.toonId ? 'text-emerald-300' : 'text-white/90'}`}>{inst.toonName}</span>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-white/10 text-white/50 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
-                            <span className="text-[11px] font-bold truncate text-white/40 italic">Waiting...</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {!inst.authorized ? (
-                        <button
-                          onMouseDown={(e) => { e.stopPropagation(); startSync(inst.port); }}
-                          className="w-7 h-7 rounded-md bg-emerald-600/90 hover:bg-emerald-500 flex items-center justify-center transition-all text-white shadow hover:shadow-emerald-500/20 active:scale-95 shrink-0 border border-emerald-400/30"
-                          title="Authorize Game"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>
-                        </button>
-                      ) : (
-                        selectedToonId === inst.toonId && (
-                          <div className="w-5 h-5 flex items-center justify-center opacity-100 shrink-0">
-                            <span className="flex w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
-              <div>
-                <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
-                  Saved Toons
-                </div>
-                {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
-                  <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 mx-1 mt-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}>
-                    <div className="w-8 h-8 rounded-full border border-white/5 bg-black/40 overflow-hidden shrink-0 flex items-center justify-center">
-                      <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
-                    </div>
-                    <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/60'}`}>{t.name}</span>
-                    <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeInstances.length === 0 && savedToons.length === 0 && (
-              <div className="px-2 py-6 text-[10px] font-bold text-white/30 text-center uppercase tracking-widest">
-                No active games or saved toons
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 
   if (subView === 'rewards_detail' && toonTrackerData) {
     const rewards = toonTrackerData.data.rewards || { pinkslips: 0, remotes: {}, sos: {}, summons: {}, unites: {} };
@@ -821,10 +888,22 @@ export function ToonTrackerTab({
     };
 
     return (
-      <section className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300 h-full">
+      <section key="rewards-detail" className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300 h-full">
         <div className="flex-1 flex gap-6 overflow-hidden pr-2 pt-0 pb-4">
           <div className="w-80 flex flex-col gap-4 shrink-0 overflow-hidden pt-2">
-            <ToonHeader />
+            <ToonHeader
+              isExpanded={isExpanded}
+              toonTrackerData={toonTrackerData}
+              activeInstances={activeInstances}
+              savedToons={savedToons}
+              selectedToonId={selectedToonId}
+              isDropdownOpen={isDropdownOpen}
+              dropdownRef={dropdownRef}
+              toggleDropdown={toggleDropdown}
+              selectToon={selectToon}
+              removeSavedToon={removeSavedToon}
+              startSync={startSync}
+            />
             <div className="flex flex-col gap-1">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2 py-1">Categories</h3>
               <div className="space-y-1">
@@ -847,18 +926,7 @@ export function ToonTrackerTab({
               {allGroups.length > 0 ? (
                 <div className="flex-1 divide-y divide-white/[0.06] overflow-y-auto custom-scrollbar">
                   {allGroups.map((group) => (
-                    <div key={group.timestamp} className={`relative overflow-hidden px-3 py-2 transition-colors ${isRecentlyEarned(group.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex flex-col gap-1 flex-1 min-w-0 py-0.5">
-                          {group.entries.map((entry, i) => (
-                            <RewardMessage key={i} entry={entry} />
-                          ))}
-                        </div>
-                        <span className="relative z-[1] text-[10px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right pt-0.5" title={new Date(group.timestamp).toLocaleString()}>
-                          <RelativeRewardTime timestamp={group.timestamp} />
-                        </span>
-                      </div>
-                    </div>
+                    <RewardHistoryGroup key={group.timestamp} group={group} />
                   ))}
                 </div>
               ) : (
@@ -955,8 +1023,20 @@ export function ToonTrackerTab({
   }
 
   return (
-    <section className="flex-1 flex flex-col overflow-hidden">
-      <ToonHeader />
+    <section key="main-tracker" className="flex-1 flex flex-col overflow-hidden">
+      <ToonHeader
+        isExpanded={isExpanded}
+        toonTrackerData={toonTrackerData}
+        activeInstances={activeInstances}
+        savedToons={savedToons}
+        selectedToonId={selectedToonId}
+        isDropdownOpen={isDropdownOpen}
+        dropdownRef={dropdownRef}
+        toggleDropdown={toggleDropdown}
+        selectToon={selectToon}
+        removeSavedToon={removeSavedToon}
+        startSync={startSync}
+      />
       <div className="flex-1 overflow-y-auto custom-scrollbar py-2 pr-2">
         {toonTrackerData ? (
           <div className={`animate-in fade-in slide-in-from-bottom-2 duration-300 ${isExpanded ? 'grid grid-cols-[320px_1fr] gap-4' : 'flex flex-col gap-4'}`}>
@@ -1034,18 +1114,7 @@ export function ToonTrackerTab({
                       {visibleGroups.length > 0 ? (
                         <div className={`divide-y divide-white/[0.06] overflow-y-auto custom-scrollbar ${isExpanded ? 'max-h-[calc(100vh-350px)]' : 'max-h-56'}`}>
                           {visibleGroups.map((group) => (
-                            <div key={group.timestamp} className={`relative overflow-hidden px-3 py-2 transition-colors ${isRecentlyEarned(group.timestamp) ? 'tracker-reward-recent' : 'hover:bg-white/[0.02]'}`}>
-                              <div className="flex justify-between items-start gap-3">
-                                <div className="flex flex-col gap-1 flex-1 min-w-0 py-0.5">
-                                  {group.entries.map((entry, i) => (
-                                    <RewardMessage key={i} entry={entry} />
-                                  ))}
-                                </div>
-                                <span className="text-[9px] font-black text-white/30 tabular-nums shrink-0 uppercase text-right pt-0.5" title={new Date(group.timestamp).toLocaleString()}>
-                                  <RelativeRewardTime timestamp={group.timestamp} />
-                                </span>
-                              </div>
-                            </div>
+                            <RewardHistoryGroup key={group.timestamp} group={group} />
                           ))}
                         </div>
                       ) : <div className="px-3 py-5 text-center text-[10px] font-black uppercase tracking-[0.24em] text-white/25">Nothing obtained yet</div>}
@@ -1053,15 +1122,7 @@ export function ToonTrackerTab({
                   </div>
                 )}
               </div>
-              {!activeInstances.some(inst => inst.toonId === selectedToonId) && (
-                <button
-                  onClick={() => setToonTrackerData(null)}
-                  className="w-full py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white/60 transition-all shadow-sm flex items-center justify-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-                  View All Toons
-                </button>
-              )}
+
             </div>
             <div className={isExpanded ? "flex flex-col gap-4" : "contents"}>
               <div className="space-y-2 rounded-xl border border-fuchsia-300/10 bg-[linear-gradient(180deg,rgba(88,28,135,0.22),rgba(17,24,39,0.5))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -1123,14 +1184,9 @@ export function ToonTrackerTab({
                               {expandedSuitId === id && (
                                 <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-2 space-y-1.5 pb-1">
                                   {(() => {
-                                    const facilities: any = {
-                                      sell: { items: [{ name: 'Long Steel', val: 1630 }, { name: 'Short Steel, +5 Battles', val: 1503 }, { name: 'Short Steel, +4 Battles', val: 1376 }, { name: 'Short Steel, +3 Battles', val: 1249 }, { name: 'Short Steel, +2 Battles', val: 1121 }, { name: 'Short Steel, +1 Battle', val: 994 }, { name: 'Short Steel', val: 867 }, { name: 'Long Scrap', val: 638 }, { name: 'Short Scrap, +5 Battles', val: 590 }, { name: 'Short Scrap, +4 Battles', val: 542 }, { name: 'Short Scrap, +3 Battles', val: 494 }, { name: 'Short Scrap, +2 Battles', val: 446 }, { name: 'Short Scrap, +1 Battle', val: 398 }, { name: 'Short Scrap', val: 350 }, { name: 'Cog Building', val: 300 }] },
-                                      cash: { items: [{ name: 'Bullion Mint', val: 1850 }, { name: 'Bullion Mint, Minimal', val: 1626 }, { name: 'Coin Mint', val: 807 }, { name: 'Coin Mint, Minimal', val: 702 }, { name: 'Cog Building', val: 300 }] },
-                                      law: { items: [{ name: 'Senior Wing', val: 2082 }, { name: 'Senior Wing, Minimal', val: 1854 }, { name: 'Junior Wing', val: 889 }, { name: 'Junior Wing, Minimal', val: 781 }, { name: 'Cog Building', val: 300 }] },
-                                      boss: { items: [{ name: 'Final Fringe', val: 2305 }, { name: 'Final Fringe, Minimal', val: 2097 }, { name: 'First Fairway', val: 975 }, { name: 'First Fairway, Minimal', val: 882 }, { name: 'Cog Building', val: 300 }] }
-                                    };
-                                    const items = facilities[dept].items;
+                                    const items = FACILITIES_DATA[dept]?.items || [];
                                     const highest = items[0];
+                                    if (!highest) return null;
                                     const highestCount = Math.floor(remaining / highest.val);
                                     const rem = remaining % highest.val;
                                     const rows = [];
@@ -1171,14 +1227,14 @@ export function ToonTrackerTab({
                     {toonTrackerData?.data?.tasks && toonTrackerData.data.tasks.length > 0 ? toonTrackerData.data.tasks.map((task: any, i: number) => {
                       const progress = (task.objective.progress.current / task.objective.progress.target) * 100;
                       return (
-                        <div key={i} className="p-4 bg-[#fcf8ef] rounded-lg border border-[#5c4a33]/30 flex flex-col gap-3 transition-all hover:bg-white shadow-md">
+                        <div key={i} className={`p-4 rounded-lg border flex flex-col gap-3 transition-all shadow-md group hover:brightness-[0.94] ${task.objective.progress.text === "Complete" ? 'bg-[#91e2af] border-green-600/30' : 'bg-[#fcf8ef] border-[#5c4a33]/30'}`}>
                           <div className="space-y-0.5">
-                            <div className="text-sm font-black text-[#4a3728] leading-tight select-all">{task.objective.text}</div>
-                            {task.objective.where && <div className="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-[#5c4a33]/60"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg><span className="text-[9.5px] font-black text-[#5c4a33]/60 uppercase tracking-widest">{task.objective.where}</span></div>}
+                            <div className={`text-sm font-black leading-tight select-all ${task.objective.progress.text === "Complete" ? 'text-[#064e3b]' : 'text-[#4a3728]'}`}>{task.objective.text}</div>
+                            {task.objective.where && <div className="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={task.objective.progress.text === "Complete" ? 'text-green-800/60' : 'text-[#5c4a33]/60'}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg><span className={`text-[9.5px] font-black uppercase tracking-widest ${task.objective.progress.text === "Complete" ? 'text-green-800/60' : 'text-[#5c4a33]/60'}`}>{task.objective.where}</span></div>}
                           </div>
                           <div className="space-y-1 pt-1">
-                            <div className="h-2 w-full bg-[#5c4a33]/10 rounded-full overflow-hidden border border-[#5c4a33]/5 p-[1px]"><div className="h-full bg-emerald-600 rounded-full transition-all duration-700 shadow-[0_0_5px_rgba(16,185,129,0.3)]" style={{ width: `${Math.min(100, progress)}%` }} /></div>
-                            <div className="text-right text-[11.5px] font-black uppercase tracking-[0.1em] text-emerald-700">{task.objective.progress.text}</div>
+                            <div className="h-2 w-full bg-black/10 rounded-full overflow-hidden border border-black/5 p-[1px]"><div className={`h-full rounded-full transition-all duration-700 ${task.objective.progress.text === "Complete" ? 'bg-green-600 shadow-[0_0_8px_rgba(22,163,74,0.3)]' : 'bg-emerald-600 shadow-[0_0_5px_rgba(16,185,129,0.3)]'}`} style={{ width: `${Math.min(100, progress)}%` }} /></div>
+                            <div className={`text-right text-[11.5px] font-black uppercase tracking-[0.1em] ${task.objective.progress.text === "Complete" ? 'text-green-800' : 'text-emerald-700'}`}>{task.objective.progress.text}</div>
                           </div>
                         </div>
                       );
@@ -1255,4 +1311,4 @@ export function ToonTrackerTab({
       </div>
     </section>
   );
-}
+});

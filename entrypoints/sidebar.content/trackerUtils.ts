@@ -90,3 +90,35 @@ export function checkRewards(prev: any, next: any, zone?: string | number): Rewa
   
   return changes;
 }
+
+export type RewardGroup = { timestamp: number; entries: RewardHistoryEntry[] };
+
+export function groupRewardHistory(entries: RewardHistoryEntry[]): RewardGroup[] {
+  const groups: RewardGroup[] = [];
+  for (const entry of entries) {
+    const last = groups[groups.length - 1];
+    if (last && last.timestamp === entry.timestamp) {
+      last.entries.push(entry);
+    } else {
+      groups.push({ timestamp: entry.timestamp, entries: [entry] });
+    }
+  }
+  return groups;
+}
+
+export function isDeepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return a === b;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== 'object') return a === b;
+  
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  
+  for (const key of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!isDeepEqual(a[key], b[key])) return false;
+  }
+  return true;
+}

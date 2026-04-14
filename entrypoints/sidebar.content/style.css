@@ -234,7 +234,6 @@
   0%,
   100% {
     box-shadow:
-      inset 0 0 0 1px rgba(250, 204, 21, 0.22),
       inset 0 0 24px rgba(34, 197, 94, 0.16),
       0 0 12px rgba(250, 204, 21, 0.08);
     background-color: rgba(34, 197, 94, 0.08);
@@ -242,10 +241,9 @@
 
   50% {
     box-shadow:
-      inset 0 0 0 1px rgba(251, 113, 133, 0.45),
       inset 0 0 32px rgba(250, 204, 21, 0.24),
       0 0 20px rgba(251, 113, 133, 0.14);
-    background-color: rgba(250, 204, 21, 0.12);
+    background-color: rgba(250, 204, 21, 0.25);
   }
 }
 
@@ -253,7 +251,7 @@
   animation: trackerRewardPulse 1.2s ease-in-out infinite;
 }
 
-.tracker-reward-recent__shine {
+/* .tracker-reward-recent__shine {
   background: linear-gradient(90deg,
       rgba(34, 197, 94, 0) 0%,
       rgba(34, 197, 94, 0.95) 18%,
@@ -262,5 +260,5 @@
       rgba(251, 113, 133, 0) 100%);
   filter: blur(2px);
   opacity: 0.95;
-  /* animation: trackerRewardSweep 1.45s linear infinite; */
-}
+  animation: trackerRewardSweep 1.45s linear infinite;
+} */

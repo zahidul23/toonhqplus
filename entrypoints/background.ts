@@ -9,6 +9,7 @@ export default defineBackground(() => {
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
   const failedPorts = new Set<string>();
   const connectingPorts = new Set<string>();
+  let stopTimeout: ReturnType<typeof setTimeout> | null = null;
 
   async function broadcastStatus() {
     const instances = Array.from(connections.entries()).map(([p, info]) => ({
@@ -150,16 +151,66 @@ export default defineBackground(() => {
     };
   }
 
-  setInterval(() => {
-    TRACKED_PORTS.forEach(port => {
-      const info = connections.get(port);
-      if (!info && !failedPorts.has(port)) {
-        connectToPort(port);
-      } else if (info && info.ws.readyState === WebSocket.OPEN && info.authorized) {
-        info.ws.send(JSON.stringify({ request: "all" }));
-      }
-    });
-  }, 5000);
+  let trackingInterval: ReturnType<typeof setInterval> | null = null;
+  const activeClients = new Set<string>();
+
+  async function startTracking() {
+    if (stopTimeout) {
+      clearTimeout(stopTimeout);
+      stopTimeout = null;
+    }
+    if (trackingInterval) return;
+    console.log("[ToonTracker BG] Starting active tracking...");
+    
+    TRACKED_PORTS.forEach(port => connectToPort(port));
+    
+    trackingInterval = setInterval(() => {
+      TRACKED_PORTS.forEach(port => {
+        const info = connections.get(port);
+        if (!info && !failedPorts.has(port)) {
+          connectToPort(port);
+        } else if (info && info.ws.readyState === WebSocket.OPEN && info.authorized) {
+          info.ws.send(JSON.stringify({ request: "all" }));
+        }
+      });
+    }, 5000);
+  }
+
+  function stopTracking() {
+    if (!trackingInterval) return;
+    console.log("[ToonTracker BG] No active clients, stopping tracker...");
+    clearInterval(trackingInterval);
+    trackingInterval = null;
+    
+    // Disconnect all WebSockets
+    for (const [port, info] of connections.entries()) {
+      info.ws.close();
+      connections.delete(port);
+    }
+    failedPorts.clear();
+    connectingPorts.clear();
+  }
+
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name === 'toonhqplus-tracker') {
+      const clientId = Math.random().toString(36).substring(2);
+      activeClients.add(clientId);
+      startTracking();
+
+      port.onDisconnect.addListener(() => {
+        activeClients.delete(clientId);
+        if (activeClients.size === 0) {
+          if (stopTimeout) clearTimeout(stopTimeout);
+          stopTimeout = setTimeout(() => {
+            if (activeClients.size === 0) {
+              stopTracking();
+            }
+            stopTimeout = null;
+          }, 10000);
+        }
+      });
+    }
+  });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'SYNC_GAMES') {
@@ -216,8 +267,17 @@ export default defineBackground(() => {
     } else if (message.type === 'SET_LAST_TOON') {
       setSetting('last-tracker-toon-id', message.toonId).catch(console.error);
       sendResponse({ success: true });
+    } else if (message.type === 'REMOVE_TOON') {
+      getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => {
+        const updated = (list || []).filter(t => t.id !== message.toonId);
+        setSetting('tracker-toon-list', updated).then(() => {
+          broadcastStatus();
+          sendResponse({ success: true });
+        });
+      });
+      return true;
     }
   });
 
-  TRACKED_PORTS.forEach(port => connectToPort(port));
+  // Initial check handled by onConnect
 });
