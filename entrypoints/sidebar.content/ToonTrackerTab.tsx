@@ -231,6 +231,7 @@ interface ToonHeaderProps {
   selectToon: (id: string | number) => void;
   removeSavedToon: (e: React.MouseEvent, id: string) => void;
   startSync: (port?: string) => void;
+  trackerEnabled: boolean | undefined;
 }
 
 const ToonHeader = React.memo(({
@@ -244,111 +245,130 @@ const ToonHeader = React.memo(({
   toggleDropdown,
   selectToon,
   removeSavedToon,
-  startSync
+  startSync,
+  trackerEnabled
 }: ToonHeaderProps) => (
   <div className={`py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
-    <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={toggleDropdown}>
-      <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
-        {toonTrackerData ? (
-          <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center opacity-20">
+    {trackerEnabled !== true ? (
+      <div className="flex-1 flex items-center min-w-0 gap-3">
+        <div className="w-10 h-10 rounded-full border border-white/10 bg-black/20 overflow-hidden shrink-0 relative flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center opacity-20 text-white">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
           </div>
-        )}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+        </div>
+        <div className="flex-1 min-w-0 relative">
+          <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white/50 truncate`}>Toon Tracker</h3>
         </div>
       </div>
-      <div className="flex-1 min-w-0 relative">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
-        </div>
-        <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
-          {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
-        </div>
-      </div>
-    </div>
-
-    {isDropdownOpen && (
-      <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
-          {activeInstances.length > 0 && (
-            <div className="mb-2">
-              <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
-                Active Games
+    ) : (
+      <>
+        <div className="flex-1 flex items-center min-w-0 gap-3 cursor-pointer group/header" ref={dropdownRef} onMouseDown={toggleDropdown}>
+          <div className="w-10 h-10 rounded-full border border-white/10 bg-emerald-500/5 overflow-hidden shrink-0 relative flex items-center justify-center">
+            {toonTrackerData ? (
+              <img src={`https://rendition.toontownrewritten.com/render/${toonTrackerData.data.toon.style}/portrait/256x256.webp`} alt={toonTrackerData.data.toon.name} className="w-full h-full object-contain scale-[1.25]" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center opacity-20">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
               </div>
-              {activeInstances.sort((a, b) => parseInt(a.port) - parseInt(b.port)).map((inst) => {
-                const gameNum = parseInt(inst.port) - 1546;
-                return (
-                  <div
-                    key={inst.port}
-                    onMouseDown={(e) => { e.stopPropagation(); if (inst.authorized) selectToon(inst.toonId); }}
-                    className={`flex items-center justify-between gap-3 p-2 mx-1 mt-1 rounded-lg ${inst.authorized ? 'hover:bg-white/5 cursor-pointer' : 'opacity-80'} transition-all group/item ${selectedToonId === inst.toonId ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {inst.authorized && inst.toonName && inst.toonName !== 'Unknown Toon' ? (
-                        <>
-                          <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
-                          <span className={`text-[11.5px] font-bold truncate ${selectedToonId === inst.toonId ? 'text-emerald-300' : 'text-white/90'}`}>{inst.toonName}</span>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-white/10 text-white/50 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
-                          <span className="text-[11px] font-bold truncate text-white/40 italic">Waiting...</span>
-                        </div>
-                      )}
-                    </div>
+            )}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0 relative">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+            </div>
+            <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
+              {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
+            </div>
+          </div>
+        </div>
 
-                    {!inst.authorized ? (
-                      <button
-                        onMouseDown={(e) => { e.stopPropagation(); startSync(inst.port); }}
-                        className="w-7 h-7 rounded-md bg-emerald-600/90 hover:bg-emerald-500 flex items-center justify-center transition-all text-white shadow hover:shadow-emerald-500/20 active:scale-95 shrink-0 border border-emerald-400/30"
-                        title="Authorize Game"
+        {isDropdownOpen && (
+          <div className="absolute top-full left-0 right-0 mt-1 mx-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+              {activeInstances.length > 0 ? (
+                <div className="mb-2">
+                  <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
+                    Active Games
+                  </div>
+                  {activeInstances.sort((a, b) => parseInt(a.port) - parseInt(b.port)).map((inst) => {
+                    const gameNum = parseInt(inst.port) - 1546;
+                    return (
+                      <div
+                        key={inst.port}
+                        onMouseDown={(e) => { e.stopPropagation(); if (inst.authorized) selectToon(inst.toonId); }}
+                        className={`flex items-center justify-between gap-3 p-2 mx-1 mt-1 rounded-lg ${inst.authorized ? 'hover:bg-white/5 cursor-pointer' : 'opacity-80'} transition-all group/item ${selectedToonId === inst.toonId ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>
-                      </button>
-                    ) : (
-                      selectedToonId === inst.toonId && (
-                        <div className="w-5 h-5 flex items-center justify-center opacity-100 shrink-0">
-                          <span className="flex w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></span>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {inst.authorized && inst.toonName && inst.toonName !== 'Unknown Toon' ? (
+                            <>
+                              <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
+                              <span className={`text-[11.5px] font-bold truncate ${selectedToonId === inst.toonId ? 'text-emerald-300' : 'text-white/90'}`}>{inst.toonName}</span>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center justify-center px-1.5 py-0.5 rounded bg-white/10 text-white/50 text-[9px] font-black shrink-0 tracking-wider">GAME {gameNum}</div>
+                              <span className="text-[11px] font-bold truncate text-white/40 italic">Waiting...</span>
+                            </div>
+                          )}
                         </div>
-                      )
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
 
-          {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
-            <div>
-              <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
-                Saved Toons
-              </div>
-              {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
-                <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 mx-1 mt-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}>
-                  <div className="w-8 h-8 rounded-full border border-white/5 bg-black/40 overflow-hidden shrink-0 flex items-center justify-center">
-                    <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
-                  </div>
-                  <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/60'}`}>{t.name}</span>
-                  <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  </button>
+                        {!inst.authorized ? (
+                          <button
+                            onMouseDown={(e) => { e.stopPropagation(); startSync(inst.port); }}
+                            className="w-7 h-7 rounded-md bg-emerald-600/90 hover:bg-emerald-500 flex items-center justify-center transition-all text-white shadow hover:shadow-emerald-500/20 active:scale-95 shrink-0 border border-emerald-400/30"
+                            title="Authorize Game"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3" /></svg>
+                          </button>
+                        ) : (
+                          selectedToonId === inst.toonId && (
+                            <div className="w-5 h-5 flex items-center justify-center opacity-100 shrink-0">
+                              <span className="flex w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></span>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              ) : (
+                <div className="py-4 text-center text-[10px] uppercase font-bold tracking-widest text-[#94a3b8]/60 leading-relaxed px-4">
+                  No running games found.<br />Make sure Companion App Support is enabled in your game settings.
+                </div>
+              )}
+
+              {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
+                <div>
+                  <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
+                    Saved Toons
+                  </div>
+                  {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
+                    <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 mx-1 mt-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}>
+                      <div className="w-8 h-8 rounded-full border border-white/5 bg-black/40 overflow-hidden shrink-0 flex items-center justify-center">
+                        <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
+                      </div>
+                      <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/60'}`}>{t.name}</span>
+                      <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </>
     )}
   </div>
 ));
 
 const SOSTableView = React.memo(({ sos }: { sos: Record<string, number> }) => {
   const sosGrid = [
-    // ['Lord Lowden Clear', 'Professor Pete', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Baker Bridget'],
     // ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
     // ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Rocky'],
     // ['Soggy Bottom', 'Flim Flam', 'Madam Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Loopy Loopenloop']
@@ -639,6 +659,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   });
   const [activeInstances, setActiveInstances] = useState<{ port: string; toonName: string; toonId: string; isPrimary: boolean, connected: boolean, authorized: boolean }[]>([]);
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
+  const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -665,9 +686,24 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   }, [subView]);
 
   useEffect(() => {
+    getSetting<boolean>('tracker-enabled').then(v => {
+      setTrackerEnabled(v);
+    });
+
+    const listener = (message: any) => {
+      if (message.type === 'TRACKER_PREF_CHANGED') setTrackerEnabled(message.enabled);
+    };
+    browser.runtime.onMessage.addListener(listener);
+    return () => {
+      browser.runtime.onMessage.removeListener(listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (trackerEnabled === false) return;
     const port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
     return () => port.disconnect();
-  }, []);
+  }, [trackerEnabled]);
 
   // Listen for background script updates
   useEffect(() => {
@@ -877,7 +913,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   }, [rewardHistory, isExpanded]);
 
 
-  if (subView === 'rewards_detail' && toonTrackerData) {
+  if (subView === 'rewards_detail' && toonTrackerData && trackerEnabled === true) {
     const rewards = toonTrackerData.data.rewards || { pinkslips: 0, remotes: {}, sos: {}, summons: {}, unites: {} };
     const totals = {
       sos: Object.values(rewards.sos || {}).reduce((a: number, b) => a + (b as number), 0),
@@ -903,6 +939,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               selectToon={selectToon}
               removeSavedToon={removeSavedToon}
               startSync={startSync}
+              trackerEnabled={trackerEnabled}
             />
             <div className="flex flex-col gap-1">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2 py-1">Categories</h3>
@@ -1036,9 +1073,10 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         selectToon={selectToon}
         removeSavedToon={removeSavedToon}
         startSync={startSync}
+        trackerEnabled={trackerEnabled}
       />
       <div className="flex-1 overflow-y-auto custom-scrollbar py-2 pr-2">
-        {toonTrackerData ? (
+        {trackerEnabled === true && toonTrackerData ? (
           <div className={`animate-in fade-in slide-in-from-bottom-2 duration-300 ${isExpanded ? 'grid grid-cols-[320px_1fr] gap-4' : 'flex flex-col gap-4'}`}>
             <div className="flex flex-col gap-4">
               <div onClick={() => isExpanded && setSubView('rewards_detail')} className={`space-y-2 rounded-xl bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] h-full ${isExpanded ? 'cursor-pointer hover:brightness-125 transition-all group/rewcard border border-white/5 hover:border-emerald-500/30' : ''}`}>
@@ -1246,50 +1284,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
           </div>
         ) : (
           <div className="h-full flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
-            {hasLoaded && savedToons.length > 0 ? (
-              <div className="w-full max-w-sm space-y-6">
-                <div className="text-center space-y-1">
-                  <h3 className="text-sm font-black text-emerald-400 uppercase tracking-[0.2em]">Your Toons</h3>
-                  <p className="text-[10px] text-white/30 uppercase tracking-widest">Select a toon to view stats offline</p>
-                </div>
-                <div className="grid gap-3">
-                  {savedToons.map(t => {
-                    const isActive = activeInstances.find(inst => inst.toonId === t.id);
-                    return (
-                      <div
-                        key={t.id}
-                        onClick={() => selectToon(t.id)}
-                        className={`flex items-center gap-4 p-3 rounded-xl border transition-all cursor-pointer group/tooncard shadow-lg ${isActive ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'}`}
-                      >
-                        <div className="w-12 h-12 rounded-full border border-white/10 bg-black/20 overflow-hidden shrink-0 flex items-center justify-center relative">
-                          <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] group-hover/tooncard:scale-[1.4] transition-transform duration-500" />
-                          {isActive && <div className="absolute inset-0 bg-emerald-500/10 animate-pulse" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-black text-white group-hover/tooncard:text-emerald-400 transition-colors truncate">{t.name}</div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-tighter">{t.laff} Laff</span>
-                            <span className="w-1 h-1 rounded-full bg-white/10" />
-                            <span className={`text-[9px] font-black uppercase tracking-widest ${isActive ? 'text-emerald-400' : 'text-white/20'}`}>{isActive ? 'Online' : 'Offline'}</span>
-                          </div>
-                        </div>
-                        <div className="opacity-0 group-hover/tooncard:opacity-100 transition-opacity">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white/20"><path d="m9 18 6-6-6-6" /></svg>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="pt-4 text-center">
-                  <button
-                    onClick={() => getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined))}
-                    className="px-6 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all"
-                  >
-                    Sync Online Toons
-                  </button>
-                </div>
-              </div>
-            ) : hasLoaded ? (
+            {(hasLoaded && trackerEnabled === true) ? (
               <div className="flex flex-col items-center gap-6 opacity-40">
                 <div className="w-20 h-20 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center animate-pulse">
                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400/50"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
@@ -1304,6 +1299,62 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 >
                   Search for Games
                 </button>
+              </div>
+            ) : hasLoaded ? (
+              <div className={`h-full flex flex-col items-center justify-center ${isExpanded ? 'py-20' : ''} animate-in fade-in duration-500`}>
+                <div className="flex flex-col items-center gap-6 opacity-80 max-w-xl mx-auto text-center">
+                  <div className="w-20 h-20 rounded-full border-2 border-dashed border-emerald-500/40 flex items-center justify-center bg-emerald-500/10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      className="text-emerald-400"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                      <circle cx="12" cy="9" r="3" />
+                    </svg>
+                  </div>
+                  <div className="text-center space-y-3">
+                    <p className={`font-black text-emerald-300 leading-relaxed ${isExpanded ? 'text-2xl' : 'text-[14px]'}`}>
+                      Allow ToonHQ+ to connect to your Toontown Rewritten game as a Companion App?
+                    </p>
+                    <p className={`text-white/75 leading-relaxed ${isExpanded ? 'text-lg px-8' : 'text-[11px]'}`}>
+                      This will allow you to track your toons rewards, tasks and suit progressions in this extension.
+                    </p>
+                    <p className={`text-white/75 leading-relaxed ${isExpanded ? 'text-lg px-8' : 'text-[11px]'}`}>
+                      This is a direct connection from your browser to your game. No data leaves your device.
+                    </p>
+                    <p className={`text-white/50 italic ${isExpanded ? 'text-sm' : 'text-[10px]'}`}>
+                      You can change this setting any time in Settings.
+                    </p>
+                  </div>
+                  <div className={`flex items-center gap-3 w-full mt-2 ${isExpanded ? 'max-w-[400px]' : 'max-w-[200px]'}`}>
+                    <button
+                      onClick={() => {
+                        setTrackerEnabled(true);
+                        setSetting('tracker-enabled', true).catch(console.error);
+                        browser.runtime.sendMessage({ type: 'TRACKER_PREF_CHANGED', enabled: true });
+                        window.dispatchEvent(new CustomEvent('toonhqplus-db-changed', { detail: { store: 'settings', key: 'tracker-enabled' } }));
+                      }}
+                      className={`flex-1 cursor-pointer rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-[0.1em] transition-all ${isExpanded ? 'py-4 text-sm' : 'py-2.5 text-[11px]'}`}
+                    >
+                      {isExpanded ? 'Allow' : 'Yes'}
+                    </button>
+                    {!isExpanded && <button
+                      onClick={() => {
+                        setSetting('tracker-enabled', false).catch(console.error);
+                        setTrackerEnabled(false);
+                        browser.runtime.sendMessage({ type: 'TRACKER_PREF_CHANGED', enabled: false });
+                        window.dispatchEvent(new CustomEvent('toonhqplus-db-changed', { detail: { store: 'settings', key: 'tracker-enabled' } }));
+
+                        if (!isExpanded) {
+                          // Change tab in SidebarApp
+                          setSetting('active-tab', 'settings').catch(console.error);
+                          window.dispatchEvent(new CustomEvent('toonhqplus-db-changed', { detail: { store: 'settings', key: 'active-tab' } }));
+                        }
+                      }}
+                      className={`flex-1 cursor-pointer rounded-full border border-white/10 hover:bg-white/5 text-white/60 hover:text-white font-black uppercase tracking-[0.1em] transition-all ${isExpanded ? 'py-4 text-sm' : 'py-2.5 text-[11px]'}`}
+                    >
+                      No
+                    </button>}
+                  </div>
+                </div>
               </div>
             ) : null}
           </div>

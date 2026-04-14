@@ -10,6 +10,21 @@ export default defineBackground(() => {
   const failedPorts = new Set<string>();
   const connectingPorts = new Set<string>();
   let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+  let trackerEnabled: boolean | undefined = undefined;
+
+  getSetting<boolean>('tracker-enabled').then(v => {
+    trackerEnabled = v;
+    if (trackerEnabled === true) {
+      startAutoDiscover();
+      // On boot attempt initial sync
+      TRACKED_PORTS.forEach(port => {
+        if (!connections.has(port)) {
+          failedPorts.delete(port);
+          try { connectToPort(port); } catch(e) {}
+        }
+      });
+    }
+  });
 
   async function broadcastStatus() {
     const instances = Array.from(connections.entries()).map(([p, info]) => ({
@@ -73,7 +88,18 @@ export default defineBackground(() => {
     }
   }
 
+  function authorizePort(port: string, info: any) {
+    if (info && info.ws.readyState === WebSocket.OPEN && trackerEnabled === true) {
+      const authKey = Math.random().toString(36).substring(2, 11);
+      info.authorized = true;
+      try {
+        info.ws.send(JSON.stringify({ authorization: authKey, name: "ToonHQ Plus" }));
+      } catch (e) {}
+    }
+  }
+
   function connectToPort(port: string) {
+    if (trackerEnabled !== true) return;
     if (connections.has(port)) return; // Already connected or connecting
     if (failedPorts.has(port)) return; // Only attempt once until explicitly synced
     if (connectingPorts.has(port)) return; // Prevent duplicate pending WebSockets
@@ -84,8 +110,10 @@ export default defineBackground(() => {
     conn.onopen = () => {
       connectingPorts.delete(port);
       // Only push to state when completely open to stop UI panels from flashing
-      connections.set(port, { ws: conn, data: null, authorized: false });
+      const info = { ws: conn, data: null, authorized: false };
+      connections.set(port, info);
       failedPorts.delete(port);
+      if (trackerEnabled === true) authorizePort(port, info);
       broadcastStatus();
     };
 
@@ -97,7 +125,9 @@ export default defineBackground(() => {
         const msgData = JSON.parse(event.data);
 
         if (msgData.type === 'authorize') {
-            conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
+            if (trackerEnabled === true) {
+                conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
+            }
         }
         
         if (msgData.event === 'all' && msgData.data?.toon) {
@@ -155,6 +185,7 @@ export default defineBackground(() => {
   const activeClients = new Set<string>();
 
   async function startTracking() {
+    if (trackerEnabled !== true) return;
     if (stopTimeout) {
       clearTimeout(stopTimeout);
       stopTimeout = null;
@@ -162,18 +193,39 @@ export default defineBackground(() => {
     if (trackingInterval) return;
     console.log("[ToonTracker BG] Starting active tracking...");
     
-    TRACKED_PORTS.forEach(port => connectToPort(port));
+    TRACKED_PORTS.forEach(port => {
+       try { connectToPort(port); } catch(e) {}
+    });
     
     trackingInterval = setInterval(() => {
+      if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
         const info = connections.get(port);
         if (!info && !failedPorts.has(port)) {
-          connectToPort(port);
+          try { connectToPort(port); } catch(e) {}
         } else if (info && info.ws.readyState === WebSocket.OPEN && info.authorized) {
-          info.ws.send(JSON.stringify({ request: "all" }));
+          try { info.ws.send(JSON.stringify({ request: "all" })); } catch(e) {}
         }
       });
     }, 5000);
+  }
+
+  let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
+  function startAutoDiscover() {
+    if (autoDiscoverInterval) return;
+    autoDiscoverInterval = setInterval(() => {
+      if (trackerEnabled !== true) return;
+      TRACKED_PORTS.forEach(port => {
+        if (!connections.has(port)) {
+          failedPorts.delete(port);
+          try { connectToPort(port); } catch (e) {}
+        }
+      });
+    }, 60000);
+  }
+  function stopAutoDiscover() {
+    if (autoDiscoverInterval) clearInterval(autoDiscoverInterval);
+    autoDiscoverInterval = null;
   }
 
   function stopTracking() {
@@ -181,10 +233,11 @@ export default defineBackground(() => {
     console.log("[ToonTracker BG] No active clients, stopping tracker...");
     clearInterval(trackingInterval);
     trackingInterval = null;
-    
-    // Disconnect all WebSockets
+  }
+
+  function disconnectAll() {
     for (const [port, info] of connections.entries()) {
-      info.ws.close();
+      try { info.ws.close(); } catch(e) {}
       connections.delete(port);
     }
     failedPorts.clear();
@@ -195,7 +248,7 @@ export default defineBackground(() => {
     if (port.name === 'toonhqplus-tracker') {
       const clientId = Math.random().toString(36).substring(2);
       activeClients.add(clientId);
-      startTracking();
+      if (trackerEnabled === true) startTracking();
 
       port.onDisconnect.addListener(() => {
         activeClients.delete(clientId);
@@ -213,29 +266,51 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'SYNC_GAMES') {
-      const portsToSync = message.port ? [message.port] : TRACKED_PORTS;
-      
-      portsToSync.forEach(port => {
-        failedPorts.delete(port);
-        const info = connections.get(port);
-        if (info && info.ws.readyState === WebSocket.OPEN) {
-          const authKey = Math.random().toString(36).substring(2, 11);
-          info.authorized = true;
-          info.ws.send(JSON.stringify({ authorization: authKey, name: "ToonHQ Plus" }));
-        } else if (!info) {
-          connectToPort(port);
-        }
-      });
+    if (message.type === 'TRACKER_PREF_CHANGED') {
+      trackerEnabled = message.enabled;
+      if (trackerEnabled) {
+        startAutoDiscover();
+        if (activeClients.size > 0) startTracking();
+        TRACKED_PORTS.forEach(port => {
+          if (!connections.has(port)) {
+            failedPorts.delete(port);
+            try { connectToPort(port); } catch (e) {}
+          } else {
+            authorizePort(port, connections.get(port));
+          }
+        });
+      } else if (trackerEnabled === false) {
+        stopAutoDiscover();
+        stopTracking();
+        disconnectAll();
+      }
       broadcastStatus();
+      sendResponse({ received: true });
+    } else if (message.type === 'SYNC_GAMES') {
+      if (trackerEnabled === true) {
+        const portsToSync = message.port ? [message.port] : TRACKED_PORTS;
+        
+        portsToSync.forEach(port => {
+          failedPorts.delete(port);
+          const info = connections.get(port);
+          if (info && info.ws.readyState === WebSocket.OPEN) {
+            authorizePort(port, info);
+          } else if (!info) {
+             try { connectToPort(port); } catch(e) {}
+          }
+        });
+        broadcastStatus();
+      }
       sendResponse({ sync: true });
     } else if (message.type === 'DISCOVER_GAMES') {
-      TRACKED_PORTS.forEach(port => {
-        if (!connections.has(port)) {
-          failedPorts.delete(port);
-          connectToPort(port);
-        }
-      });
+      if (trackerEnabled === true) {
+        TRACKED_PORTS.forEach(port => {
+          if (!connections.has(port)) {
+            failedPorts.delete(port);
+            try { connectToPort(port); } catch(e) {}
+          }
+        });
+      }
       sendResponse({ discovered: true });
     } else if (message.type === 'GET_TRACKER_STATUS') {
       broadcastStatus();

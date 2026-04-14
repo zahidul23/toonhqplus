@@ -4,6 +4,7 @@ import { CogCalculator } from './CogCalculator';
 
 import { AboutTabContent } from './AboutTab';
 import { ToonTrackerTab } from './ToonTrackerTab';
+import { getSetting, getSettings } from './db';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2418,11 +2419,15 @@ function BookSidebar({
   activeFacility,
   onTabChange,
   onFacilityChange,
+  trackerEnabled,
+  hasLoadedSettings,
 }: {
   activeTab: InfoBookTab;
   activeFacility: number | null;
   onTabChange: (tab: InfoBookTab) => void;
   onFacilityChange: (idx: number | null) => void;
+  trackerEnabled: boolean | undefined;
+  hasLoadedSettings: boolean;
 }) {
   const navButtonClass = (tab: InfoBookTab, extra = '') =>
     `w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer ${extra} ${activeTab === tab ? 'bg-[#145837] text-white shadow-inner' : 'text-green-100/80 hover:bg-black/20 hover:text-white'
@@ -2557,6 +2562,8 @@ export function ShtickerBook() {
   const CLOSE_ANIMATION_MS = 260;
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
+  const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<InfoBookTab>(() => {
     try {
       const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
@@ -2586,6 +2593,22 @@ export function ShtickerBook() {
     } catch (e) { }
     return null;
   });
+
+  useEffect(() => {
+    getSetting<boolean>('tracker-enabled').then(v => {
+      setTrackerEnabled(v);
+      setHasLoadedSettings(true);
+    });
+
+    const handleDbChange = (e: Event) => {
+      const { store, key } = (e as CustomEvent).detail || {};
+      if (store === 'settings' && key === 'tracker-enabled') {
+        getSetting<boolean>('tracker-enabled').then(setTrackerEnabled);
+      }
+    };
+    window.addEventListener('toonhqplus-db-changed', handleDbChange);
+    return () => window.removeEventListener('toonhqplus-db-changed', handleDbChange);
+  }, []);
 
   useEffect(() => {
     try {
@@ -2655,6 +2678,8 @@ export function ShtickerBook() {
                 activeFacility={activeFacility}
                 onTabChange={setActiveTab}
                 onFacilityChange={setActiveFacility}
+                trackerEnabled={trackerEnabled}
+                hasLoadedSettings={hasLoadedSettings}
               />
 
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
@@ -2665,7 +2690,7 @@ export function ShtickerBook() {
                 {activeTab === 'boiler_calc' && <BoilerCalculator />}
                 {activeTab === 'cog_calc' && <CogCalculator />}
                 {activeTab === 'bosses' && (
-                  <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveFacility} />
+                  <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveBoss} />
                 )}
                 {activeTab === 'toon_tracker' && <ToonTrackerTab isExpanded={true} />}
                 {activeTab === 'reward_details' && (

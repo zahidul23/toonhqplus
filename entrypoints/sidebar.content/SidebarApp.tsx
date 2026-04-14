@@ -850,6 +850,7 @@ export function SidebarApp() {
   });
   const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
   const [notesEnabled, setNotesEnabled] = useState(true);
+  const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -858,6 +859,7 @@ export function SidebarApp() {
   const [toonyCollapsed, setToonyCollapsed] = useState(false);
   const [stinkyCollapsed, setStinkyCollapsed] = useState(false);
   const [neutralCollapsed, setNeutralCollapsed] = useState(false);
+  const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [searchPage, setSearchPage] = useState(1);
   const pageSize = 10;
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
@@ -1043,14 +1045,23 @@ export function SidebarApp() {
 
   useEffect(() => {
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed']).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
       if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
+      if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
+      
+      let initialTab = values['active-tab'];
+      if (initialTab === 'tracker' && values['tracker-enabled'] === false) {
+        initialTab = 'history';
+      }
+      if (initialTab !== undefined) setActiveTab(initialTab);
+
       if (values['toony-collapsed'] !== undefined) setToonyCollapsed(!!values['toony-collapsed']);
       if (values['stinky-collapsed'] !== undefined) setStinkyCollapsed(!!values['stinky-collapsed']);
       if (values['neutral-collapsed'] !== undefined) setNeutralCollapsed(!!values['neutral-collapsed']);
+      setHasLoadedSettings(true);
     });
 
     const handleDbChange = (e: Event) => {
@@ -1087,6 +1098,7 @@ export function SidebarApp() {
         getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(c => { if (c) setNavbarConfig(c); });
         getSetting<boolean>('boss-info-enabled').then(v => { if (v !== undefined) setBossInfoEnabled(v !== false); });
         getSetting<boolean>('notes-enabled').then(v => { if (v !== undefined) setNotesEnabled(v !== false); });
+        getSetting<boolean>('tracker-enabled').then(v => { if (v !== undefined) setTrackerEnabled(v !== false); });
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
         getSetting<string[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
@@ -1124,15 +1136,17 @@ export function SidebarApp() {
         {open && (
           <aside className="w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0">
             <div className="flex border-b border-[#0a2e1d]/80 bg-[#0c3622]">
-              <button
-                className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'tracker' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
-                onClick={() => {
-                  setActiveTab('tracker');
-                  setSetting('active-tab', 'tracker').catch(console.error);
-                }}
-              >
-                Tracker
-              </button>
+              {hasLoadedSettings && trackerEnabled !== false && (
+                <button
+                  className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'tracker' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
+                  onClick={() => {
+                    setActiveTab('tracker');
+                    setSetting('active-tab', 'tracker').catch(console.error);
+                  }}
+                >
+                  Tracker
+                </button>
+              )}
               <button
                 className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
                 onClick={() => {
@@ -1606,6 +1620,31 @@ export function SidebarApp() {
                           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${notesEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${notesEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">Toon Tracker Integration</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Connect directly to your Toontown Rewritten game to track your toon stats.
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const next = !(trackerEnabled !== false);
+                            setTrackerEnabled(next);
+                            setSetting('tracker-enabled', next).catch(console.error);
+                            if (!next && activeTab === 'tracker') {
+                              setActiveTab('history');
+                              setSetting('active-tab', 'history').catch(console.error);
+                            }
+                            // Notify background script about the change
+                            browser.runtime.sendMessage({ type: 'TRACKER_PREF_CHANGED', enabled: next });
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${trackerEnabled !== false ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${trackerEnabled !== false ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
                     </div>
