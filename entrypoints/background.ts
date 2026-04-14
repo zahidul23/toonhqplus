@@ -56,7 +56,7 @@ export default defineBackground(() => {
 
     try {
       browser.runtime.sendMessage(payload).catch(() => {});
-      const tabs = await browser.tabs.query({});
+      const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
       tabs.forEach(tab => {
         if (tab.id) {
           browser.tabs.sendMessage(tab.id, payload).catch(() => {});
@@ -109,11 +109,15 @@ export default defineBackground(() => {
 
     conn.onopen = () => {
       connectingPorts.delete(port);
+      if (trackerEnabled !== true) {
+        conn.close();
+        return;
+      }
       // Only push to state when completely open to stop UI panels from flashing
       const info = { ws: conn, data: null, authorized: false };
       connections.set(port, info);
       failedPorts.delete(port);
-      if (trackerEnabled === true) authorizePort(port, info);
+      authorizePort(port, info);
       broadcastStatus();
     };
 
