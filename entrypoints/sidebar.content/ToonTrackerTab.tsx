@@ -638,15 +638,35 @@ const EmptyRewardState = React.memo(() => {
 export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   isExpanded = false,
   initialSubView = 'main',
-  category: propCategory
+  category: propCategory,
+  selectedToonId: propSelectedToonId,
+  onToonSelect
 }: {
   isExpanded?: boolean;
   initialSubView?: 'main' | 'rewards_detail';
   category?: RewardCategory;
+  selectedToonId?: string | null;
+  onToonSelect?: (id: string | null) => void;
 }) {
   const [toonTrackerData, setToonTrackerData] = useState<ToonTrackerData | null>(null);
-  const [selectedToonId, setSelectedToonId] = useState<string | null>(null);
-  const selectedToonIdRef = useRef<string | null>(null);
+  const [localSelectedToonId, setLocalSelectedToonId] = useState<string | null>(null);
+
+  const selectedToonId = propSelectedToonId !== undefined ? propSelectedToonId : localSelectedToonId;
+
+  const setSelectedToonId = (id: string | null) => {
+    selectedToonIdRef.current = id;
+    if (onToonSelect) {
+      onToonSelect(id);
+    } else {
+      setLocalSelectedToonId(id);
+    }
+  };
+
+  const selectedToonIdRef = useRef<string | null>(selectedToonId);
+
+  useEffect(() => {
+    selectedToonIdRef.current = selectedToonId;
+  }, [selectedToonId]);
   const [expandedSuitId, setExpandedSuitId] = useState<string | null>(null);
   const [savedToons, setSavedToons] = useState<{ id: string; name: string; style: string; laff: number }[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -722,7 +742,6 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
             setToonTrackerData(current => isDeepEqual(current, message.toonTrackerData) ? current : message.toonTrackerData);
             if (!selectedToonIdRef.current) {
               setSelectedToonId(incomingToonId);
-              selectedToonIdRef.current = incomingToonId;
             }
           }
         }
@@ -749,7 +768,6 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
             setToonTrackerData(current => isDeepEqual(current, response.toonTrackerData) ? current : response.toonTrackerData);
             if (!selectedToonIdRef.current) {
               setSelectedToonId(incomingId);
-              selectedToonIdRef.current = incomingId;
             }
           }
         }
@@ -815,6 +833,13 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     });
   }, [isExpanded, selectedToonId]);
 
+  const loadToonData = useCallback(async (toonId: string) => {
+    const response = await browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(toonId) });
+    if (response?.data && selectedToonIdRef.current === String(toonId)) {
+      setToonTrackerData(current => isDeepEqual(current, response.data) ? current : response.data);
+    }
+  }, []);
+
   const loadRewardHistory = useCallback(async (toonId: string) => {
     const response = await browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(toonId) });
     setRewardHistory(current => isDeepEqual(current, response?.history || []) ? current : (response?.history || []));
@@ -833,20 +858,24 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     });
     browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'last-id' }).then(res => {
       if (res?.lastId && !selectedToonIdRef.current) {
-        setSelectedToonId(String(res.lastId));
-        selectedToonIdRef.current = String(res.lastId);
-        browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: String(res.lastId) }).then(out => {
-          if (out?.data) setToonTrackerData(current => isDeepEqual(current, out.data) ? current : out.data);
-        });
+        const stringId = String(res.lastId);
+        setSelectedToonId(stringId);
+        loadToonData(stringId).catch(console.error);
+        loadRewardHistory(stringId).catch(console.error);
       }
     });
     startSync();
-  }, [startSync]);
+  }, [startSync, loadToonData, loadRewardHistory]);
 
   useEffect(() => {
-    if (!selectedToonId) { setRewardHistory([]); return; }
+    if (!selectedToonId) {
+      setRewardHistory([]);
+      setToonTrackerData(null);
+      return;
+    }
+    loadToonData(selectedToonId).catch(console.error);
     loadRewardHistory(selectedToonId).catch(console.error);
-  }, [selectedToonId, loadRewardHistory]);
+  }, [selectedToonId, loadToonData, loadRewardHistory]);
 
   const isDropdownOpenRef = useRef(false);
   useEffect(() => { isDropdownOpenRef.current = isDropdownOpen; }, [isDropdownOpen]);
@@ -887,7 +916,6 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const selectToon = useCallback((id: string | number) => {
     const stringId = String(id);
     setSelectedToonId(stringId);
-    selectedToonIdRef.current = stringId;
     browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: stringId }).then(response => {
       if (response?.data && selectedToonIdRef.current === stringId) {
         setToonTrackerData(current => isDeepEqual(current, response.data) ? current : response.data);

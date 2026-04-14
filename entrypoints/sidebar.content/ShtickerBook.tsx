@@ -2558,7 +2558,13 @@ function CloseBookButton({ onClick }: { onClick: () => void }) {
 
 // ─── ShtickerBook (root) ──────────────────────────────────────────────────────
 
-export function ShtickerBook() {
+export function ShtickerBook({
+  selectedToonId,
+  onToonSelect
+}: {
+  selectedToonId?: string | null;
+  onToonSelect?: (id: string | null) => void;
+}) {
   const CLOSE_ANIMATION_MS = 260;
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -2690,13 +2696,21 @@ export function ShtickerBook() {
                 {activeTab === 'boiler_calc' && <BoilerCalculator />}
                 {activeTab === 'cog_calc' && <CogCalculator />}
                 {activeTab === 'bosses' && (
-                  <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveBoss} />
+                  <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveFacility} />
                 )}
-                {activeTab === 'toon_tracker' && <ToonTrackerTab isExpanded={true} />}
+                {activeTab === 'toon_tracker' && (
+                  <ToonTrackerTab
+                    isExpanded={true}
+                    selectedToonId={selectedToonId}
+                    onToonSelect={onToonSelect}
+                  />
+                )}
                 {activeTab === 'reward_details' && (
                   <ToonTrackerTab
                     isExpanded={true}
                     initialSubView="rewards_detail"
+                    selectedToonId={selectedToonId}
+                    onToonSelect={onToonSelect}
                   />
                 )}
                 {activeTab === 'about' && <AboutTabContent />}

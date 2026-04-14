@@ -918,6 +918,8 @@ export function SidebarApp() {
   const [hoverSource, setHoverSource] = useState<'sidebar' | 'main' | null>(null);
   const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; height: number } | null>(null);
 
+  const [selectedToonId, setSelectedToonId] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     const [{ favorites: f, blocked: b }, groups, groupMembers, allNotes, ids] = await Promise.all([
       loadLists(),
@@ -1116,7 +1118,10 @@ export function SidebarApp() {
 
   return (
     <>
-      <ShtickerBook />
+      <ShtickerBook
+        selectedToonId={selectedToonId}
+        onToonSelect={setSelectedToonId}
+      />
 
 
       <div className="fixed top-0 right-0 z-[2147483647] flex h-screen max-h-screen flex-col items-end p-4 pointer-events-none overflow-hidden">
@@ -1178,7 +1183,12 @@ export function SidebarApp() {
             </div>
 
             <div className="flex-1 flex flex-col min-h-0 p-3">
-              {activeTab === 'tracker' && <ToonTrackerTab />}
+              {activeTab === 'tracker' && (
+                <ToonTrackerTab
+                  selectedToonId={selectedToonId}
+                  onToonSelect={setSelectedToonId}
+                />
+              )}
 
               {activeTab === 'toons' && (
                 <>
