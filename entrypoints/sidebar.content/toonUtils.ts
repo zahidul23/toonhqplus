@@ -78,7 +78,7 @@ export const getCogValueFromName = (name: string) => {
   const cleanName = name.replace(/<[^>]*>?/gm, ' ');
   if (cleanName.includes("2.0")) return 78;
 
-  const levelMatch = cleanName.match(/Level\s+(\d+)/i) || cleanName.match(/(\d+)$/);
+  const levelMatch = cleanName.match(/Level\s+(\d+)/i) || cleanName.match(/(\d+)\s*\)?$/);
   const level = levelMatch ? parseInt(levelMatch[1]) : 1;
 
   const offsets = {
@@ -92,16 +92,26 @@ export const getCogValueFromName = (name: string) => {
     "Big Wig": 28, "The Big Cheese": 28,
   };
 
+  const lowerName = cleanName.toLowerCase();
   for (const [cog, offset] of Object.entries(offsets)) {
-    if (cleanName.includes(cog)) {
+    if (lowerName.includes(cog.toLowerCase())) {
       return level + offset;
     }
   }
   return level;
 };
 
+export function bankersRound(num: number): number {
+  const half = Math.floor(num) + 0.5;
+  if (Math.abs(num - half) < 0.000001) {
+    const floor = Math.floor(num);
+    return (floor % 2 === 0) ? floor : floor + 1;
+  }
+  return Math.round(num);
+}
+
 export const getAverageSuitValue = (suitNames: string[]) => {
   if (suitNames.length === 0) return 0;
   const suitValues = suitNames.map(name => getCogValueFromName(name));
-  return Math.floor(suitValues.reduce((sum, value) => sum + value, 0) / suitValues.length);
+  return bankersRound(suitValues.reduce((sum, value) => sum + value, 0) / suitValues.length);
 };

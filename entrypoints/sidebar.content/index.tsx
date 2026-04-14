@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import { SidebarApp } from './SidebarApp';
-import { extractToonName, getCogValueFromName, getAverageSuitValue } from './toonUtils';
+import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
 import './style.css';
 import {
   openDB,
@@ -824,7 +824,7 @@ const getTooltipNoteForThreshold = (
 };
 
 const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bossKey: string, currentSum: number, currentCount: number) => {
-  const currentAvg = Math.floor(currentSum / currentCount);
+  const currentAvg = bankersRound(currentSum / currentCount);
   const lawyerRowsHtml = LAWYER_THRESHOLDS.map(threshold => {
     const isActive = tierData.lawyers === threshold.lawyerCount;
     const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);
@@ -856,7 +856,7 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
 };
 
 const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, bossKey: string, currentSum: number, currentCount: number) => {
-  const currentAvg = Math.floor(currentSum / currentCount);
+  const currentAvg = bankersRound(currentSum / currentCount);
   const rowsHtml = PINK_SLIP_THRESHOLDS.map(threshold => {
     const isActive = currentPinkSlips === threshold.slipCount;
     const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);

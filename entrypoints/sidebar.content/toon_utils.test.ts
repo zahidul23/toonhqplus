@@ -1,4 +1,4 @@
-import { getCogValueFromName, getAverageSuitValue, getGroupDisplayName, getGroupSimpleName } from './toonUtils';
+import { getCogValueFromName, getAverageSuitValue, getGroupDisplayName, getGroupSimpleName, bankersRound } from './toonUtils';
 
 /**
  * Simple test runner for ToonUtils.
@@ -7,6 +7,24 @@ import { getCogValueFromName, getAverageSuitValue, getGroupDisplayName, getGroup
 
 function runTests() {
   console.log('--- Running ToonUtils Tests ---');
+
+  const bankersRoundTests = [
+    { input: 0.5, expected: 0 },
+    { input: 1.5, expected: 2 },
+    { input: 2.5, expected: 2 },
+    { input: 3.5, expected: 4 },
+    { input: 62.5, expected: 62 },
+    { input: 63.5, expected: 64 },
+    { input: -0.5, expected: 0 },
+    { input: -1.5, expected: -2 },
+  ];
+
+  console.log('\n[bankersRound Tests]');
+  bankersRoundTests.forEach(({ input, expected }) => {
+    const actual = bankersRound(input);
+    const passed = actual === expected;
+    console.log(`${passed ? 'PASS' : 'FAIL'} | ${input} -> expected ${expected}, got ${actual}`);
+  });
 
   const cogValueTests = [
     { name: 'Bottom Feeder Level 5', expected: 5 },
@@ -31,11 +49,11 @@ function runTests() {
   const averageValueTests = [
     {
       names: ['Bottom Feeder Level 5', 'Pencil Pusher Level 10'],
-      expected: Math.round((5 + 14) / 2), // 19 / 2 = 9.5 -> 10
+      expected: 10, // 19 / 2 = 9.5 -> 10 (bankers round: 9 is odd, round to 10)
     },
     {
       names: ['The Big Cheese Level 50', 'Big Wig Level 45', 'Bottom Feeder Level 5'],
-      expected: Math.round((78 + 73 + 5) / 3), // 156 / 3 = 52
+      expected: 52, // 156 / 3 = 52
     },
     {
       names: [
@@ -48,7 +66,7 @@ function runTests() {
         'Corporate Raider Level 8',
         'The Big Cheese Level 12'
       ],
-      expected: 62, // 46 + 74 + 74 + 78 + 78 + 78 + 32 + 40 = 500 / 8 = 62.5 -> 62
+      expected: 62, // 500 / 8 = 62.5 -> 62 (bankers round: 62 is even, round to 62)
     },
     {
       names: [],
