@@ -1116,6 +1116,12 @@ export function SidebarApp() {
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (trackerEnabled !== true) return;
+    const port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
+    return () => port.disconnect();
+  }, [trackerEnabled]);
+
   return (
     <>
       <ShtickerBook

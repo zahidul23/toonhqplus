@@ -719,11 +719,6 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     };
   }, []);
 
-  useEffect(() => {
-    if (trackerEnabled === false) return;
-    const port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
-    return () => port.disconnect();
-  }, [trackerEnabled]);
 
   // Listen for background script updates
   useEffect(() => {
@@ -973,7 +968,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2 py-1">Categories</h3>
               <div className="space-y-1">
                 {REWARD_CATEGORIES_CONFIG.map((cat) => (
-                  <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${activeCategory === cat.id ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:bg-white/5 border border-transparent'}`}>
+                  <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`w-full cursor-pointer flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${activeCategory === cat.id ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:bg-white/5 border border-transparent'}`}>
                     <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${activeCategory === cat.id ? 'bg-emerald-500/20' : 'bg-black/20'}`}>
                       <img src={getExtensionImageUrl(`images/${cat.img}`)} className={`w-5 h-5 object-contain ${activeCategory === cat.id ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
                     </div>

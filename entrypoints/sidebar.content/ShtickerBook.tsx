@@ -2529,7 +2529,7 @@ function BookSidebar({
         </div>
       </div>
 
-      <div className="mt-auto pt-2 border-t border-emerald-800/50 pb-20">
+      {/* <div className="mt-auto pt-2 border-t border-emerald-800/50 pb-20">
         <button
           type="button"
           onClick={() => { onTabChange('about'); onFacilityChange(null); }}
@@ -2537,7 +2537,7 @@ function BookSidebar({
         >
           About
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }

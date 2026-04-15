@@ -9,22 +9,36 @@ export default defineBackground(() => {
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
   const failedPorts = new Set<string>();
   const connectingPorts = new Set<string>();
+  const activeClients = new Set<string>();
+  const TRACKER_ENABLED_KEY = 'tracker-enabled';
   let stopTimeout: ReturnType<typeof setTimeout> | null = null;
   let trackerEnabled: boolean | undefined = undefined;
+  let trackingInterval: ReturnType<typeof setInterval> | null = null;
+  let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
 
-  getSetting<boolean>('tracker-enabled').then(v => {
-    trackerEnabled = v;
+  async function isTrackerEnabled() {
+    const storedTrackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
+    if (storedTrackerEnabled !== true) {
+      return false;
+    }
+    const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
+    return tabs.length > 0;
+  }
+
+  async function initializeBackground() {
+    trackerEnabled = await isTrackerEnabled();
     if (trackerEnabled === true) {
       startAutoDiscover();
+      if (activeClients.size > 0) startTracking();
       // On boot attempt initial sync
       TRACKED_PORTS.forEach(port => {
         if (!connections.has(port)) {
           failedPorts.delete(port);
-          try { connectToPort(port); } catch(e) {}
+          try { connectToPort(port); } catch (e) { }
         }
       });
     }
-  });
+  }
 
   async function broadcastStatus() {
     const instances = Array.from(connections.entries()).map(([p, info]) => ({
@@ -39,7 +53,7 @@ export default defineBackground(() => {
     const primaryInfo = primaryPort ? connections.get(primaryPort) : null;
     const primaryData = primaryInfo?.data || null;
     const savedToons = await getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list') || [];
-    
+
     let rewardHistory: RewardHistoryEntry[] = [];
     if (primaryData?.data.toon.id) {
       rewardHistory = await getSetting<RewardHistoryEntry[]>(getRewardHistoryKey(primaryData.data.toon.id)) || [];
@@ -55,14 +69,14 @@ export default defineBackground(() => {
     };
 
     try {
-      browser.runtime.sendMessage(payload).catch(() => {});
+      browser.runtime.sendMessage(payload).catch(() => { });
       const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
       tabs.forEach(tab => {
         if (tab.id) {
-          browser.tabs.sendMessage(tab.id, payload).catch(() => {});
+          browser.tabs.sendMessage(tab.id, payload).catch(() => { });
         }
       });
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async function addNotifications(data: ToonTrackerData, changes: any[]) {
@@ -78,11 +92,11 @@ export default defineBackground(() => {
       timestamp: now,
       ...(change.metadata ? { metadata: change.metadata } : {}),
     }));
-    
+
     console.log(`[ToonTracker BG] Detected ${newEntries.length} new rewards for ${data.data.toon.name}`);
     const updated = pruneRewardHistory([...newEntries, ...history]);
     await setSetting(historyKey, updated);
-    
+
     if (primaryPort && connections.get(primaryPort)?.data?.data.toon.id === toonId) {
       broadcastStatus();
     }
@@ -94,7 +108,7 @@ export default defineBackground(() => {
       info.authorized = true;
       try {
         info.ws.send(JSON.stringify({ authorization: authKey, name: "ToonHQ Plus" }));
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 
@@ -127,13 +141,12 @@ export default defineBackground(() => {
 
       try {
         const msgData = JSON.parse(event.data);
-
         if (msgData.type === 'authorize') {
-            if (trackerEnabled === true) {
-                conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
-            }
+          if (trackerEnabled === true) {
+            conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
+          }
         }
-        
+
         if (msgData.event === 'all' && msgData.data?.toon) {
           const toonId = msgData.data.toon.id;
           const previousData = info.data;
@@ -165,7 +178,7 @@ export default defineBackground(() => {
           setSetting(`tracker-data-${toonId}`, msgData).catch(console.error);
           broadcastStatus();
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     conn.onclose = () => {
@@ -177,7 +190,7 @@ export default defineBackground(() => {
       }
       broadcastStatus();
     };
-    
+
     conn.onerror = () => {
       connectingPorts.delete(port);
       failedPorts.add(port);
@@ -185,8 +198,6 @@ export default defineBackground(() => {
     };
   }
 
-  let trackingInterval: ReturnType<typeof setInterval> | null = null;
-  const activeClients = new Set<string>();
 
   async function startTracking() {
     if (trackerEnabled !== true) return;
@@ -196,25 +207,24 @@ export default defineBackground(() => {
     }
     if (trackingInterval) return;
     console.log("[ToonTracker BG] Starting active tracking...");
-    
+
     TRACKED_PORTS.forEach(port => {
-       try { connectToPort(port); } catch(e) {}
+      try { connectToPort(port); } catch (e) { }
     });
-    
+
     trackingInterval = setInterval(() => {
       if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
         const info = connections.get(port);
         if (!info && !failedPorts.has(port)) {
-          try { connectToPort(port); } catch(e) {}
+          try { connectToPort(port); } catch (e) { }
         } else if (info && info.ws.readyState === WebSocket.OPEN && info.authorized) {
-          try { info.ws.send(JSON.stringify({ request: "all" })); } catch(e) {}
+          try { info.ws.send(JSON.stringify({ request: "all" })); } catch (e) { }
         }
       });
     }, 5000);
   }
 
-  let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
   function startAutoDiscover() {
     if (autoDiscoverInterval) return;
     autoDiscoverInterval = setInterval(() => {
@@ -222,7 +232,7 @@ export default defineBackground(() => {
       TRACKED_PORTS.forEach(port => {
         if (!connections.has(port)) {
           failedPorts.delete(port);
-          try { connectToPort(port); } catch (e) {}
+          try { connectToPort(port); } catch (e) { }
         }
       });
     }, 60000);
@@ -241,7 +251,7 @@ export default defineBackground(() => {
 
   function disconnectAll() {
     for (const [port, info] of connections.entries()) {
-      try { info.ws.close(); } catch(e) {}
+      try { info.ws.close(); } catch (e) { }
       connections.delete(port);
     }
     failedPorts.clear();
@@ -272,13 +282,14 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'TRACKER_PREF_CHANGED') {
       trackerEnabled = message.enabled;
+      setSetting(TRACKER_ENABLED_KEY, trackerEnabled).catch(console.error);
       if (trackerEnabled) {
         startAutoDiscover();
         if (activeClients.size > 0) startTracking();
         TRACKED_PORTS.forEach(port => {
           if (!connections.has(port)) {
             failedPorts.delete(port);
-            try { connectToPort(port); } catch (e) {}
+            try { connectToPort(port); } catch (e) { }
           } else {
             authorizePort(port, connections.get(port));
           }
@@ -293,14 +304,14 @@ export default defineBackground(() => {
     } else if (message.type === 'SYNC_GAMES') {
       if (trackerEnabled === true) {
         const portsToSync = message.port ? [message.port] : TRACKED_PORTS;
-        
+
         portsToSync.forEach(port => {
           failedPorts.delete(port);
           const info = connections.get(port);
           if (info && info.ws.readyState === WebSocket.OPEN) {
             authorizePort(port, info);
           } else if (!info) {
-             try { connectToPort(port); } catch(e) {}
+            try { connectToPort(port); } catch (e) { }
           }
         });
         broadcastStatus();
@@ -311,7 +322,7 @@ export default defineBackground(() => {
         TRACKED_PORTS.forEach(port => {
           if (!connections.has(port)) {
             failedPorts.delete(port);
-            try { connectToPort(port); } catch(e) {}
+            try { connectToPort(port); } catch (e) { }
           }
         });
       }
@@ -321,8 +332,8 @@ export default defineBackground(() => {
       sendResponse({ statusSent: true });
     } else if (message.type === 'SWITCH_PRIMARY_INSTANCE') {
       if (connections.has(message.port)) {
-          primaryPort = message.port;
-          broadcastStatus();
+        primaryPort = message.port;
+        broadcastStatus();
       }
       sendResponse({ switched: true });
     } else if (message.type === 'GET_TOON_DATA') {
@@ -357,6 +368,8 @@ export default defineBackground(() => {
       return true;
     }
   });
+
+  initializeBackground().catch(console.error);
 
   // Initial check handled by onConnect
 });
