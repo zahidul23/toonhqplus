@@ -367,7 +367,9 @@ const ToonHeader = React.memo(({
   </div>
 ));
 
-const SOSTableView = React.memo(({ sos }: { sos: Record<string, number> }) => {
+type SOSTableSort = 'default' | 'count';
+
+const SOSTableView = React.memo(({ sos, sortBy }: { sos: Record<string, number>; sortBy: SOSTableSort }) => {
   const sosGrid = [
     // ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
     // ['Soggy Nell', 'Mr. Freeze', 'Daffy Don', 'Clerk Penny', 'Nancy Gas', 'Sid Sonata', 'Franz Neckvein', 'Rocky'],
@@ -377,6 +379,23 @@ const SOSTableView = React.memo(({ sos }: { sos: Record<string, number> }) => {
     ['Sofie Squirt', 'Madam Chuckle', 'Clerk Will', 'Stinky Ned', 'Barbara Seville', 'Clumsy Ned', 'Soggy Bottom', 'Flim Flam'],
     ['Lord Lowden Clear', 'Professor Guffaw', 'Clerk Ray', 'Doctor Drift', 'Melody Wavers', 'Shelly Seaweed', 'Rocky', 'Loopy Loopenloop']
   ];
+
+  const cleanSosCounts = useMemo(() => Object.fromEntries(
+    Object.entries(sos).map(([name, count]) => [name.replace(/\u0003/g, ''), Number(count)])
+  ), [sos]);
+
+  const initialOrder = useMemo(() => sosGrid.flat(), [sosGrid]);
+  const sortedSosNames = useMemo(() => {
+    if (sortBy === 'count') {
+      return [...initialOrder].sort((a, b) => {
+        const countA = cleanSosCounts[a] || 0;
+        const countB = cleanSosCounts[b] || 0;
+        if (countA !== countB) return countB - countA;
+        return initialOrder.indexOf(a) - initialOrder.indexOf(b);
+      });
+    }
+    return initialOrder;
+  }, [cleanSosCounts, initialOrder, sortBy]);
 
   // Image mapping from CogCalculator.tsx
   const sosImages: Record<string, string> = {
@@ -420,7 +439,7 @@ const SOSTableView = React.memo(({ sos }: { sos: Record<string, number> }) => {
   return (
     <div className="flex flex-col gap-3 h-full overflow-y-auto custom-scrollbar p-2">
       <div className="grid grid-cols-4 xl:grid-cols-8 gap-3">
-        {sosGrid.flat().map(name => {
+        {sortedSosNames.map(name => {
           const count = Object.entries(sos).find(([n, _]) => n.replace(/\u0003/g, '') === name)?.[1] || 0;
           const image = sosImages[name] || '';
           const cardData = SOS_DATA[name] || { type: 'Unknown', starRating: 0 };
@@ -672,6 +691,8 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [subView, setSubView] = useState<'main' | 'rewards_detail'>(initialSubView);
   const [activeCategory, setActiveCategory] = useState<RewardCategory>(propCategory || 'sos');
+  const [sosSortBy, setSosSortBy] = useState<SOSTableSort>('default');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     tasks: true,
     suits: true,
@@ -683,6 +704,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
@@ -704,6 +726,18 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
       delete (window as any)._pendingRewardCategory;
     }
   }, [subView]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (isSortMenuOpen && sortMenuRef.current && !sortMenuRef.current.contains(target)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSortMenuOpen]);
 
   useEffect(() => {
     getSetting<boolean>('tracker-enabled').then(v => {
@@ -1000,10 +1034,49 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 <h3 className="text-xl font-black text-white uppercase tracking-widest">{REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
                 <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>
               </div>
-              {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
+              <div className="flex items-center gap-2">
+                {activeCategory === 'sos' && (
+                  <div className="relative inline-flex items-center" ref={sortMenuRef}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setIsSortMenuOpen(open => !open);
+                      }}
+                      className="cursor-pointer inline-flex items-center gap-2 rounded-full bg-[#081a0e] border border-emerald-500/20 px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-colors duration-200 hover:border-emerald-300/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/20"
+                    >
+                      <span className="text-white/40">Sort by</span>
+                      <span>{sosSortBy === 'count' ? 'SOS Count' : 'Default'}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/50 transition-transform ${isSortMenuOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                    {isSortMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-44 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#081a0e] shadow-2xl z-[150] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex flex-col gap-2 p-2">
+                          <button
+                            type="button"
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setSosSortBy('default'); setIsSortMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${sosSortBy === 'default' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                          >
+                            Default
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setSosSortBy('count'); setIsSortMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${sosSortBy === 'count' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                          >
+                            SOS Count
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-              {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} />}
+              {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} sortBy={sosSortBy} />}
               {activeCategory === 'unites' && (
                 <div className="flex gap-x-12 h-full overflow-y-auto custom-scrollbar pr-4">
                   {/* Left Column: Toon-Up and Jellybeans */}
