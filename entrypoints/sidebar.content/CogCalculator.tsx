@@ -625,6 +625,13 @@ const FACILITY_PRESETS = [
   { name: "Fringe Course", bossId: 'golf_fringe', cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: true }, { id: '12', isV2: true }] },
 ];
 
+const DEFAULT_COGS: Cog[] = [
+  { id: '11', isTrapped: false, isLured: false, isV2: false },
+  { id: '12', isTrapped: false, isLured: false, isV2: false },
+  { id: '13', isTrapped: false, isLured: false, isV2: false },
+  { id: '14', isTrapped: false, isLured: false, isV2: false },
+];
+
 export function CogCalculator() {
   const [cogs, setCogs] = useState<Cog[]>(() => {
     const saved = localStorage.getItem('cog-calc-cogs');
@@ -635,12 +642,7 @@ export function CogCalculator() {
         console.error("Failed to parse saved cogs", e);
       }
     }
-    return [
-      { id: '12', isTrapped: false, isLured: false, isV2: false },
-      { id: '12', isTrapped: false, isLured: false, isV2: false },
-      { id: '12', isTrapped: false, isLured: false, isV2: false },
-      { id: '12', isTrapped: false, isLured: false, isV2: false },
-    ];
+    return DEFAULT_COGS.map(c => ({ ...c }));
   });
 
   const [selectedGagsByRound, setSelectedGagsByRound] = useState<SelectedGag[][]>(() => {
@@ -1250,6 +1252,7 @@ export function CogCalculator() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      setCogs(DEFAULT_COGS.map(c => ({ ...c })));
                       setActivePreset(null);
                       setPresetMenuOpen(false);
                     }}
