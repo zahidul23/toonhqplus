@@ -1,6 +1,6 @@
 import type { ToonTrackerData } from './tracker';
 
-export type RewardCategory = 'sos' | 'unites' | 'summons' | 'pinkslips' | 'remotes';
+export type RewardCategory = 'sos' | 'unites' | 'summons' | 'pinkslips' | 'remotes' | 'analytics';
 
 export type RewardChange = {
   type: RewardCategory;

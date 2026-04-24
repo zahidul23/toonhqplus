@@ -83,7 +83,7 @@ const REWARD_CATEGORIES_CONFIG = [
   { id: 'unites', label: 'Unites', img: 'unites.png' },
   { id: 'summons', label: 'Cog Summons', img: 'summons.png' },
   { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.png' },
-  { id: 'remotes', label: 'Remotes', img: 'remotes.png' },
+  { id: 'remotes', label: 'Remotes', img: 'remotes.png' }
 ] as const;
 
 const RewardMessage = React.memo(({ entry }: { entry: RewardHistoryEntry }) => {
@@ -652,6 +652,204 @@ const EmptyRewardState = React.memo(() => {
     </div>
   );
 });
+
+const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] }) => {
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - ONE_WEEK_MS;
+  const weeklyRewards = history.filter(h => h.timestamp >= cutoff);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const stats = useMemo(() => {
+    const data: Record<RewardCategory, { clears: number; items: number; list: Record<string, number> }> = {
+      sos: { clears: 0, items: 0, list: {} },
+      unites: { clears: 0, items: 0, list: {} },
+      summons: { clears: 0, items: 0, list: {} },
+      pinkslips: { clears: 0, items: 0, list: {} },
+      remotes: { clears: 0, items: 0, list: {} }
+    };
+
+    const groups = groupRewardHistory(weeklyRewards);
+    groups.forEach(group => {
+      const categoriesInGroup = new Set<RewardCategory>();
+      group.entries.forEach(entry => {
+        if (data[entry.category]) {
+          categoriesInGroup.add(entry.category);
+          const amount = entry.amount || 1;
+          data[entry.category].items += amount;
+
+          let itemName = entry.item || entry.message || 'Unknown Item';
+          if (entry.category === 'summons' && entry.metadata?.summonType) {
+            itemName = `${entry.item} (${entry.metadata.summonType})`;
+          } else if (entry.category === 'remotes' && entry.metadata?.remoteLevel) {
+            itemName = `${entry.metadata.remoteLevel}★ ${entry.metadata.remoteType?.replace(' Remote', '')}`;
+          }
+
+          data[entry.category].list[itemName] = (data[entry.category].list[itemName] || 0) + amount;
+        }
+      });
+      categoriesInGroup.forEach(cat => data[cat].clears++);
+    });
+    return data;
+  }, [weeklyRewards]);
+
+  const totalClears = Object.values(stats).reduce((a, b) => a + b.clears, 0);
+
+  const CATEGORIES_CONFIG = [
+    { id: 'sos', boss: 'VP', label: 'SOS Cards', singular: 'SOS Card', color: '#a855f7' },    // Saturated Purple
+    { id: 'unites', boss: 'CFO', label: 'Unites', singular: 'Unite', color: '#22c55e' },    // Saturated Green
+    { id: 'summons', boss: 'CJ', label: 'Summons', singular: 'Summon', color: '#3b82f6' }, // Saturated Blue
+    { id: 'pinkslips', boss: 'CEO', label: 'Pink Slips', singular: 'Pink Slip', color: '#f59e0b' }, // Saturated Amber/Brown
+    { id: 'remotes', boss: 'FO', label: 'Remotes', singular: 'Remote', color: '#ef4444' },     // Saturated Red
+  ];
+
+  const chartData = useMemo(() => {
+    let currentAngle = 0;
+    return CATEGORIES_CONFIG.map(cat => {
+      const s = stats[cat.id as RewardCategory];
+      const percentage = totalClears > 0 ? (s.clears / totalClears) * 100 : 0;
+      const startAngle = currentAngle;
+      const sweepAngle = (percentage / 100) * 360;
+      currentAngle += sweepAngle;
+      return { ...cat, clears: s.clears, items: s.items, list: s.list, percentage, startAngle, sweepAngle };
+    });
+  }, [stats, totalClears]);
+
+  const getArcPath = (startAngle: number, sweepAngle: number) => {
+    if (sweepAngle >= 360) sweepAngle = 359.99;
+    const radius = 42;
+    const center = 60;
+    const startRad = (startAngle * Math.PI) / 180;
+    const endRad = ((startAngle + sweepAngle) * Math.PI) / 180;
+
+    const x1 = center + radius * Math.cos(startRad);
+    const y1 = center + radius * Math.sin(startRad);
+    const x2 = center + radius * Math.cos(endRad);
+    const y2 = center + radius * Math.sin(endRad);
+
+    const largeArc = sweepAngle > 180 ? 1 : 0;
+
+    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
+  };
+
+  if (totalClears === 0) return (
+    <div className="h-full flex flex-col items-center justify-center gap-4 opacity-30">
+      <div className="w-32 h-32 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /><path d="M22 12A10 10 0 0 0 12 2v10z" /></svg>
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-black uppercase tracking-[0.2em]">No clears recorded in the past week</p>
+        <p className="text-[10px] mt-1 italic">Complete boss battles to see your distribution!</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="h-full w-full flex flex-row items-center justify-center gap-12 lg:gap-24 animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
+      {/* Left: Static Pie Chart */}
+      <div className="relative w-80 h-80 shrink-0 flex items-center justify-center">
+        <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90 overflow-visible">
+          {chartData.filter(d => d.sweepAngle > 0).map((d) => {
+            const isHovered = hoveredId === d.id || expandedId === d.id;
+            const strokeWidth = 16;
+
+            return (
+              <path
+                key={d.id}
+                d={getArcPath(d.startAngle, d.sweepAngle)}
+                fill="none"
+                stroke={d.color}
+                strokeWidth={isHovered ? strokeWidth + 4 : strokeWidth}
+                strokeLinecap="butt"
+                className="transition-all duration-300 ease-out cursor-pointer opacity-85 hover:opacity-100"
+                style={{
+                  filter: isHovered ? `drop-shadow(0 0 3px ${d.color})` : 'none',
+                  pointerEvents: 'stroke'
+                }}
+                onMouseEnter={() => setHoveredId(d.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+              />
+            );
+          })}
+        </svg>
+
+        <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center justify-center pointer-events-none">
+          <div className="text-4xl font-black text-white tabular-nums leading-none tracking-tighter drop-shadow-lg">{totalClears}</div>
+          <div className="text-[9px] font-black uppercase tracking-widest text-white/30 mt-1.5">Total Clears</div>
+        </div>
+      </div>
+
+      {/* Right: Scrollable Legend */}
+      <div className="flex-1 h-full max-w-lg flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 py-8">
+          <div className="flex flex-col gap-3 min-h-full justify-center">
+            {chartData.filter(d => d.clears > 0).sort((a, b) => b.clears - a.clears).map(cat => {
+              const isHovered = hoveredId === cat.id;
+              const isExpanded = expandedId === cat.id;
+              return (
+                <div
+                  key={cat.id}
+                  className={`flex flex-col rounded-2xl transition-all duration-300 border overflow-hidden shrink-0 ${isExpanded ? 'bg-white/[0.06] border-white/20 shadow-xl' : 'bg-white/[0.03] border-white/5 opacity-85'}`}
+                >
+                  <div
+                    className="flex items-center gap-4 p-4 cursor-pointer"
+                    onMouseEnter={() => setHoveredId(cat.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    onClick={() => setExpandedId(isExpanded ? null : cat.id)}
+                  >
+                    <div className="w-4 h-4 rounded-full shrink-0 shadow-lg" style={{ backgroundColor: cat.color, boxShadow: (isHovered || isExpanded) ? `0 0 8px ${cat.color}` : 'none' }} />
+                    <div className="flex-1 flex flex-col gap-0.5">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-white uppercase tracking-wider">{cat.boss}</span>
+                          <div className="w-1 h-1 rounded-full bg-white/20" />
+                          <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">{cat.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col items-end">
+                            <span className="text-sm font-black text-white tabular-nums">{cat.clears} <span className="text-[9px] text-white/30 ml-0.5">{(cat.clears === 1 ? 'Clear' : 'Clears').toUpperCase()}</span></span>
+                            <span className="text-[10px] font-bold text-emerald-400/70 tabular-nums">{cat.items} <span className="text-[8px] opacity-60 uppercase">{cat.items === 1 ? cat.singular : cat.label}</span></span>
+                          </div>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+                        </div>
+                      </div>
+                      <div className="w-full h-1.5 bg-black/40 rounded-full mt-2 overflow-hidden relative">
+                        <div
+                          className="h-full rounded-full transition-all duration-1000 ease-out"
+                          style={{
+                            width: `${cat.percentage}%`,
+                            backgroundColor: cat.color,
+                            boxShadow: `0 0 8px ${cat.color}`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded Reward List */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-300">
+                      <div className="bg-black/40 rounded-xl border border-white/5 p-3 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                        {/* <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Rewards List</div> */}
+                        {Object.entries(cat.list).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                          <div key={name} className="flex justify-between items-center py-1.5 px-3 rounded-lg bg-white/[0.03] border border-white/5 group/rewitem font-bold">
+                            <span className="text-[12px] text-white/70 group-hover/rewitem:text-white transition-colors">{name}</span>
+                            <span className="text-[12px] text-white/90 tabular-nums">x{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export const ToonTrackerTab = React.memo(function ToonTrackerTab({
@@ -702,6 +900,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [showRewardPieChart, setShowRewardPieChart] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
@@ -1012,10 +1211,16 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 ))}
               </div>
             </div>
-            <div className="flex-1 flex flex-col min-h-0 bg-slate-950/30 rounded-xl border border-sky-200/10 overflow-hidden">
-              <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3 shrink-0">
+            <div
+              onClick={() => setActiveCategory('analytics')}
+              className="flex-1 flex flex-col min-h-0 rounded-xl border bg-slate-950/45 border-sky-200/10 cursor-pointer group/rewardhistory"
+            >
+              <div className="px-3 py-2 border-b border-white/5 flex items-center justify-between gap-3 shrink-0 ">
                 <div className="text-[10px] font-black uppercase tracking-widest text-sky-100/45">Recent Rewards</div>
-                {rewardHistory.length > 0 && <div className="text-[11px] text-white/30">{`${rewardHistory.length} items`}</div>}
+                <div className="flex items-center gap-2">
+                  {rewardHistory.length > 0 && <div className="text-[11px] text-white/30">{`${rewardHistory.length} items`}</div>}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-all ${activeCategory === 'analytics' ? 'text-emerald-400 translate-x-0 opacity-100' : 'text-white/20 opacity-0 -translate-x-2 group-hover/rewardhistory:translate-x-0 group-hover/rewardhistory:opacity-100'}`}><polyline points="9 18 15 12 9 6" /></svg>
+                </div>
               </div>
               {allGroups.length > 0 ? (
                 <div className="flex-1 divide-y divide-white/[0.06] overflow-y-auto custom-scrollbar">
@@ -1028,11 +1233,11 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               )}
             </div>
           </div>
-          <div className="flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+          <div className="flex-1 flex flex-col min-w-0 bg-slate-950/40 rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
               <div className="flex items-center gap-3">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">{REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
-                <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">{activeCategory === 'analytics' ? 'Recent Rewards - Past 7 Days' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
+                {activeCategory !== 'analytics' && <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>}
               </div>
               <div className="flex items-center gap-2">
                 {activeCategory === 'sos' && (
@@ -1075,7 +1280,14 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+            <div className={`flex-1 ${activeCategory === 'analytics' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'} p-6`}>
+              {activeCategory === 'analytics' && (
+                <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500">
+                  <div className="w-full h-full max-w-4xl mx-auto">
+                    <RewardPieChart history={rewardHistory} />
+                  </div>
+                </div>
+              )}
               {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} sortBy={sosSortBy} />}
               {activeCategory === 'unites' && (
                 <div className="flex gap-x-12 h-full overflow-y-auto custom-scrollbar pr-4">
@@ -1175,8 +1387,18 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         {trackerEnabled === true && toonTrackerData ? (
           <div className={`animate-in fade-in slide-in-from-bottom-2 duration-300 ${isExpanded ? 'grid grid-cols-[320px_1fr] gap-4' : 'flex flex-col gap-4'}`}>
             <div className="flex flex-col gap-4">
-              <div onClick={() => isExpanded && setSubView('rewards_detail')} className={`space-y-2 rounded-xl bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] h-full ${isExpanded ? 'cursor-pointer hover:brightness-125 transition-all group/rewcard border border-white/5 hover:border-emerald-500/30' : ''}`}>
-                <button onClick={(e) => { if (isExpanded) { e.stopPropagation(); setSubView('rewards_detail'); } else { toggleSection('rewards'); } }} className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer">
+              <div
+                onClick={(e) => {
+                  if (isExpanded) {
+                    e.stopPropagation();
+                    window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
+                      detail: { tab: 'reward_details', category: 'analytics' }
+                    }));
+                  }
+                }}
+                className={`space-y-2 rounded-xl bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] h-full ${isExpanded ? 'cursor-pointer hover:brightness-125 transition-all group/rewcard border border-white/5 hover:border-emerald-500/30' : ''}`}
+              >
+                <button onClick={() => toggleSection('rewards')} className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Rewards {isExpanded && <span className="text-[8px] text-emerald-400/60 ml-2 opacity-0 group-hover/rewcard:opacity-100 transition-opacity">(View Detailed)</span>}</h4>
                   {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.rewards ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
                 </button>
@@ -1236,7 +1458,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                             onClick={(e) => {
                               e.stopPropagation();
                               window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
-                                detail: { tab: 'reward_details', category: activeCategory }
+                                detail: { tab: 'reward_details', category: 'analytics' }
                               }));
                             }}
                             className="text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors"
