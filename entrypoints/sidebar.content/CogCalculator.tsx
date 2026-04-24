@@ -367,6 +367,7 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColo
 
   return (
     <div className="flex gap-1 h-10 items-center">
+      {mode === 'sos' && items.length > 0 && <div className="w-px h-8 bg-white/10 mx-1" />}
       {items.map((gag: any, idx: number) => {
         const itemIdx = isBase ? idx : gag.gagIndex;
         const variant = isBase ? 'base' : 'sos';
@@ -413,30 +414,35 @@ function SpecialGagColumn({ mode, onSelectGag, cogs, cogDamages, getHealthColor,
   return (
     <div className="flex flex-col gap-2">
       {isPinkSlip ? (
-        <GagButton
-          imageSrc={specialGags[0].image}
-          imageAlt="Pink Slip"
-          color="#8b5cf6"
-          title="Pink Slip"
-          onClick={(e: any) => handleGagClick(e, 0)}
-          targetPopup={<TargetPopup trackId="special" gagIndex={0} variant="sos" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
-        />
+        <div className="flex items-center gap-1">
+          <div className="w-px h-8 bg-white/10 mx-1" />
+          <GagButton
+            imageSrc={specialGags[0].image}
+            imageAlt="Pink Slip"
+            color="#8b5cf6"
+            title="Pink Slip"
+            onClick={(e: any) => handleGagClick(e, 0)}
+            targetPopup={<TargetPopup trackId="special" gagIndex={0} variant="sos" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
+          />
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
           {[1, 4].map(idx => (
-            <GagButton
-              key={idx}
-              imageSrc={specialGags[idx].image}
-              imageAlt={idx === 1 ? "Damage Remote" : "Heal Remote"}
-              color="#8b5cf6"
-              title={idx === 1 ? "Damage Remote" : "Heal Remote"}
-              onClick={(e: any) => handleGagClick(e, idx)}
-              targetPopup={
-                activePopup?.trackId === 'special' && [idx, idx + 1, idx + 2].includes(activePopup.gagIndex) && activePopup.subType !== 'stars'
-                  ? <TargetPopup trackId="special" gagIndex={activePopup.gagIndex} variant="sos" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />
-                  : <RemoteStarsPopup gagIndex={idx} activePopup={activePopup} setActivePopup={setActivePopup} />
-              }
-            />
+            <div key={idx} className="flex items-center gap-1">
+              <div className="w-px h-8 bg-white/10 mx-1" />
+              <GagButton
+                imageSrc={specialGags[idx].image}
+                imageAlt={idx === 1 ? "Damage Remote" : "Heal Remote"}
+                color="#8b5cf6"
+                title={idx === 1 ? "Damage Remote" : "Heal Remote"}
+                onClick={(e: any) => handleGagClick(e, idx)}
+                targetPopup={
+                  activePopup?.trackId === 'special' && [idx, idx + 1, idx + 2].includes(activePopup.gagIndex) && activePopup.subType !== 'stars'
+                    ? <TargetPopup trackId="special" gagIndex={activePopup.gagIndex} variant="sos" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />
+                    : <RemoteStarsPopup gagIndex={idx} activePopup={activePopup} setActivePopup={setActivePopup} />
+                }
+              />
+            </div>
           ))}
         </div>
       )}
@@ -1400,15 +1406,13 @@ export function CogCalculator() {
         <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
           <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
           <div className="bg-black/20 rounded-lg p-4 border border-white/5 gag-picker-container">
-            <div className="flex gap-2 items-start min-w-max">
+            <div className="flex gap-1 items-start min-w-max">
               {/* Column 1: Gags */}
               <div className="flex flex-col gap-2">
                 {gagTracks.map(track => (
                   <GagTrackRow key={track.id} track={track} mode="base" onSelectGag={handleSelectGag} cogs={activeRound === 0 ? cogs : activeStats.finalCogs} cogDamages={activeStats.cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
-
-              <div className="w-px h-full bg-white/5 self-stretch" />
 
               {/* Column 2: SOS */}
               <div className="flex flex-col gap-2">
@@ -1417,14 +1421,10 @@ export function CogCalculator() {
                 ))}
               </div>
 
-              <div className="w-px h-full bg-white/5 self-stretch" />
-
               {/* Column 3: Remotes */}
               <div className="flex flex-col gap-2">
                 <SpecialGagColumn mode="remotes" onSelectGag={handleSelectGag} cogs={activeRound === 0 ? cogs : activeStats.finalCogs} cogDamages={activeStats.cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
               </div>
-
-              <div className="w-px h-full bg-white/5 self-stretch" />
 
               {/* Column 4: Pink Slips */}
               <div className="flex flex-col gap-2">

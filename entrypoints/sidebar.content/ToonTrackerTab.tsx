@@ -1226,7 +1226,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                     })()}
                   </div>
                 )}
-                {expandedSections.rewards && (
+                {(expandedSections.rewards || isExpanded) && (
                   <div className="animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="bg-slate-950/30 rounded-lg border border-sky-200/10 overflow-hidden">
                       <div className="px-3 py-2 bg-white/[0.04] border-b border-white/5 flex items-center justify-between gap-3">
@@ -1264,7 +1264,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Cog Suits</h4>
                   {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.suits ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
                 </button>
-                {expandedSections.suits && (
+                {(expandedSections.suits || isExpanded) && (
                   <div className={`animate-in fade-in slide-in-from-top-1 duration-200 ${isExpanded ? 'grid grid-cols-2 gap-3' : 'space-y-3'}`}>
                     {Object.entries(toonTrackerData.data.cogsuits || {}).filter(([_, suit]) => suit.hasDisguise).map(([id, suit]) => {
                       const dept = suit.department.toLowerCase().replace('bot', '');
@@ -1356,7 +1356,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">ToonTasks</h4>
                   {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.tasks ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
                 </button>
-                {expandedSections.tasks && (
+                {(expandedSections.tasks || isExpanded) && (
                   <div className={`animate-in fade-in slide-in-from-top-1 duration-200 ${isExpanded ? 'grid grid-cols-2 gap-4' : 'flex flex-col gap-2'}`}>
                     {toonTrackerData?.data?.tasks && toonTrackerData.data.tasks.length > 0 ? toonTrackerData.data.tasks.map((task: any, i: number) => {
                       const progress = (task.objective.progress.current / task.objective.progress.target) * 100;
