@@ -738,8 +738,8 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /><path d="M22 12A10 10 0 0 0 12 2v10z" /></svg>
       </div>
       <div className="text-center">
-        <p className="text-sm font-black uppercase tracking-[0.2em]">No clears recorded in the past week</p>
-        <p className="text-[10px] mt-1 italic">Complete boss battles to see your distribution!</p>
+        <p className="text-sm font-black text-white uppercase tracking-[0.2em]">No clears recorded in the past week</p>
+        <p className="text-[12px] text-white/50 mt-1 italic">Complete boss battles to see your analytics!</p>
       </div>
     </div>
   );
@@ -807,9 +807,10 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
                           <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">{cat.label}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <div className="flex flex-col items-end">
-                            <span className="text-sm font-black text-white tabular-nums">{cat.clears} <span className="text-[9px] text-white/30 ml-0.5">{(cat.clears === 1 ? 'Clear' : 'Clears').toUpperCase()}</span></span>
-                            <span className="text-[10px] font-bold text-emerald-400/70 tabular-nums">{cat.items} <span className="text-[8px] opacity-60 uppercase">{cat.items === 1 ? cat.singular : cat.label}</span></span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-white tabular-nums">{cat.clears} <span className="text-[9px] text-white/30 ml-0.5 uppercase">{(cat.clears === 1 ? 'Clear' : 'Clears').toUpperCase()}</span></span>
+                            <div className="w-1 h-1 rounded-full bg-white/20" />
+                            <span style={{ color: cat.color }} className="text-sm font-black text-emerald-400/70 tabular-nums">{cat.items} <span className="text-[9px] opacity-60 ml-0.5 uppercase">{cat.items === 1 ? cat.singular : cat.label}</span></span>
                           </div>
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
                         </div>

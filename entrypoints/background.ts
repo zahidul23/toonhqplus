@@ -1,5 +1,5 @@
 import { getSetting, setSetting } from './sidebar.content/db';
-import { checkRewards, getRewardHistoryKey, pruneRewardHistory } from './sidebar.content/trackerUtils';
+import { checkRewards, getRewardHistoryKey, pruneRewardHistory, isDeepEqual } from './sidebar.content/trackerUtils';
 import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardHistoryEntry } from './sidebar.content/trackerUtils';
 
@@ -40,7 +40,9 @@ export default defineBackground(() => {
     }
   }
 
-  async function broadcastStatus() {
+  let broadcastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  async function _broadcastStatus() {
     const instances = Array.from(connections.entries()).map(([p, info]) => ({
       port: p,
       toonName: info.data?.data.toon.name || 'Unknown Toon',
@@ -77,6 +79,13 @@ export default defineBackground(() => {
         }
       });
     } catch (e) { }
+  }
+
+  function broadcastStatus() {
+    if (broadcastTimeout) clearTimeout(broadcastTimeout);
+    broadcastTimeout = setTimeout(() => {
+      _broadcastStatus().catch(() => {});
+    }, 100);
   }
 
   async function addNotifications(data: ToonTrackerData, changes: any[]) {
@@ -150,6 +159,11 @@ export default defineBackground(() => {
         if (msgData.event === 'all' && msgData.data?.toon) {
           const toonId = msgData.data.toon.id;
           const previousData = info.data;
+
+          if (previousData && isDeepEqual(previousData.data, msgData.data)) {
+            return;
+          }
+
           info.data = msgData;
 
           getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(prev => {
@@ -371,5 +385,20 @@ export default defineBackground(() => {
 
   initializeBackground().catch(console.error);
 
-  // Initial check handled by onConnect
+  // Add installation/update listener to reload toonhq tabs
+  browser.runtime.onInstalled.addListener(async (details) => {
+    if (details.reason === 'update' || details.reason === 'install') {
+      try {
+        const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
+        tabs.forEach(tab => {
+          if (tab.id) {
+            browser.tabs.reload(tab.id).catch(() => {});
+          }
+        });
+      } catch (e) {
+        console.error('[ToonTracker BG] Error reloading tabs on update/install:', e);
+      }
+    }
+  });
+
 });
