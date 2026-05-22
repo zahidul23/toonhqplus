@@ -1,9 +1,16 @@
 #root {
-  width: 375px;
+  width: 450px;
   margin: 0 auto;
   padding: 1.25rem;
   text-align: left;
   background-color: #1a1a1a;
+  box-sizing: border-box;
+}
+
+.actions-container {
+  display: flex;
+  gap: 1.2rem;
+  justify-content: center;
 }
 
 .popup-container {
@@ -128,4 +135,115 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+/* Settings Card styling */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.settings-title {
+  font-size: 0.85rem;
+  color: #888;
+  margin: 0 0 0.8rem 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.3rem;
+}
+
+.settings-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+  margin-bottom: 1.2rem;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.settings-desc {
+  font-size: 0.75rem;
+  color: #ddd;
+  margin: 0.5rem 0 0 0;
+  line-height: 1.4;
+}
+
+.settings-warning {
+  font-size: 0.65rem;
+  color: #aaa;
+  margin: 0.5rem 0 0 0;
+  line-height: 1.4;
+}
+
+/* Toggle Switch Styles */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #444;
+  transition: .3s;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+input:checked+.slider {
+  background-color: #2c6eb5;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 8px rgba(44, 110, 181, 0.4);
+}
+
+input:focus+.slider {
+  box-shadow: 0 0 1px #2c6eb5;
+}
+
+input:checked+.slider:before {
+  transform: translateX(20px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 20px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
 }

@@ -9,27 +9,24 @@ export default defineBackground(() => {
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
   const failedPorts = new Set<string>();
   const connectingPorts = new Set<string>();
-  const activeClients = new Set<string>();
   const TRACKER_ENABLED_KEY = 'tracker-enabled';
-  let stopTimeout: ReturnType<typeof setTimeout> | null = null;
   let trackerEnabled: boolean | undefined = undefined;
   let trackingInterval: ReturnType<typeof setInterval> | null = null;
   let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
+  let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 
   async function isTrackerEnabled() {
     const storedTrackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
-    if (storedTrackerEnabled !== true) {
-      return false;
-    }
-    const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
-    return tabs.length > 0;
+    return storedTrackerEnabled === true;
   }
 
   async function initializeBackground() {
+    console.log("Inititalizing");
     trackerEnabled = await isTrackerEnabled();
     if (trackerEnabled === true) {
+      console.log("tracker enabled");
       startAutoDiscover();
-      if (activeClients.size > 0) startTracking();
+      startTracking();
       // On boot attempt initial sync
       TRACKED_PORTS.forEach(port => {
         if (!connections.has(port)) {
@@ -84,7 +81,7 @@ export default defineBackground(() => {
   function broadcastStatus() {
     if (broadcastTimeout) clearTimeout(broadcastTimeout);
     broadcastTimeout = setTimeout(() => {
-      _broadcastStatus().catch(() => {});
+      _broadcastStatus().catch(() => { });
     }, 100);
   }
 
@@ -215,10 +212,6 @@ export default defineBackground(() => {
 
   async function startTracking() {
     if (trackerEnabled !== true) return;
-    if (stopTimeout) {
-      clearTimeout(stopTimeout);
-      stopTimeout = null;
-    }
     if (trackingInterval) return;
     console.log("[ToonTracker BG] Starting active tracking...");
 
@@ -227,6 +220,7 @@ export default defineBackground(() => {
     });
 
     trackingInterval = setInterval(() => {
+      console.log("[ToonTracker BG] Sending all request...");
       if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
         const info = connections.get(port);
@@ -237,6 +231,13 @@ export default defineBackground(() => {
         }
       });
     }, 5000);
+
+    if (!keepAliveInterval) {
+      keepAliveInterval = setInterval(() => {
+        console.log("[ToonTracker BG] Keep alive check: " + new Date().toLocaleTimeString());
+        browser.storage.local.set({ _keepAlive: Date.now() }).catch(() => { });
+      }, 10000);
+    }
   }
 
   function startAutoDiscover() {
@@ -261,6 +262,10 @@ export default defineBackground(() => {
     console.log("[ToonTracker BG] No active clients, stopping tracker...");
     clearInterval(trackingInterval);
     trackingInterval = null;
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
   }
 
   function disconnectAll() {
@@ -274,22 +279,7 @@ export default defineBackground(() => {
 
   browser.runtime.onConnect.addListener((port) => {
     if (port.name === 'toonhqplus-tracker') {
-      const clientId = Math.random().toString(36).substring(2);
-      activeClients.add(clientId);
       if (trackerEnabled === true) startTracking();
-
-      port.onDisconnect.addListener(() => {
-        activeClients.delete(clientId);
-        if (activeClients.size === 0) {
-          if (stopTimeout) clearTimeout(stopTimeout);
-          stopTimeout = setTimeout(() => {
-            if (activeClients.size === 0) {
-              stopTracking();
-            }
-            stopTimeout = null;
-          }, 10000);
-        }
-      });
     }
   });
 
@@ -297,9 +287,19 @@ export default defineBackground(() => {
     if (message.type === 'TRACKER_PREF_CHANGED') {
       trackerEnabled = message.enabled;
       setSetting(TRACKER_ENABLED_KEY, trackerEnabled).catch(console.error);
+
+      // Broadcast setting change to all other open tabs
+      browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] }).then(tabs => {
+        tabs.forEach(tab => {
+          if (tab.id) {
+            browser.tabs.sendMessage(tab.id, { type: 'TRACKER_PREF_CHANGED', enabled: message.enabled }).catch(() => { });
+          }
+        });
+      }).catch(console.error);
+
       if (trackerEnabled) {
         startAutoDiscover();
-        if (activeClients.size > 0) startTracking();
+        startTracking();
         TRACKED_PORTS.forEach(port => {
           if (!connections.has(port)) {
             failedPorts.delete(port);
@@ -315,6 +315,8 @@ export default defineBackground(() => {
       }
       broadcastStatus();
       sendResponse({ received: true });
+    } else if (message.type === 'GET_TRACKER_PREF') {
+      sendResponse({ enabled: trackerEnabled });
     } else if (message.type === 'SYNC_GAMES') {
       if (trackerEnabled === true) {
         const portsToSync = message.port ? [message.port] : TRACKED_PORTS;
@@ -383,7 +385,14 @@ export default defineBackground(() => {
     }
   });
 
-  initializeBackground().catch(console.error);
+  browser.runtime.onStartup.addListener(() => {
+    initializeBackground().catch(console.error);
+  });
+
+  browser.runtime.onInstalled.addListener((details) => {
+    console.log(details);
+    initializeBackground().catch(console.error);
+  });
 
   // Add installation/update listener to reload toonhq tabs
   browser.runtime.onInstalled.addListener(async (details) => {
@@ -392,7 +401,7 @@ export default defineBackground(() => {
         const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
         tabs.forEach(tab => {
           if (tab.id) {
-            browser.tabs.reload(tab.id).catch(() => {});
+            browser.tabs.reload(tab.id).catch(() => { });
           }
         });
       } catch (e) {

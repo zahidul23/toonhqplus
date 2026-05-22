@@ -6,6 +6,24 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.3',
+    date: 'May 22, 2026',
+    changes: [
+      'Allow setting Toon Tracker settings from the extension popup',
+      'Allow Toon Tracker to connect as long as browser is open',
+      'Update colors on Toon Tracker rewards',
+      'Show recent rewards stats for past day, 7 days and 30 days'
+    ]
+  },
+  {
+    version: '1.2.2',
+    date: 'Apr 24, 2026',
+    changes: [
+      '[New Feature] Recent Rewards Analytics in Toon Tracker',
+      '[Bug Fix] Fix Remote logic in Cog Calculator',
+    ]
+  },
+  {
     version: '1.2.1',
     date: 'Apr 17, 2026',
     changes: [

@@ -604,7 +604,7 @@ const PinkSlipsGridView = React.memo(({ count }: { count: number }) => {
 const RemoteCard = React.memo(({ type, level, count }: { type: string, level: string, count: number }) => {
   return (
     <div className={`rounded-xl border p-3 flex gap-4 transition-all hover:brightness-110 shadow-lg ${count > 0
-      ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-100'
+      ? 'bg-sky-500/90 border-sky-500/30 text-white'
       : 'bg-black/20 border-white/5 text-white/20 opacity-40 grayscale'
       }`}>
       <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 p-2 flex items-center justify-center shrink-0 relative">
@@ -622,7 +622,7 @@ const RemoteCard = React.memo(({ type, level, count }: { type: string, level: st
         />
       </div>
       <div className="flex-1 flex flex-col justify-between items-end min-w-0">
-        <div className={`text-2xl font-black tabular-nums ${count > 0 ? 'text-emerald-400' : ''}`}>
+        <div className={`text-2xl font-black tabular-nums ${count > 0 ? 'text-white' : ''}`}>
           {count}<span className="text-sm opacity-50 ml-0.5">/100</span>
         </div>
         <div className="text-[10px] font-black uppercase tracking-widest truncate w-full text-right opacity-70">
@@ -634,7 +634,7 @@ const RemoteCard = React.memo(({ type, level, count }: { type: string, level: st
 });
 const UniteListItem = React.memo(({ name, count, max = 100 }: { name: string, count: number, max?: number }) => {
   return (
-    <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-pink-900/20 border border-pink-500/10 hover:border-pink-500/30 transition-all group shadow-sm">
+    <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-emerald-900/70 border border-emerald-500/10 hover:border-emerald-500/30 transition-all group shadow-sm">
       <div className="text-[14px] font-bold text-pink-50/90 group-hover:text-white transition-colors truncate">{name}</div>
       <div className="text-[13px] font-black text-pink-400 tabular-nums shrink-0 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">
         {count}<span className="text-[10px] opacity-50 ml-0.5">/{max}</span>
@@ -653,10 +653,7 @@ const EmptyRewardState = React.memo(() => {
   );
 });
 
-const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] }) => {
-  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-  const cutoff = Date.now() - ONE_WEEK_MS;
-  const weeklyRewards = history.filter(h => h.timestamp >= cutoff);
+const RewardPieChart = React.memo(({ history, timeframe }: { history: RewardHistoryEntry[], timeframe?: string }) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -669,7 +666,7 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
       remotes: { clears: 0, items: 0, list: {} }
     };
 
-    const groups = groupRewardHistory(weeklyRewards);
+    const groups = groupRewardHistory(history);
     groups.forEach(group => {
       const categoriesInGroup = new Set<RewardCategory>();
       group.entries.forEach(entry => {
@@ -679,19 +676,22 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
           data[entry.category].items += amount;
 
           let itemName = entry.item || entry.message || 'Unknown Item';
-          if (entry.category === 'summons' && entry.metadata?.summonType) {
+          if (entry.category === 'pinkslips') {
+            itemName = `${amount} Fire`;
+          } else if (entry.category === 'summons' && entry.metadata?.summonType) {
             itemName = `${entry.item} (${entry.metadata.summonType})`;
           } else if (entry.category === 'remotes' && entry.metadata?.remoteLevel) {
             itemName = `${entry.metadata.remoteLevel}★ ${entry.metadata.remoteType?.replace(' Remote', '')}`;
           }
 
-          data[entry.category].list[itemName] = (data[entry.category].list[itemName] || 0) + amount;
+          const increment = entry.category === 'pinkslips' ? 1 : amount;
+          data[entry.category].list[itemName] = (data[entry.category].list[itemName] || 0) + increment;
         }
       });
       categoriesInGroup.forEach(cat => data[cat].clears++);
     });
     return data;
-  }, [weeklyRewards]);
+  }, [history]);
 
   const totalClears = Object.values(stats).reduce((a, b) => a + b.clears, 0);
 
@@ -715,30 +715,15 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
     });
   }, [stats, totalClears]);
 
-  const getArcPath = (startAngle: number, sweepAngle: number) => {
-    if (sweepAngle >= 360) sweepAngle = 359.99;
-    const radius = 42;
-    const center = 60;
-    const startRad = (startAngle * Math.PI) / 180;
-    const endRad = ((startAngle + sweepAngle) * Math.PI) / 180;
-
-    const x1 = center + radius * Math.cos(startRad);
-    const y1 = center + radius * Math.sin(startRad);
-    const x2 = center + radius * Math.cos(endRad);
-    const y2 = center + radius * Math.sin(endRad);
-
-    const largeArc = sweepAngle > 180 ? 1 : 0;
-
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
-  };
-
   if (totalClears === 0) return (
     <div className="h-full flex flex-col items-center justify-center gap-4 opacity-30">
       <div className="w-32 h-32 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /><path d="M22 12A10 10 0 0 0 12 2v10z" /></svg>
       </div>
       <div className="text-center">
-        <p className="text-sm font-black text-white uppercase tracking-[0.2em]">No clears recorded in the past week</p>
+        <p className="text-sm font-black text-white uppercase tracking-[0.2em]">
+          No clears recorded in the {timeframe === '24h' ? 'Past Day' : timeframe === '30d' ? 'past 30 days' : 'past 7 days'}
+        </p>
         <p className="text-[12px] text-white/50 mt-1 italic">Complete boss battles to see your analytics!</p>
       </div>
     </div>
@@ -749,26 +734,35 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
       {/* Left: Static Pie Chart */}
       <div className="relative w-80 h-80 shrink-0 flex items-center justify-center">
         <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90 overflow-visible">
-          {chartData.filter(d => d.sweepAngle > 0).map((d) => {
+          {chartData.map((d) => {
             const isHovered = hoveredId === d.id || expandedId === d.id;
             const strokeWidth = 16;
+            const radius = 42;
+            const circumference = 2 * Math.PI * radius;
+            const strokeLength = (d.percentage / 100) * circumference;
+            // Negative offset pushes the starting point clockwise
+            const offset = -(d.startAngle / 360) * circumference;
 
             return (
-              <path
+              <circle
                 key={d.id}
-                d={getArcPath(d.startAngle, d.sweepAngle)}
+                cx="60"
+                cy="60"
+                r={radius}
                 fill="none"
                 stroke={d.color}
                 strokeWidth={isHovered ? strokeWidth + 4 : strokeWidth}
+                strokeDasharray={`${Math.max(0.001, strokeLength)} ${circumference}`}
+                strokeDashoffset={offset}
                 strokeLinecap="butt"
-                className="transition-all duration-300 ease-out cursor-pointer opacity-85 hover:opacity-100"
+                className={`transition-all duration-500 ease-out cursor-pointer ${d.percentage > 0 ? 'opacity-85 hover:opacity-100' : 'opacity-0'}`}
                 style={{
-                  filter: isHovered ? `drop-shadow(0 0 3px ${d.color})` : 'none',
-                  pointerEvents: 'stroke'
+                  filter: isHovered && d.percentage > 0 ? `drop-shadow(0 0 3px ${d.color})` : 'none',
+                  pointerEvents: d.percentage > 0 ? 'stroke' : 'none'
                 }}
-                onMouseEnter={() => setHoveredId(d.id)}
+                onMouseEnter={() => d.percentage > 0 && setHoveredId(d.id)}
                 onMouseLeave={() => setHoveredId(null)}
-                onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+                onClick={() => d.percentage > 0 && setExpandedId(expandedId === d.id ? null : d.id)}
               />
             );
           })}
@@ -833,12 +827,28 @@ const RewardPieChart = React.memo(({ history }: { history: RewardHistoryEntry[] 
                     <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-300">
                       <div className="bg-black/40 rounded-xl border border-white/5 p-3 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
                         {/* <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Rewards List</div> */}
-                        {Object.entries(cat.list).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
-                          <div key={name} className="flex justify-between items-center py-1.5 px-3 rounded-lg bg-white/[0.03] border border-white/5 group/rewitem font-bold">
-                            <span className="text-[12px] text-white/70 group-hover/rewitem:text-white transition-colors">{name}</span>
-                            <span className="text-[12px] text-white/90 tabular-nums">x{count}</span>
-                          </div>
-                        ))}
+                        {Object.entries(cat.list).sort((a, b) => b[1] - a[1]).map(([name, count]) => {
+                          const denominator = cat.id === 'pinkslips' ? cat.clears : cat.items;
+                          const itemPct = denominator > 0 ? Math.min(100, (count / denominator) * 100) : 0;
+                          return (
+                            <div
+                              key={name}
+                              className="relative flex justify-between items-center py-1.5 px-3 rounded-lg border border-white/5 group/rewitem font-bold overflow-hidden"
+                            >
+                              {/* Background fill bar */}
+                              <div
+                                className="absolute inset-y-0 left-0 rounded-lg transition-all duration-700 ease-out"
+                                style={{
+                                  width: `${itemPct}%`,
+                                  backgroundColor: cat.color,
+                                  opacity: 0.15,
+                                }}
+                              />
+                              <span className="relative z-[1] text-[12px] text-white/70 group-hover/rewitem:text-white transition-colors">{name}</span>
+                              <span className="relative z-[1] text-[12px] text-white/90 tabular-nums">x{count}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -889,9 +899,12 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [savedToons, setSavedToons] = useState<{ id: string; name: string; style: string; laff: number }[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [subView, setSubView] = useState<'main' | 'rewards_detail'>(initialSubView);
-  const [activeCategory, setActiveCategory] = useState<RewardCategory>(propCategory || 'sos');
+  const [activeCategory, setActiveCategory] = useState<RewardCategory>(propCategory || 'analytics');
   const [sosSortBy, setSosSortBy] = useState<SOSTableSort>('default');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'24h' | '7d' | '30d'>('7d');
+  const [isAnalyticsMenuOpen, setIsAnalyticsMenuOpen] = useState(false);
+  const analyticsMenuRef = useRef<HTMLDivElement>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     tasks: true,
     suits: true,
@@ -933,11 +946,14 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
       if (isSortMenuOpen && sortMenuRef.current && !sortMenuRef.current.contains(target)) {
         setIsSortMenuOpen(false);
       }
+      if (isAnalyticsMenuOpen && analyticsMenuRef.current && !analyticsMenuRef.current.contains(target)) {
+        setIsAnalyticsMenuOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isSortMenuOpen]);
+  }, [isSortMenuOpen, isAnalyticsMenuOpen]);
 
   useEffect(() => {
     getSetting<boolean>('tracker-enabled').then(v => {
@@ -1161,13 +1177,18 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     }
   }, [activeInstances]);
 
-  const allGroups = useMemo(() => groupRewardHistory(rewardHistory), [rewardHistory]);
+  const filteredRewardHistory = useMemo(() => {
+    const cutoff = Date.now() - (analyticsTimeframe === '24h' ? 86400000 : analyticsTimeframe === '7d' ? 604800000 : 2592000000);
+    return rewardHistory.filter(r => r.timestamp >= cutoff);
+  }, [rewardHistory, analyticsTimeframe]);
+
+  const allGroups = useMemo(() => groupRewardHistory(filteredRewardHistory), [filteredRewardHistory]);
   const visibleGroups = useMemo(() => {
     const limit = isExpanded ? 50 : RECENT_REWARD_LIMIT * 4;
-    const items = rewardHistory.slice(0, limit);
+    const items = filteredRewardHistory.slice(0, limit);
     const groups = groupRewardHistory(items);
     return groups.slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
-  }, [rewardHistory, isExpanded]);
+  }, [filteredRewardHistory, isExpanded]);
 
 
   if (subView === 'rewards_detail' && toonTrackerData && trackerEnabled === true) {
@@ -1237,10 +1258,53 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950/40 rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
             <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
               <div className="flex items-center gap-3">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">{activeCategory === 'analytics' ? 'Recent Rewards - Past 7 Days' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">{activeCategory === 'analytics' ? 'Rewards Stats' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
                 {activeCategory !== 'analytics' && <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>}
               </div>
               <div className="flex items-center gap-2">
+                {activeCategory === 'analytics' && (
+                  <div className="relative inline-flex items-center" ref={analyticsMenuRef}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setIsAnalyticsMenuOpen(open => !open);
+                      }}
+                      className="cursor-pointer inline-flex items-center gap-2 rounded-full bg-[#081a0e] border border-emerald-500/20 px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-colors duration-200 hover:border-emerald-300/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/20"
+                    >
+                      <span>{analyticsTimeframe === '24h' ? 'Past Day' : analyticsTimeframe === '7d' ? 'Past 7 Days' : 'Past 30 Days'}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/50 transition-transform ${isAnalyticsMenuOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                    {isAnalyticsMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-48 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#081a0e] shadow-2xl z-[150] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex flex-col gap-2 p-2">
+                          <button
+                            type="button"
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setAnalyticsTimeframe('24h'); setIsAnalyticsMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${analyticsTimeframe === '24h' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                          >
+                            Past Day
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setAnalyticsTimeframe('7d'); setIsAnalyticsMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${analyticsTimeframe === '7d' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                          >
+                            Past 7 Days
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setAnalyticsTimeframe('30d'); setIsAnalyticsMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${analyticsTimeframe === '30d' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                          >
+                            Past 30 Days
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {activeCategory === 'sos' && (
                   <div className="relative inline-flex items-center" ref={sortMenuRef}>
                     <button
@@ -1285,7 +1349,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               {activeCategory === 'analytics' && (
                 <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500">
                   <div className="w-full h-full max-w-4xl mx-auto">
-                    <RewardPieChart history={rewardHistory} />
+                    <RewardPieChart history={filteredRewardHistory} timeframe={analyticsTimeframe} />
                   </div>
                 </div>
               )}
@@ -1306,7 +1370,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
                       return (
                         <div key={categoryName} className="flex flex-col gap-3">
-                          <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{categoryName}</h4>
+                          <h4 className="text-[14px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{categoryName}</h4>
                           <div className="flex flex-col gap-1.5">
                             {sortedTypes.length > 0 ? (
                               sortedTypes.map(([name, count]) => (
@@ -1358,7 +1422,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                   </div>
                 </div>
               )}
-              {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400/60 border-b border-emerald-500/10 pb-2">{type}</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
+              {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/100 border-b border-sky-500/10 pb-2">{type}s</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
               {activeCategory === 'summons' && <SummonsTableView summons={rewards.summons || {}} />}
               {activeCategory === 'pinkslips' && <PinkSlipsGridView count={rewards.pinkslips || 0} />}
             </div>
@@ -1393,7 +1457,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                   if (isExpanded) {
                     e.stopPropagation();
                     window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
-                      detail: { tab: 'reward_details', category: 'analytics' }
+                      detail: { tab: 'reward_details' }
                     }));
                   }
                 }}
@@ -1459,7 +1523,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                             onClick={(e) => {
                               e.stopPropagation();
                               window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
-                                detail: { tab: 'reward_details', category: 'analytics' }
+                                detail: { tab: 'reward_details' }
                               }));
                             }}
                             className="text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors"

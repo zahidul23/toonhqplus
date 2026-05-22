@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'ToonHQ+',
     description: 'ToonHQ+ (ToonHQ Plus) is a browser extension that enhances the ToonHQ experience.',
-    version: '1.2.1',
+    version: '1.2.3',
     permissions: ['storage'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
 
@@ -35,6 +35,6 @@ export default defineConfig({
   },
   runner: {
     chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
-    startUrls: ['https://toonhq.org/groups']
+    // startUrls: ['https://toonhq.org/groups']
   },
 });

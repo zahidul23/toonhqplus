@@ -19,6 +19,7 @@ export type RewardHistoryEntry = {
 };
 
 export const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export const RECENT_REWARD_LIMIT = 5;
 export const REWARD_HIGHLIGHT_MS = 15 * 1000;
 
@@ -27,11 +28,11 @@ export function getRewardHistoryKey(toonId: string): string {
 }
 
 export function pruneRewardHistory(entries: RewardHistoryEntry[]): RewardHistoryEntry[] {
-  const cutoff = Date.now() - ONE_WEEK_MS;
+  const cutoff = Date.now() - THIRTY_DAYS_MS;
   return entries
     .filter((entry) => entry.timestamp >= cutoff)
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 100);
+    .slice(0, 500);
 }
 
 export function checkRewards(prev: any, next: any, zone?: string | number): RewardChange[] {

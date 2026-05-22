@@ -1053,7 +1053,7 @@ export function SidebarApp() {
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
       if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
       if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
-      
+
       let initialTab = values['active-tab'];
       if (initialTab === 'tracker' && values['tracker-enabled'] === false) {
         initialTab = 'history';
@@ -1064,6 +1064,14 @@ export function SidebarApp() {
       if (values['stinky-collapsed'] !== undefined) setStinkyCollapsed(!!values['stinky-collapsed']);
       if (values['neutral-collapsed'] !== undefined) setNeutralCollapsed(!!values['neutral-collapsed']);
       setHasLoadedSettings(true);
+
+      // Sync from background script as source of truth for tracker-enabled
+      browser.runtime.sendMessage({ type: 'GET_TRACKER_PREF' }).then((res: any) => {
+        if (res && res.enabled !== undefined) {
+          setTrackerEnabled(res.enabled);
+          setSetting('tracker-enabled', res.enabled).catch(console.error);
+        }
+      }).catch(console.error);
     });
 
     const handleDbChange = (e: Event) => {
@@ -1110,16 +1118,69 @@ export function SidebarApp() {
       }
     };
 
+    const handleMessage = (message: any) => {
+      if (message.type === 'TRACKER_PREF_CHANGED') {
+        setTrackerEnabled(message.enabled);
+        setSetting('tracker-enabled', message.enabled).catch(console.error);
+        if (!message.enabled) {
+          setActiveTab(currentTab => {
+            if (currentTab === 'tracker') {
+              setSetting('active-tab', 'history').catch(console.error);
+              return 'history';
+            }
+            return currentTab;
+          });
+        }
+      }
+    };
+
     window.addEventListener('toonhqplus-db-changed', handleDbChange);
+    browser.runtime.onMessage.addListener(handleMessage);
     return () => {
       window.removeEventListener('toonhqplus-db-changed', handleDbChange);
+      browser.runtime.onMessage.removeListener(handleMessage);
     };
   }, [refresh]);
 
   useEffect(() => {
     if (trackerEnabled !== true) return;
-    const port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
-    return () => port.disconnect();
+
+    let port: ReturnType<typeof browser.runtime.connect> | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let backoff = 1000;
+
+    function connect() {
+      port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
+
+      // If the connection stays alive for 2 seconds without disconnecting, it's successful; reset backoff
+      const resetBackoff = setTimeout(() => {
+        backoff = 1000;
+      }, 2000);
+
+      port.onDisconnect.addListener(() => {
+        clearTimeout(resetBackoff);
+
+        const err = browser.runtime.lastError;
+        if (err?.message?.includes('Extension context invalidated')) {
+          console.log('[ToonTracker UI] Extension updated or invalidated. Stopping tracker.');
+          return; // Stop trying to reconnect, the user needs to refresh the page
+        }
+
+        // Try reconnecting with a progressively longer delay up to max 10 seconds
+        reconnectTimeout = setTimeout(connect, backoff);
+        backoff = Math.min(backoff * 1.5, 10000);
+      });
+    }
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (port) {
+        port.onDisconnect.removeListener(); // type definition workaround: some browser implementations use varying removeListener approaches, this is standard enough for polyfills
+        port.disconnect();
+      }
+    };
   }, [trackerEnabled]);
 
   return (
