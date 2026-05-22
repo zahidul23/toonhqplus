@@ -31,6 +31,13 @@
   height: 32px;
 }
 
+.version-tag {
+  font-size: 0.8rem;
+  font-weight: bold;
+  align-self: flex-end;
+  margin-bottom: 0.25rem;
+}
+
 h1 {
   font-size: 1.8rem;
   margin: 0;

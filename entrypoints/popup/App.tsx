@@ -40,6 +40,7 @@ function App() {
       <div className="title-container">
         <img src={logo} alt="ToonHQ+ Logo" className="title-logo" />
         <h1>ToonHQ+</h1>
+        <span className="version-tag">v{browser.runtime.getManifest().version}</span>
       </div>
 
       <div className="actions-container">
@@ -88,7 +89,7 @@ function App() {
               Allow ToonHQ+ to connect to your Toontown Rewritten game client to automatically track toon rewards, tasks and suit progressions.
             </p>
             <p className="settings-warning">
-              If enabled, this extension will periodically check for running games while your browser is open.
+              If enabled, this extension will periodically check for running TTR instances while your browser is open.
             </p>
             <p className="settings-warning">
               All data is passed locally between the game client and your browser. No data ever leaves your computer.
