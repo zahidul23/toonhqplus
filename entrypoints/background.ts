@@ -4,6 +4,7 @@ import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardHistoryEntry } from './sidebar.content/trackerUtils';
 
 export default defineBackground(() => {
+  const DEBUG = false; // Set to true to enable verbose interval logging
   const connections = new Map<string, { ws: WebSocket; data: ToonTrackerData | null; authorized: boolean }>();
   let primaryPort: string | null = null;
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
@@ -13,7 +14,7 @@ export default defineBackground(() => {
   let trackerEnabled: boolean | undefined = undefined;
   let trackingInterval: ReturnType<typeof setInterval> | null = null;
   let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
-  let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+  const KEEP_ALIVE_ALARM = 'toontracker-keepalive';
 
   async function isTrackerEnabled() {
     const storedTrackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
@@ -220,7 +221,7 @@ export default defineBackground(() => {
     });
 
     trackingInterval = setInterval(() => {
-      console.log("[ToonTracker BG] Sending all request...");
+      if (DEBUG) console.log("[ToonTracker BG] Sending all request...");
       if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
         const info = connections.get(port);
@@ -232,12 +233,7 @@ export default defineBackground(() => {
       });
     }, 5000);
 
-    if (!keepAliveInterval) {
-      keepAliveInterval = setInterval(() => {
-        console.log("[ToonTracker BG] Keep alive check: " + new Date().toLocaleTimeString());
-        browser.storage.local.set({ _keepAlive: Date.now() }).catch(() => { });
-      }, 10000);
-    }
+    browser.alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: 1 });
   }
 
   function startAutoDiscover() {
@@ -262,10 +258,7 @@ export default defineBackground(() => {
     console.log("[ToonTracker BG] No active clients, stopping tracker...");
     clearInterval(trackingInterval);
     trackingInterval = null;
-    if (keepAliveInterval) {
-      clearInterval(keepAliveInterval);
-      keepAliveInterval = null;
-    }
+    browser.alarms.clear(KEEP_ALIVE_ALARM).catch(() => { });
   }
 
   function disconnectAll() {
@@ -284,6 +277,10 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Re-initialize if the SW was killed and restarted mid-session
+    if (trackerEnabled === undefined) {
+      initializeBackground().catch(console.error);
+    }
     if (message.type === 'TRACKER_PREF_CHANGED') {
       trackerEnabled = message.enabled;
       setSetting(TRACKER_ENABLED_KEY, trackerEnabled).catch(console.error);
@@ -382,6 +379,16 @@ export default defineBackground(() => {
         });
       });
       return true;
+    }
+  });
+
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === KEEP_ALIVE_ALARM) {
+      if (DEBUG) console.log("[ToonTracker BG] Keep alive ping: " + new Date().toLocaleTimeString());
+      // Re-initialize if the SW was killed and restarted mid-session
+      if (trackerEnabled === undefined) {
+        initializeBackground().catch(console.error);
+      }
     }
   });
 

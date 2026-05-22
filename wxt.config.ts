@@ -7,7 +7,7 @@ export default defineConfig({
     name: 'ToonHQ+',
     description: 'ToonHQ+ (ToonHQ Plus) is a browser extension that enhances the ToonHQ experience.',
     version: '1.2.3',
-    permissions: ['storage'],
+    permissions: ['storage', 'alarms'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
 
     web_accessible_resources: [
