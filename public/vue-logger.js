@@ -8,7 +8,7 @@
 (function () {
   if (window.__TOONHQ_PLUS_VUE_LOGGER__) return;
   window.__TOONHQ_PLUS_VUE_LOGGER__ = true;
-  
+
   function generateToonHash(name, photo) {
     let str = name || '';
     if (photo && photo.includes('https://rendition.toontownrewritten.com/render/')) {
@@ -38,6 +38,16 @@
 
         if (el.getAttribute('toon-id') !== tid) {
           el.setAttribute('toon-id', tid);
+        }
+      }
+    });
+
+    document.querySelectorAll('.groups-list-item').forEach(groupCard => {
+      const vue = groupCard.__vue__;
+      if (vue && vue.group && vue.group.id != null) {
+        const gid = String(vue.group.id);
+        if (groupCard.getAttribute('group-id') !== gid) {
+          groupCard.setAttribute('group-id', gid);
         }
       }
     });

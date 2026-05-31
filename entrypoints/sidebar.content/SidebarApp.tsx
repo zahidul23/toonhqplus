@@ -850,6 +850,7 @@ export function SidebarApp() {
   });
   const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
   const [notesEnabled, setNotesEnabled] = useState(true);
+  const [highlightGroupsEnabled, setHighlightGroupsEnabled] = useState(false);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
@@ -1047,11 +1048,12 @@ export function SidebarApp() {
 
   useEffect(() => {
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
       if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
+      if (values['highlight-groups'] !== undefined) setHighlightGroupsEnabled(!!values['highlight-groups']);
       if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
 
       let initialTab = values['active-tab'];
@@ -1697,6 +1699,26 @@ export function SidebarApp() {
                           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${notesEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${notesEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">Highlight Groups</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Highlight groups that have toony or stinky toons on the main page.
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const next = !highlightGroupsEnabled;
+                            setHighlightGroupsEnabled(next);
+                            setSetting('highlight-groups', next).catch(console.error);
+                            window.location.replace(window.location.href);
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${highlightGroupsEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${highlightGroupsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
 

@@ -415,6 +415,56 @@ function injectHighlightStyles() {
     tr.toonhq-plus-blocked .note-bubble::after {
       border-color: transparent transparent #dc2626 transparent;
     }
+
+    .info-card__bottom-right {
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    .saved-toons-counts {
+      display: flex;
+      gap: 0.75em;
+      margin-right: 0.75em !important;
+    }
+
+    .toony-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: bold;
+      color: #22c55e;
+    }
+
+    .stinky-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: bold;
+      color: #ef4444;
+    }
+
+    .toony-icon,
+    .stinky-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .toony-icon {
+      background-color: #1f8454;
+    }
+    .stinky-icon {
+      background-color: #dc2626;
+    }
+
+    .info-card--groups:has(.info-card__content.toony-group) {
+      background-color: #76ffaa !important;
+    }
+    .info-card--groups:has(.info-card__content.stinky-group) {
+      background-color: #ff9f9f !important;
+    }
   `;
   (document.head ?? document.documentElement).appendChild(style);
 }
@@ -499,8 +549,12 @@ function updateRowButtons(row: HTMLElement, toonName: string, toonData: ToonData
 
 let isApplyingHighlights = false;
 let pendingHighlight = false;
+type SavedToonLists = {
+  favorites: string[];
+  blocked: string[];
+};
 
-async function applyRowHighlights() {
+async function applyRowHighlights(savedToonLists?: SavedToonLists) {
   if (isApplyingHighlights) {
     pendingHighlight = true;
     return;
@@ -508,19 +562,28 @@ async function applyRowHighlights() {
   isApplyingHighlights = true;
 
   try {
-    const [favorites, blocked, allNotes, settings] = await Promise.all([
-      getAllFromList('toony_toons'),
-      getAllFromList('stinky_toons'),
+    const savedToonsPromise = savedToonLists
+      ? Promise.resolve(savedToonLists)
+      : Promise.all([
+        getAllFromList('toony_toons'),
+        getAllFromList('stinky_toons'),
+      ]).then(([favorites, blocked]) => ({ favorites, blocked }));
+
+    const [savedToons, allNotes, settings] = await Promise.all([
+      savedToonsPromise,
       getAllNotes(),
       getSettings(['notes-enabled']),
     ]);
+
+    toonyToonsMemory = new Set(savedToons.favorites);
+    stinkyToonsMemory = new Set(savedToons.blocked);
 
     const rows = Array.from(document.querySelectorAll('.group-member-row')) as HTMLElement[];
     if (rows.length === 0) return;
 
     notesEnabled = settings['notes-enabled'] !== false;
-    const favIds = new Set(favorites);
-    const blkIds = new Set(blocked);
+    const favIds = toonyToonsMemory;
+    const blkIds = stinkyToonsMemory;
 
     // Batch Fetch Toon Data
     const idsToFetch = new Set<string>();
@@ -1121,6 +1184,8 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
 }
 
 const groupsState: Record<number, any> = {};
+let toonyToonsMemory = new Set<string>();
+let stinkyToonsMemory = new Set<string>();
 /** Member id (from API/websocket) -> toon id, for resolving member_left events. */
 const memberIdToToonId: Record<number, string> = {};
 /** Group id -> set of member ids in that group; cleared on group_disbanded. */
@@ -1128,10 +1193,12 @@ const groupMemberIds: Record<number, Set<number>> = {};
 const activeToons: Record<string, any> = {};
 let bossInfoEnabled = true;
 let notesEnabled = true;
+let highlightGroupsEnabled = true;
 
 const DEFAULT_SETTINGS: Record<string, any> = {
   'boss-info-enabled': true,
   'notes-enabled': true,
+  'highlight-groups': false,
   'navbar-config': {
     pinned: ['invasions', 'groups', 'fishing', 'ccg'],
     dropdown: ['field-offices', 'gardening', 'doodles']
@@ -1164,6 +1231,122 @@ function applyToonHash(toon: any) {
   }
 }
 
+function applyGroupHighlights(
+  groupsState: Record<number, any>,
+  toonyToonsMemory: Set<string>,
+  stinkyToonsMemory: Set<string>,
+  generateToonHashFn: (name: string, photo: string) => string,
+  highlightGroupsEnabled: boolean
+) {
+  document.querySelectorAll('.groups-list-item').forEach(groupCard => {
+    const groupId = groupCard.getAttribute('group-id');
+    if (!groupId) return;
+
+    const group = groupsState[Number(groupId)];
+    if (!group || !Array.isArray(group.members)) return;
+
+    const bottomRight = groupCard.querySelector('.info-card__bottom-right');
+    if (!bottomRight) return;
+
+    let countsDiv = bottomRight.querySelector('.saved-toons-counts') as HTMLElement | null;
+    if (!countsDiv) {
+      countsDiv = document.createElement('div');
+      countsDiv.className = 'saved-toons-counts';
+      bottomRight.insertBefore(countsDiv, bottomRight.firstChild);
+    }
+
+    let toonyCount = 0;
+    let stinkyCount = 0;
+    const seenToons = new Set<string>();
+
+    group.members.forEach((m: any) => {
+      if (m.left) return;
+      const toon = m.toon;
+      if (!toon) return;
+      const numericId = toon.id != null && !isNaN(Number(toon.id)) ? String(Number(toon.id)) : null;
+      const hashId = toon.hashId ?? generateToonHashFn(toon.name || '', toon.photo || '');
+      const id = numericId ?? String(hashId);
+
+      if (seenToons.has(id)) return;
+      seenToons.add(id);
+
+      if (toonyToonsMemory.has(id)) {
+        toonyCount++;
+      }
+      if (stinkyToonsMemory.has(id)) {
+        stinkyCount++;
+      }
+    });
+
+    const cardContent = groupCard.querySelector('.info-card__content');
+    if (cardContent) {
+      if (!highlightGroupsEnabled || (toonyCount === 0 && stinkyCount === 0)) {
+        cardContent.classList.remove('toony-group', 'stinky-group');
+      } else if (stinkyCount >= toonyCount) {
+        cardContent.classList.add('stinky-group');
+        cardContent.classList.remove('toony-group');
+      } else {
+        cardContent.classList.add('toony-group');
+        cardContent.classList.remove('stinky-group');
+      }
+    }
+
+    const currentToonyStr = String(toonyCount);
+    const currentStinkyStr = String(stinkyCount);
+
+    if (countsDiv.getAttribute('data-toony') !== currentToonyStr || countsDiv.getAttribute('data-stinky') !== currentStinkyStr) {
+      countsDiv.setAttribute('data-toony', currentToonyStr);
+      countsDiv.setAttribute('data-stinky', currentStinkyStr);
+
+      const ICON_SIZE = 10;
+      const CIRCLE_SIZE = 18;
+
+      const toonyIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="${ICON_SIZE}" height="${ICON_SIZE}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>`;
+      const stinkyIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="${ICON_SIZE}" height="${ICON_SIZE}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>`;
+
+      countsDiv.innerHTML = `
+        ${toonyCount > 0 ? `
+          <span class="toony-count" title="${toonyCount} toony ${toonyCount === 1 ? 'toon' : 'toons'} in this group">
+            <span class="toony-icon" style="width: ${CIRCLE_SIZE}px; height: ${CIRCLE_SIZE}px;">
+              ${toonyIcon}
+            </span>
+            ${toonyCount}
+          </span>
+        ` : ''}
+        ${stinkyCount > 0 ? `
+          <span class="stinky-count" title="${stinkyCount} stinky ${stinkyCount === 1 ? 'toon' : 'toons'} in this group">
+            <span class="stinky-icon" style="width: ${CIRCLE_SIZE}px; height: ${CIRCLE_SIZE}px;">
+              ${stinkyIcon}
+            </span>
+            ${stinkyCount}
+          </span>
+        ` : ''}
+      `.trim();
+    }
+  });
+}
+
+function applyCurrentGroupHighlights() {
+  applyGroupHighlights(groupsState, toonyToonsMemory, stinkyToonsMemory, generateToonHash, highlightGroupsEnabled);
+}
+
+async function getSavedToonLists(): Promise<SavedToonLists> {
+  const [favorites, blocked] = await Promise.all([
+    getAllFromList('toony_toons'),
+    getAllFromList('stinky_toons'),
+  ]);
+
+  return { favorites, blocked };
+}
+
+async function refreshSavedToonGroupHighlights(savedToonLists?: SavedToonLists) {
+  const { favorites, blocked } = savedToonLists ?? (await getSavedToonLists());
+
+  toonyToonsMemory = new Set(favorites);
+  stinkyToonsMemory = new Set(blocked);
+  applyCurrentGroupHighlights();
+}
+
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
   cssInjectionMode: 'ui',
@@ -1184,6 +1367,7 @@ export default defineContentScript({
     const currentSettings = await getSettings(Object.keys(DEFAULT_SETTINGS));
     bossInfoEnabled = currentSettings['boss-info-enabled'] !== false;
     notesEnabled = currentSettings['notes-enabled'] !== false;
+    highlightGroupsEnabled = currentSettings['highlight-groups'] !== false;
     if (currentSettings['navbar-config']) {
       applyNavbarCustomization(currentSettings['navbar-config']);
     }
@@ -1686,7 +1870,17 @@ export default defineContentScript({
       const { store } = e.detail || {};
       if (store === 'toony_toons' || store === 'stinky_toons' || store === 'notes') {
         if (dbHighlightTimeout) clearTimeout(dbHighlightTimeout);
-        dbHighlightTimeout = setTimeout(() => {
+        dbHighlightTimeout = setTimeout(async () => {
+          if (store === 'toony_toons' || store === 'stinky_toons') {
+            try {
+              const savedToonLists = await getSavedToonLists();
+              await applyRowHighlights(savedToonLists);
+              refreshSavedToonGroupHighlights(savedToonLists);
+            } catch (error) {
+              console.error(error);
+            }
+            return;
+          }
           applyRowHighlights();
         }, 50);
       }
@@ -1711,6 +1905,12 @@ export default defineContentScript({
             }
           }
         });
+        getSetting<boolean>('highlight-groups').then(enabled => {
+          if (enabled !== undefined) {
+            highlightGroupsEnabled = enabled !== false;
+            applyCurrentGroupHighlights();
+          }
+        });
       }
     }) as EventListener;
 
@@ -1720,10 +1920,16 @@ export default defineContentScript({
     let highlightTimeout: ReturnType<typeof setTimeout> | null = null;
     const observer = new MutationObserver(() => {
       if (highlightTimeout) clearTimeout(highlightTimeout);
-      highlightTimeout = setTimeout(() => {
+      highlightTimeout = setTimeout(async () => {
         highlightTimeout = null;
-        applyRowHighlights();
-        updateBossInfo();
+        try {
+          const savedToonLists = await getSavedToonLists();
+          await applyRowHighlights(savedToonLists);
+          updateBossInfo();
+          refreshSavedToonGroupHighlights(savedToonLists);
+        } catch (error) {
+          console.error(error);
+        }
 
         getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(config => {
           if (config) applyNavbarCustomization(config);

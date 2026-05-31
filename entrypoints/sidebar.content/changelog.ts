@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.4',
+    date: 'May 31, 2026',
+    changes: [
+      'Display Toony and Stinky toon counts on group cards with optional highlighting'
+    ]
+  },
+  {
     version: '1.2.3',
     date: 'May 22, 2026',
     changes: [

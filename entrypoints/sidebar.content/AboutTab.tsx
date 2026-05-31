@@ -67,7 +67,7 @@ export function AboutTabContent() {
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="flex-1 space-y-3">
                   <p className="text-sm text-white/60">
-                    Have any questions, suggestions or other feedback? Feel free to reach out!
+                    Have any questions, suggestions, complaints, or other feedback? Feel free to reach out!
                   </p>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2">

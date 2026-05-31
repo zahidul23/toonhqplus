@@ -111,7 +111,7 @@ function App() {
         <div className="feedback">
           <div>
             <div>
-              Have any questions, suggestions or other feedback?
+              Have any questions, suggestions, complaints, or other feedback?
             </div>
             <div>
               Feel free to reach out!
