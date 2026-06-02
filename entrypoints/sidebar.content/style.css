@@ -180,27 +180,27 @@
 .book-opened {
   width: var(--book-size);
   height: var(--book-size);
-  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_opened.webp');
+  background-image: var(--book-opened-image);
   background-size: cover;
   transition: background-image 0.3s ease;
   /* Smooths the transition */
 }
 
 .book-opened:hover {
-  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_close.webp');
+  background-image: var(--book-close-image);
 }
 
 .book-closed {
   width: var(--book-size);
   height: var(--book-size);
-  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_closed.webp');
+  background-image: var(--book-closed-image);
   background-size: cover;
   transition: background-image 0.3s ease;
   /* Smooths the transition */
 }
 
 .book-closed:hover {
-  background-image: url('chrome-extension://__MSG_@@extension_id__/images/book_open.webp');
+  background-image: var(--book-open-image);
 }
 
 .round-rows-col {

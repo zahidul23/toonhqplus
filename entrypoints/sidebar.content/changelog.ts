@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.5',
+    date: 'June 1, 2026',
+    changes: [
+      'Firefox compatibility fixes'
+    ]
+  },
+  {
     version: '1.2.4',
     date: 'May 31, 2026',
     changes: [

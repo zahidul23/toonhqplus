@@ -1,4 +1,5 @@
 import ReactDOM from 'react-dom/client';
+import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
 import './style.css';
@@ -40,6 +41,10 @@ const STORAGE_KEYS = {
 } as const;
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
+
+function getExtensionResourceUrl(path: string): string {
+  return browser.runtime.getURL(path.replace(/^\/+/, '') as any);
+}
 
 
 interface ToonData {
@@ -1958,6 +1963,10 @@ export default defineContentScript({
         append: 'last',
         onMount(container) {
           const wrapper = document.createElement('div');
+          wrapper.style.setProperty('--book-opened-image', `url("${getExtensionResourceUrl('/images/book_opened.webp')}")`);
+          wrapper.style.setProperty('--book-close-image', `url("${getExtensionResourceUrl('/images/book_close.webp')}")`);
+          wrapper.style.setProperty('--book-closed-image', `url("${getExtensionResourceUrl('/images/book_closed.webp')}")`);
+          wrapper.style.setProperty('--book-open-image', `url("${getExtensionResourceUrl('/images/book_open.webp')}")`);
           container.append(wrapper);
           const root = ReactDOM.createRoot(wrapper);
           root.render(<SidebarApp />);
