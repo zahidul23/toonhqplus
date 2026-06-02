@@ -37,4 +37,9 @@ export default defineConfig({
     chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
     startUrls: ['https://toonhq.org/groups']
   },
+  vite: () => ({
+    build: {
+      minify: false,
+    },
+  }),
 });

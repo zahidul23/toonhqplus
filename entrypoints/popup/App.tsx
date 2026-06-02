@@ -53,9 +53,19 @@ function App() {
         </div>
 
         <div className="card">
-          <a href="https://chromewebstore.google.com/detail/toonhq+/npoiljoenaihnleoogcmcpfgdikdjmfg" target="_blank" rel="noreferrer">
+          <a
+            href={
+              import.meta.env.FIREFOX
+                ? 'https://addons.mozilla.org/en-US/firefox/addon/toonhq/'
+                : 'https://chromewebstore.google.com/detail/toonhq+/npoiljoenaihnleoogcmcpfgdikdjmfg'
+            }
+            target="_blank"
+            rel="noreferrer"
+          >
             <button className="webstore-button">
-              Go to Chrome Web Store Page
+              {import.meta.env.FIREFOX
+                ? 'Go to Firefox Add-ons Page'
+                : 'Go to Chrome Web Store Page'}
             </button>
           </a>
         </div>
