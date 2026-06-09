@@ -3,6 +3,7 @@ import { getSetting, setSetting } from './db';
 import type { ToonTrackerData } from './tracker';
 import { browser } from 'wxt/browser';
 import { cogs as cogsData } from './cogs';
+import { gags as gagsConfig } from './gags';
 import {
   REWARD_HIGHLIGHT_MS,
   RECENT_REWARD_LIMIT,
@@ -18,6 +19,46 @@ function getExtensionImageUrl(path: string): string {
   } catch (e) {
     return `/${cleanPath}`;
   }
+}
+
+const GAG_ASSET_BASE_URL = 'https://toonhq.org/static/assets/gags';
+const gagTracks = gagsConfig as Array<{
+  id: string;
+  name: string;
+  color: string;
+  gags: Array<{ name: string; image: string }>;
+}>;
+
+function getGagImageUrl(image: string): string {
+  return `${GAG_ASSET_BASE_URL}/${image}`;
+}
+
+function ToonGagsStrip({ gags }: { gags?: Record<string, any> }) {
+  return (
+    <div className="flex items-center gap-1.5 w-full">
+      {gagTracks.map((track) => {
+        const gagData = gags?.[track.name] ?? null;
+        const level = typeof gagData?.gag?.level === 'number' ? gagData.gag.level : 1;
+        const gag = track.gags[Math.max(0, Math.min(track.gags.length - 1, level - 1))] ?? track.gags[0];
+        const obtained = !!gagData?.gag;
+        const xpRequired = (obtained && level !== 7 && gagData?.experience) ? ` - ${gagData.experience.next - gagData.experience.current} to go` : '';
+        const title = obtained
+          ? `${track.name}: ${gagData?.gag?.name} (Lv. ${level}) ${xpRequired}`
+          : `${track.name}less`;
+
+        return (
+          <div
+            key={track.id}
+            className={`h-7 w-7 rounded-full border bg-black/35 p-1 flex items-center justify-center shrink-0 transition-all ${obtained ? 'border-white/15' : 'border-white/5 opacity-35 grayscale'}`}
+            style={obtained ? { boxShadow: `inset 0 0 0 1px ${track.color}55` } : undefined}
+            title={title}
+          >
+            <img src={getGagImageUrl(gag.image)} alt={title} className="h-full w-full object-contain" />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -663,7 +704,8 @@ const RewardPieChart = React.memo(({ history, timeframe }: { history: RewardHist
       unites: { clears: 0, items: 0, list: {} },
       summons: { clears: 0, items: 0, list: {} },
       pinkslips: { clears: 0, items: 0, list: {} },
-      remotes: { clears: 0, items: 0, list: {} }
+      remotes: { clears: 0, items: 0, list: {} },
+      analytics: { clears: 0, items: 0, list: {} }
     };
 
     const groups = groupRewardHistory(history);
@@ -861,6 +903,302 @@ const RewardPieChart = React.memo(({ history, timeframe }: { history: RewardHist
     </div>
   );
 });
+
+const DEPT_COLORS: Record<string, { bg: string, border: string, text: string, accent: string }> = {
+  sell: { bg: '#4c0d6b', border: '#9d4edd', text: '#f3e8ff', accent: '#d8b4fe' },
+  cash: { bg: '#14532d', border: '#22c55e', text: '#f0fdf4', accent: '#86efac' },
+  law: { bg: '#1e3a8a', border: '#60a5fa', text: '#eff6ff', accent: '#93c5fd' },
+  boss: { bg: '#4a3728', border: '#8c5d3d', text: '#fafaf9', accent: '#d6d3d1' }
+};
+
+const DEFAULT_COLORS = { bg: '#1f2937', border: '#374151', text: '#f9fafb', accent: '#9ca3af' };
+
+const STAT_LABELS: Record<string, { short: string, long: string }> = {
+  boss: { short: 'Options', long: 'Stock Options' },
+  law: { short: 'Notices', long: 'Jury Notices' },
+  cash: { short: 'Cogbucks', long: 'Cogbucks' },
+  sell: { short: 'Merits', long: 'Merits' }
+};
+
+const SuitRecommendations = ({ dept, remaining, statName, colors }: { dept: string, remaining: number, statName: string, colors: any }) => {
+  const items = FACILITIES_DATA[dept]?.items || [];
+  const highest = items[0];
+  if (!highest) return null;
+
+  const highestCount = Math.floor(remaining / highest.val);
+  const rem = remaining % highest.val;
+  const rows = Array(highestCount).fill(highest);
+
+  if (rem > 0) {
+    const bestFit = items.reduce((prev: any, curr: any) =>
+      (curr.val >= rem && curr.val < prev.val) ? curr : prev,
+      highest
+    );
+    rows.push(bestFit);
+  }
+
+  const total = rows.reduce((acc: number, row: any) => acc + row.val, 0);
+
+  return (
+    <div className="bg-black/10 rounded p-2 border border-white/5 flex flex-col gap-1.5">
+      {rows.map((row: any, i: number) => (
+        <div key={i} className="flex justify-between items-center text-[10.5px] font-medium opacity-80" style={{ color: colors.text }}>
+          <span className="truncate">{row.name}</span>
+          <span className="shrink-0 ml-2">~ {row.val} {statName}</span>
+        </div>
+      ))}
+      <div className="pt-1 mt-1 border-t border-white/10 text-right text-[11.5px] font-black" style={{ color: colors.text }}>
+        <span className="text-left">Total</span> <span style={{ color: colors.accent }}>{total.toLocaleString()} {statName}</span>
+      </div>
+    </div>
+  );
+};
+
+const ToonSuitsView = React.memo(({
+  cogsuits,
+  condensed = false,
+  isExpanded = false,
+  expandedSuitId,
+  setExpandedSuitId
+}: {
+  cogsuits?: Record<string, any>;
+  condensed?: boolean;
+  isExpanded?: boolean;
+  expandedSuitId?: string | null;
+  setExpandedSuitId?: (id: string | null) => void;
+}) => {
+  if (!cogsuits) return null;
+
+  const suits = Object.entries(cogsuits).filter(([_, suit]) => suit.hasDisguise);
+
+  if (suits.length === 0) {
+    return (
+      <div className={`font-black text-white/20 uppercase tracking-widest ${condensed ? 'text-[11px] col-span-2' : 'text-xs py-4'}`}>
+        No Disguises
+      </div>
+    );
+  }
+
+  return (
+    <div className={condensed ? "grid grid-cols-2 gap-2 flex-1 min-w-[280px] px-4 border-l border-white/10" : `animate-in fade-in slide-in-from-top-1 duration-200 ${isExpanded ? 'grid grid-cols-2 gap-3' : 'space-y-3'}`}>
+      {suits.map(([id, suit]) => {
+        const dept = (suit.department.toLowerCase().endsWith('bot') ? suit.department.toLowerCase().slice(0, -3) : suit.department.toLowerCase()) as keyof typeof DEPT_COLORS;
+        const colors = DEPT_COLORS[dept] || DEFAULT_COLORS;
+        const statLabels = STAT_LABELS[dept] || { short: 'Points', long: 'Points' };
+        const statName = condensed ? statLabels.short : statLabels.long;
+
+        const isMaxed = suit.level >= 50;
+        const isReady = suit.promotion && suit.promotion.current >= suit.promotion.target;
+        const remaining = suit.promotion ? suit.promotion.target - suit.promotion.current : 0;
+        const progress = suit.promotion ? (suit.promotion.current / suit.promotion.target) * 100 : 0;
+        const cogName = (suit.suit?.name || 'No Disguise').replace(/\u0003/g, '') + (suit.version === 2 ? ' V2.0' : '');
+
+        if (condensed) {
+          return (
+            <div key={id} className="relative rounded flex flex-col p-2 gap-1.5 shadow-md border" style={{ backgroundColor: colors.bg, borderColor: `${colors.border}60` }}>
+              <div className="flex justify-between items-center gap-1">
+                <span className="text-[12px] font-bold text-white/90 truncate drop-shadow-sm">{cogName}</span>
+                <span className="text-[10px] font-black shrink-0 px-1 py-0.5 rounded bg-black/20" style={{ color: colors.accent }}>Lv. {suit.level}</span>
+              </div>
+              <div className="h-4 w-full rounded border overflow-hidden relative" style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: `${colors.border}40` }}>
+                {isMaxed ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: colors.accent }}>Maxed</span>
+                  </div>
+                ) : isReady ? (
+                  <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: colors.border }}>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Promo</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-full transition-all duration-700" style={{ width: `${Math.min(100, progress)}%`, backgroundColor: `${colors.accent}90` }} />
+                    <div className="absolute inset-0 flex items-center justify-center drop-shadow-md">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-white/90">{remaining.toLocaleString()} {statName}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div key={id} className={`relative rounded-lg border flex flex-col transition-all hover:brightness-110 shadow-md group/suit ${isMaxed && !isExpanded ? 'p-3 gap-0' : 'p-4 gap-3'}`} style={{ backgroundColor: colors.bg, borderColor: `${colors.border}60` }}>
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-[11.5px] font-bold text-white uppercase tracking-widest truncate">{suit.department}</span>
+              <div className="flex items-center shrink-0">
+                {isMaxed && !isExpanded ? (
+                  <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded border bg-black/20" style={{ color: colors.accent, borderColor: `${colors.border}40` }}>Maxed</div>
+                ) : (
+                  <div className="flex items-center h-5 px-2 rounded border bg-black/20 shadow-sm" style={{ color: colors.text, borderColor: `${colors.border}40` }}>
+                    <span className="text-[11.5px] font-bold italic whitespace-nowrap opacity-70">{cogName}</span>
+                    <div className="w-[1px] h-3 bg-white/20 mx-1.5" />
+                    <span className="text-[11.5px] font-black whitespace-nowrap">Lv. {suit.level}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              {isMaxed ? (
+                isExpanded && <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: colors.accent, backgroundColor: 'rgba(0,0,0,0.3)', borderColor: `${colors.border}40` }}>Maxed</div>
+              ) : isReady ? (
+                <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: '#ffffff', backgroundColor: colors.border, borderColor: colors.border }}>Ready for promotion</div>
+              ) : suit.promotion ? (
+                <div className="relative h-6 w-full bg-black/30 rounded border overflow-hidden flex items-center justify-center p-[1px]" style={{ borderColor: `${colors.border}40` }}>
+                  <div className="absolute inset-y-0 left-0 transition-all duration-700 shadow-[0_0_10px_rgba(255,255,255,0.1)]" style={{ width: `${Math.min(100, progress)}%`, backgroundColor: `${colors.border}80` }} />
+                  <span className="relative z-10 text-[10.5px] font-black uppercase tracking-widest text-center leading-none" style={{ color: colors.text }}>{remaining.toLocaleString()} {statName} remaining</span>
+                </div>
+              ) : null}
+            </div>
+            {!isMaxed && suit.promotion && remaining > 0 && setExpandedSuitId && (
+              <div className="pt-1 mt-1 border-t border-white/10">
+                <button onClick={(e) => { e.stopPropagation(); setExpandedSuitId(expandedSuitId === id ? null : id); }} className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group">
+                  <span className="text-[9.5px] font-black uppercase tracking-[0.2em] opacity-40 group-hover:opacity-100 transition-opacity" style={{ color: colors.text }}>{expandedSuitId === id ? 'Hide Recommendations' : 'Show Recommendations'}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSuitId === id ? 'rotate-180' : ''}`} style={{ color: colors.accent }}><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
+                {expandedSuitId === id && (
+                  <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-2 space-y-1.5 pb-1">
+                    <SuitRecommendations dept={dept} remaining={remaining} statName={statName} colors={colors} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: { savedToons: any[], activeInstances: any[], selectToon: (id: string) => void }) => {
+  const [toonsData, setToonsData] = useState<Record<string, { data: ToonTrackerData, history: RewardHistoryEntry[] }>>({});
+
+  useEffect(() => {
+    savedToons.forEach(toon => {
+      browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: toon.id }).then(res => {
+        if (res?.data) {
+          setToonsData(prev => ({ ...prev, [toon.id]: { data: res.data, history: res.history || [] } }));
+        }
+      });
+    });
+  }, [savedToons]);
+
+  return (
+    <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar px-4 h-full animate-in fade-in slide-in-from-right-4 duration-300">
+      {savedToons.length > 0 ? [...savedToons].sort((a, b) => {
+        if (b.laff !== a.laff) return b.laff - a.laff;
+        return a.name.localeCompare(b.name);
+      }).map(toon => {
+        const toonRes = toonsData[toon.id];
+        const data = toonRes?.data;
+        const isActive = activeInstances.some(inst => String(inst.toonId) === String(toon.id));
+        const laff = data?.data?.laff?.current ?? toon.laff;
+
+        const rewards = data?.data?.rewards;
+        const stats = {
+          sos: rewards ? Object.values(rewards.sos || {}).reduce((a: number, b) => a + (b as number), 0) : 0,
+          unites: rewards ? Object.values(rewards.unites || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0) : 0,
+          summons: rewards ? Object.values(rewards.summons || {}).reduce((a: number, b: any) => a + (b.single ? 1 : 0) + (b.building ? 1 : 0) + (b.invasion ? 1 : 0), 0) : 0,
+          pinkslips: rewards ? (rewards.pinkslips || 0) : 0,
+          remotes: rewards ? Object.values(rewards.remotes || {}).reduce((a: number, b) => a + Object.values(b as Record<string, number>).reduce((c: number, d) => c + (d as number), 0), 0) : 0,
+        };
+
+        const rewardLabels = { sos: 'SOS', unites: 'Unites', summons: 'Summons', pinkslips: 'Pink Slips', remotes: 'Remotes' };
+        const CATEGORIES_CONFIG = [
+          { id: 'sos', color: '#a855f7' },
+          { id: 'unites', color: '#22c55e' },
+          { id: 'summons', color: '#3b82f6' },
+          { id: 'pinkslips', color: '#f59e0b' },
+          { id: 'remotes', color: '#ef4444' },
+        ];
+
+        return (
+          <div key={toon.id} onClick={() => {
+            selectToon(toon.id);
+            window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', { detail: { tab: 'toon_tracker' } }));
+          }} className="relative flex items-center gap-4 bg-slate-950/40 rounded-xl border border-white/5 p-4 hover:bg-white/5 cursor-pointer transition-colors shadow-lg group">
+
+            <div className="flex flex-col min-w-[300px] max-w-[320px] shrink-0 gap-3">
+              <div className="flex items-center gap-2 w-full">
+                <span className={`flex rounded-full shrink-0 ${isActive ? 'w-2.5 h-2.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' : 'w-2 h-2 bg-white/10'}`} title={isActive ? 'Active' : 'Offline'}></span>
+                <span className={`text-[13px] font-bold truncate transition-colors ${isActive ? 'text-emerald-400' : 'text-white/80 group-hover:text-white'}`}>{toon.name} <span className="text-white/40">({laff})</span></span>
+              </div>
+              <div className="flex items-center gap-3 w-full">
+                <div className={`w-14 h-14 rounded-full border bg-black/20 overflow-hidden shrink-0 flex items-center justify-center transition-colors ${isActive ? 'border-emerald-500/30' : 'border-white/10 group-hover:border-white/30'}`}>
+                  <img src={`https://rendition.toontownrewritten.com/render/${toon.style}/portrait/256x256.webp`} alt={toon.name} className={`w-full h-full object-contain scale-[1.25] transition-all ${isActive ? '' : 'grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100'}`} />
+                </div>
+                <div className="flex flex-col gap-2 min-w-0 flex-1">
+
+
+                  <ToonGagsStrip gags={data?.data?.gags as any} />
+                  <div className="flex justify-center items-center gap-2 w-full pt-2 border-t border-white/10">
+                    {CATEGORIES_CONFIG.map(({ id: cat, color }) => {
+                      const count = stats[cat as keyof typeof stats] || 0;
+                      return (
+                        <div key={cat} className="relative flex items-center justify-center" title={rewardLabels[cat as keyof typeof rewardLabels]}>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-white/10" style={{ backgroundColor: `${color}15` }}>
+                            <img src={getExtensionImageUrl(`images/${cat}.png`)} className={`w-4 h-4 object-contain filter drop-shadow-sm ${count === 0 ? 'grayscale opacity-30' : 'opacity-90'}`} />
+                          </div>
+                          {count > 0 && (
+                            <div className="absolute -top-1.5 -right-1.5 bg-black border border-white/10 text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-full min-w-[18px] flex items-center justify-center shadow-lg" style={{ color }}>
+                              {count}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+
+            </div>
+
+            <ToonSuitsView cogsuits={data?.data?.cogsuits} condensed />
+
+            <div className="flex flex-col gap-1.5 w-[250px] shrink-0 border-l border-white/10 pl-4 h-full min-h-[90px] justify-center">
+              {data?.data?.tasks && data.data.tasks.length > 0 ? (
+                <>
+                  {data.data.tasks.slice(0, 4).map((task: any, i: number) => {
+                    const progress = (task.objective.progress.current / task.objective.progress.target) * 100;
+                    return (
+                      <div key={i} className="flex flex-col gap-1">
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="text-[10px] font-bold text-white/70 truncate" title={task.objective.text}>{task.objective.text}</div>
+                          <div className={`text-[9px] font-black uppercase tracking-wider shrink-0 ${task.objective.progress.text === "Complete" ? 'text-green-400' : 'text-emerald-400/70'}`}>{task.objective.progress.text}</div>
+                        </div>
+                        <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
+                          <div className={`h-full rounded-full transition-all duration-700 ${task.objective.progress.text === "Complete" ? 'bg-green-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, progress)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {data.data.tasks.length > 4 && (
+                    <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] pt-0.5">+{data.data.tasks.length - 4} more tasks</div>
+                  )}
+                </>
+              ) : (
+                <div className="text-[11px] font-black text-white/20 uppercase tracking-widest">No ToonTasks</div>
+              )}
+            </div>
+
+            <div className="shrink-0 pl-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white/20 group-hover:text-white/60 transition-colors group-hover:translate-x-1"><path d="m9 18 6-6-6-6" /></svg>
+            </div>
+          </div>
+        );
+      }) : (
+        <div className="flex-1 flex flex-col items-center justify-center opacity-40 gap-4">
+          <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          </div>
+          <div className="text-[12px] font-black uppercase tracking-[0.3em] text-white">No saved toons</div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export const ToonTrackerTab = React.memo(function ToonTrackerTab({
@@ -871,7 +1209,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   onToonSelect
 }: {
   isExpanded?: boolean;
-  initialSubView?: 'main' | 'rewards_detail';
+  initialSubView?: 'main' | 'rewards_detail' | 'toons';
   category?: RewardCategory;
   selectedToonId?: string | null;
   onToonSelect?: (id: string | null) => void;
@@ -898,7 +1236,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [expandedSuitId, setExpandedSuitId] = useState<string | null>(null);
   const [savedToons, setSavedToons] = useState<{ id: string; name: string; style: string; laff: number }[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [subView, setSubView] = useState<'main' | 'rewards_detail'>(initialSubView);
+  const [subView, setSubView] = useState<'main' | 'rewards_detail' | 'toons'>(initialSubView);
   const [activeCategory, setActiveCategory] = useState<RewardCategory>(propCategory || 'analytics');
   const [sosSortBy, setSosSortBy] = useState<SOSTableSort>('default');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
@@ -1432,6 +1770,17 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     );
   }
 
+  if (subView === 'toons') {
+    return (
+      <section key="toons-list" className="flex-1 flex flex-col overflow-hidden h-full">
+        <ToonsListView savedToons={savedToons} activeInstances={activeInstances} selectToon={(id) => {
+          selectToon(id);
+          window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', { detail: { tab: 'toon_tracker' } }));
+        }} />
+      </section>
+    );
+  }
+
   return (
     <section key="main-tracker" className="flex-1 flex flex-col overflow-hidden">
       <ToonHeader
@@ -1552,90 +1901,12 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                   {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.suits ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
                 </button>
                 {(expandedSections.suits || isExpanded) && (
-                  <div className={`animate-in fade-in slide-in-from-top-1 duration-200 ${isExpanded ? 'grid grid-cols-2 gap-3' : 'space-y-3'}`}>
-                    {Object.entries(toonTrackerData.data.cogsuits || {}).filter(([_, suit]) => suit.hasDisguise).map(([id, suit]) => {
-                      const dept = suit.department.toLowerCase().replace('bot', '');
-                      const deptColors: Record<string, { bg: string, border: string, text: string, accent: string }> = {
-                        sell: { bg: '#4c0d6b', border: '#9d4edd', text: '#f3e8ff', accent: '#d8b4fe' },
-                        cash: { bg: '#14532d', border: '#22c55e', text: '#f0fdf4', accent: '#86efac' },
-                        law: { bg: '#1e3a8a', border: '#60a5fa', text: '#eff6ff', accent: '#93c5fd' },
-                        boss: { bg: '#4a3728', border: '#8c5d3d', text: '#fafaf9', accent: '#d6d3d1' }
-                      };
-                      const colors = deptColors[dept] || { bg: '#1f2937', border: '#374151', text: '#f9fafb', accent: '#9ca3af' };
-                      const statMap: Record<string, string> = { boss: 'Stock Options', law: 'Jury Notices', cash: 'Cogbucks', sell: 'Merits' };
-                      const statName = statMap[dept] || 'Points';
-                      const isMaxed = suit.level >= 50;
-                      const isReady = suit.promotion && suit.promotion.current >= suit.promotion.target;
-                      const remaining = suit.promotion ? suit.promotion.target - suit.promotion.current : 0;
-                      const progress = suit.promotion ? (suit.promotion.current / suit.promotion.target) * 100 : 0;
-                      return (
-                        <div key={id} className={`relative rounded-lg border flex flex-col transition-all hover:brightness-110 shadow-md group/suit ${isMaxed && !isExpanded ? 'p-3 gap-0' : 'p-4 gap-3'}`} style={{ backgroundColor: colors.bg, borderColor: `${colors.border}60` }}>
-                          <div className="flex justify-between items-center gap-2">
-                            <span className="text-[11.5px] font-bold text-white uppercase tracking-widest truncate">{suit.department}</span>
-                            <div className="flex items-center shrink-0">
-                              {isMaxed && !isExpanded ? (
-                                <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded border bg-black/20" style={{ color: colors.accent, borderColor: `${colors.border}40` }}>Maxed</div>
-                              ) : (
-                                <div className="flex items-center h-5 px-2 rounded border bg-black/20 shadow-sm" style={{ color: colors.text, borderColor: `${colors.border}40` }}>
-                                  <span className="text-[11.5px] font-bold italic whitespace-nowrap opacity-70">{(suit.suit?.name || 'No Disguise').replace(/\u0003/g, '')}{suit.version === 2 ? ' V2.0' : ''}</span>
-                                  <div className="w-[1px] h-3 bg-white/20 mx-1.5" />
-                                  <span className="text-[11.5px] font-black whitespace-nowrap">Lv. {suit.level}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            {isMaxed ? (
-                              isExpanded && <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: colors.accent, backgroundColor: 'rgba(0,0,0,0.3)', borderColor: `${colors.border}40` }}>Maxed</div>
-                            ) : isReady ? (
-                              <div className="text-[10.5px] font-black uppercase tracking-widest px-2 py-1.5 rounded border text-center shadow-sm" style={{ color: '#ffffff', backgroundColor: colors.border, borderColor: colors.border }}>Ready for promotion</div>
-                            ) : suit.promotion ? (
-                              <div className="relative h-6 w-full bg-black/30 rounded border overflow-hidden flex items-center justify-center p-[1px]" style={{ borderColor: `${colors.border}40` }}>
-                                <div className="absolute inset-y-0 left-0 transition-all duration-700 shadow-[0_0_10px_rgba(255,255,255,0.1)]" style={{ width: `${Math.min(100, progress)}%`, backgroundColor: `${colors.border}80` }} />
-                                <span className="relative z-10 text-[10.5px] font-black uppercase tracking-widest text-center leading-none" style={{ color: colors.text }}>{remaining.toLocaleString()} {statName} remaining</span>
-                              </div>
-                            ) : null}
-                          </div>
-                          {!isMaxed && suit.promotion && remaining > 0 && (
-                            <div className="pt-1 mt-1 border-t border-white/10">
-                              <button onClick={(e) => { e.stopPropagation(); setExpandedSuitId(expandedSuitId === id ? null : id); }} className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group">
-                                <span className="text-[9.5px] font-black uppercase tracking-[0.2em] opacity-40 group-hover:opacity-100 transition-opacity" style={{ color: colors.text }}>{expandedSuitId === id ? 'Hide Recommendations' : 'Show Recommendations'}</span>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSuitId === id ? 'rotate-180' : ''}`} style={{ color: colors.accent }}><polyline points="6 9 12 15 18 9" /></svg>
-                              </button>
-                              {expandedSuitId === id && (
-                                <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-2 space-y-1.5 pb-1">
-                                  {(() => {
-                                    const items = FACILITIES_DATA[dept]?.items || [];
-                                    const highest = items[0];
-                                    if (!highest) return null;
-                                    const highestCount = Math.floor(remaining / highest.val);
-                                    const rem = remaining % highest.val;
-                                    const rows = [];
-                                    for (let c = 0; c < highestCount; c++) rows.push(highest);
-                                    if (rem > 0) {
-                                      // Find the smallest single item that covers the remainder
-                                      const bestFit = items.reduce((prev: any, curr: any) =>
-                                        (curr.val >= rem && curr.val < prev.val) ? curr : prev,
-                                        highest
-                                      );
-                                      rows.push(bestFit);
-                                    }
-                                    const total = rows.reduce((acc: number, row: any) => acc + row.val, 0);
-                                    return (
-                                      <div className="bg-black/10 rounded p-2 border border-white/5 flex flex-col gap-1.5">
-                                        {rows.map((row: any, i: number) => <div key={i} className="flex justify-between items-center text-[10.5px] font-medium opacity-80" style={{ color: colors.text }}><span className="truncate">{row.name}</span><span className="shrink-0 ml-2">~ {row.val} {statName}</span></div>)}
-                                        <div className="pt-1 mt-1 border-t border-white/10 text-right text-[11.5px] font-black" style={{ color: colors.text }}><span className="text-left">Total</span> <span style={{ color: colors.accent }}>{total.toLocaleString()} {statName}</span></div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <ToonSuitsView
+                    cogsuits={toonTrackerData.data.cogsuits}
+                    isExpanded={isExpanded}
+                    expandedSuitId={expandedSuitId}
+                    setExpandedSuitId={setExpandedSuitId}
+                  />
                 )}
               </div>
               <div className="space-y-2 rounded-xl border border-amber-300/20 bg-[linear-gradient(180deg,rgba(120,53,15,0.22),rgba(28,25,23,0.45))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">

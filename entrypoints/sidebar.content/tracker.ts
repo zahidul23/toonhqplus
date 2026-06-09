@@ -18,6 +18,17 @@ export interface ToonTrackerData {
       summons: Record<string, { name: string; single: boolean; building: boolean; invasion: boolean }>;
       unites: Record<string, Record<string, number>>;
     };
+    gags?: Record<string, {
+      experience: {
+        current: number;
+        next: number;
+      };
+      gag: {
+        level: number;
+        name: string;
+        organic: unknown;
+      };
+    } | null>;
     tasks: Array<{
       objective: {
         text: string;

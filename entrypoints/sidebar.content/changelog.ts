@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.6',
+    date: 'June 9, 2026',
+    changes: [
+      'View all synced toon details in Toon Tracker - Toons subtab'
+    ]
+  },
+  {
     version: '1.2.5',
     date: 'June 1, 2026',
     changes: [

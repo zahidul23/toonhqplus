@@ -8,7 +8,7 @@ import { getSetting, getSettings } from './db';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'cog_calc' | 'bosses' | 'about' | 'toon_tracker' | 'reward_details';
+type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'cog_calc' | 'bosses' | 'about' | 'toon_tracker' | 'reward_details' | 'toons';
 
 type AllowedGagTrackId = 'throw' | 'squirt' | 'sound';
 type BoilerRoundType = 'neutral' | 'fired_up' | 'defense' | 'meltdown';
@@ -2526,6 +2526,14 @@ function BookSidebar({
           >
             Rewards
           </button>
+          <button
+            type="button"
+            onClick={() => { onTabChange('toons'); onFacilityChange(null); }}
+            className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-black/30 text-emerald-200' : 'text-green-100/75 hover:bg-black/20 hover:text-white'
+              }`}
+          >
+            Toons
+          </button>
         </div>
       </div>
 
@@ -2575,7 +2583,7 @@ export function ShtickerBook({
       const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
       if (raw) {
         const parsed = JSON.parse(raw);
-        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details'];
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details', 'toons'];
         if (validTabs.includes(parsed.tab)) {
           return parsed.tab as InfoBookTab;
         }
@@ -2629,7 +2637,7 @@ export function ShtickerBook({
     const handleOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.tab) {
-        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details'];
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details', 'toons'];
         if (validTabs.includes(detail.tab)) {
           setActiveTab(detail.tab as InfoBookTab);
           if (detail.tab === 'reward_details' && detail.category) {
@@ -2709,6 +2717,14 @@ export function ShtickerBook({
                   <ToonTrackerTab
                     isExpanded={true}
                     initialSubView="rewards_detail"
+                    selectedToonId={selectedToonId}
+                    onToonSelect={onToonSelect}
+                  />
+                )}
+                {activeTab === 'toons' && (
+                  <ToonTrackerTab
+                    isExpanded={true}
+                    initialSubView="toons"
                     selectedToonId={selectedToonId}
                     onToonSelect={onToonSelect}
                   />
