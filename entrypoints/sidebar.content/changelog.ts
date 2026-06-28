@@ -9,7 +9,8 @@ export const changelog: ChangelogEntry[] = [
     version: '1.2.8',
     date: 'June 28, 2026',
     changes: [
-      'Improved CEO Tier tooltips'
+      'Improved CEO Tier tooltips',
+      'Update DA Office and Cog Colf Course Calculators to reflect changes for ttr-live-v4.4.0'
     ]
   },
   {

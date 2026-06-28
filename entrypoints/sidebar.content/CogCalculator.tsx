@@ -246,8 +246,7 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
   return (
     <div ref={popupRef} style={popupStyle} className="absolute bottom-full mb-3 w-max bg-[#0c3622] p-2 rounded-2xl border border-white/10 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2">
       <div className="flex gap-2">
-        {[0, 1, 2, 3].map(cogIdx => {
-          const cog = cogs[cogIdx];
+        {cogs.map((cog: any, cogIdx: number) => {
           const choice = COG_CHOICES.find(c => c.id === cog.id);
           const maxHp = getCogMaxHp(cog, cogs);
           const dmg = cogDamages[cogIdx] || 0;
@@ -262,7 +261,7 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
           const isPinkSlip = trackId === 'special' && gagIndex === 0;
           const isRemote = (gagData as any)?.isRemote;
           const isSupervisor = choice?.type === 'boss';
-          const hasMintSupervisor = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
+          const hasMintSupervisor = cogs.some((c: any) => c.id === 'mint_coin' || c.id === 'mint_bullion');
           const isTenured = cog.isTenure || isSupervisor || hasMintSupervisor;
 
           const hasRemoteActive = !!cog.remote;
@@ -455,10 +454,10 @@ const FACILITY_PRESETS = [
   { name: "Steel Factory", bossId: 'factory_steel', cogs: [{ id: 'factory_steel', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }, { id: '12', isV2: false }] },
   { name: "Coin Mint", bossId: 'mint_coin', cogs: [{ id: 'mint_coin', isV2: false }, { id: '10', isV2: false }, { id: '10', isV2: false }, { id: '9', isV2: false }] },
   { name: "Bullion Mint", bossId: 'mint_bullion', cogs: [{ id: 'mint_bullion', isV2: false }, { id: '12', isV2: false }, { id: '12', isV2: false }, { id: '11', isV2: false }] },
-  { name: "Junior Office", bossId: 'office_junior', cogs: [{ id: '11', isV2: false }, { id: 'office_junior', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }] },
-  { name: "Senior Office", bossId: 'office_senior', cogs: [{ id: '13', isV2: false }, { id: 'office_senior', isV2: false }, { id: '12', isV2: false }, { id: '13', isV2: false }] },
-  { name: "Fairway Course", bossId: 'golf_fairway', cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: true }, { id: '10', isV2: true }] },
-  { name: "Fringe Course", bossId: 'golf_fringe', cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: true }, { id: '12', isV2: true }] },
+  { name: "Junior Office", bossId: 'office_junior', cogs: [{ id: '11', isV2: false }, { id: 'office_junior', isV2: false }, { id: '11', isV2: false }] },
+  { name: "Senior Office", bossId: 'office_senior', cogs: [{ id: '13', isV2: false }, { id: 'office_senior', isV2: false }, { id: '13', isV2: false }] },
+  { name: "Fairway Course", bossId: 'golf_fairway', cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: false }, { id: '10', isV2: false }] },
+  { name: "Fringe Course", bossId: 'golf_fringe', cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: false }, { id: '12', isV2: false }] },
 ];
 
 const DEFAULT_COGS: Cog[] = [
@@ -597,13 +596,15 @@ export function CogCalculator() {
         totalEffectiveDamage: 0,
       };
     });
+    const currentCogCount = currentCogs.length;
+    const currentCogIndexes = currentCogs.map((_, idx) => idx);
 
-    let cumulativeDamages = [0, 0, 0, 0];
+    let cumulativeDamages = Array(currentCogCount).fill(0);
     const results = [];
 
     for (let r = 0; r < 9; r++) {
       const selectedGags = selectedGagsByRound[r];
-      const cogDamagesThisRound = [0, 0, 0, 0];
+      const cogDamagesThisRound = Array(currentCogCount).fill(0);
       const trackDamages: Record<string, number> = {};
       const trapDamageOnCog = currentCogs.map(c => c.trapDamage || 0);
 
@@ -620,14 +621,15 @@ export function CogCalculator() {
         const gagsInTrack = selectedGags.filter(g => g?.trackId === trackId);
         if (gagsInTrack.length === 0) return;
 
-        const hitCounts = [0, 0, 0, 0];
-        const trackBaseDamages = [0, 0, 0, 0];
+        const hitCounts = Array(currentCogCount).fill(0);
+        const trackBaseDamages = Array(currentCogCount).fill(0);
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
           const baseDmg = getGagDamage(gag);
-          const targets = gag.target === 'all' ? [0, 1, 2, 3] : [gag.targetIdx!];
+          const targets = gag.target === 'all' ? currentCogIndexes : [gag.targetIdx!];
           targets.forEach(t => {
+            if (t < 0 || t >= currentCogCount) return;
             hitCounts[t]++;
             const isPinkSlip = gag.trackId === 'special' && gag.gagIndex === 0;
             if (!['trap', 'lure', 'special'].includes(gag.trackId) && !isPinkSlip) {
@@ -638,8 +640,8 @@ export function CogCalculator() {
 
         const luredAtStartOfPhase = currentCogs.map(c => c.isLured);
         const trappedAtStartOfPhase = currentCogs.map(c => c.isTrapped);
-        const phaseDamage = [0, 0, 0, 0];
-        const instaKillThisPhase = [false, false, false, false];
+        const phaseDamage = Array(currentCogCount).fill(0);
+        const instaKillThisPhase = Array(currentCogCount).fill(false);
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
@@ -647,9 +649,10 @@ export function CogCalculator() {
           const sosData = gag.variant === 'sos' ? (SOS_GAGS[gag.trackId] || []).find(s => s.gagIndex === gag.gagIndex) : null;
           const isInstaKill = sosData?.isInstaKill;
           const isRemote = sosData?.isRemote;
-          const targets = gag.target === 'all' ? [0, 1, 2, 3] : [gag.targetIdx!];
+          const targets = gag.target === 'all' ? currentCogIndexes : [gag.targetIdx!];
 
           targets.forEach(cogIdx => {
+            if (cogIdx < 0 || cogIdx >= currentCogCount) return;
             const cog = currentCogs[cogIdx];
             let currentDmg = baseDmg;
 
@@ -856,7 +859,7 @@ export function CogCalculator() {
 
       // NEW: Absolute Final Phase (Remotes)
       // Process from right to left (4, 3, 2, 1) -> Indices 3, 2, 1, 0
-      for (let i = 3; i >= 0; i--) {
+      for (let i = currentCogCount - 1; i >= 0; i--) {
         const state = cogStates[i];
         const cog = currentCogs[i];
         // If cog is dead or doesn't have a remote, skip
@@ -868,7 +871,7 @@ export function CogCalculator() {
         // 1. Damage to others
         const dmgOthers = remote.damageToOthers;
         if (dmgOthers > 0) {
-          for (let j = 0; j < 4; j++) {
+          for (let j = 0; j < currentCogCount; j++) {
             if (i === j) continue;
             const targetState = cogStates[j];
             if (targetState.layer === 0) continue;
@@ -1024,7 +1027,7 @@ export function CogCalculator() {
                       <div className="flex flex-col gap-0.5 mb-0.5 items-center">
                         {/* Target visualization (X and -) */}
                         <div className="flex gap-0.5 h-2.5 items-center">
-                          {[0, 1, 2, 3].map(cIdx => {
+                          {cogs.map((_, cIdx) => {
                             const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
 
                             return (
