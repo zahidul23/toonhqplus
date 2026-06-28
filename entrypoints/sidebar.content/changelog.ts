@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.7',
+    date: 'June 27, 2026',
+    changes: [
+      'Update CEO Pink Slip counts to match the updated rewards for ttr-live-v4.4.0'
+    ]
+  },
+  {
     version: '1.2.6',
     date: 'June 9, 2026',
     changes: [

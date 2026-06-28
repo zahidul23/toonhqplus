@@ -777,15 +777,15 @@ const getSuitLevel = (suitString: string) => {
 const getPinkSlips = (value: number): number => {
   // Determine Pink Slips based on the Difficulty Tier table
   if (value >= 63) {
-    return 6; // Tier 5: 63+ value
+    return 5; // Tier 5: 63+ value
   } else if (value >= 48) {
     return 5; // Tier 4: 48-62 value
   } else if (value >= 33) {
     return 4; // Tier 3: 33-47 value
   } else if (value >= 17) {
-    return 3; // Tier 2: 17-32 value
+    return 4; // Tier 2: 17-32 value
   } else if (value >= 1) {
-    return 2; // Tier 1: 1-16 value
+    return 3; // Tier 1: 1-16 value
   } else {
     return 0; // Below minimum requirements
   }
@@ -852,11 +852,11 @@ const LAWYER_THRESHOLDS = [
 ];
 
 const PINK_SLIP_THRESHOLDS = [
-  { minSuitValue: 63, slipCount: 6 },
+  { minSuitValue: 63, slipCount: 5 },
   { minSuitValue: 48, slipCount: 5 },
   { minSuitValue: 33, slipCount: 4 },
-  { minSuitValue: 17, slipCount: 3 },
-  { minSuitValue: 1, slipCount: 2 }
+  { minSuitValue: 17, slipCount: 4 },
+  { minSuitValue: 1, slipCount: 3 }
 ];
 
 const renderTierRow = (label: string, value: string | number, isActive: boolean, extraClass = '', note = '') => `
