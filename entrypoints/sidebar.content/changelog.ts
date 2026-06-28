@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.9',
+    date: 'June 28, 2026',
+    changes: [
+      'Update CEO and CJ Tiers tooltips',
+      'Fix bug in Cog Calculator for DA Offices'
+    ]
+  },
+  {
     version: '1.2.8',
     date: 'June 28, 2026',
     changes: [

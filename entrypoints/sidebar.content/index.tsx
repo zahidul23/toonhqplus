@@ -140,6 +140,7 @@ function injectHighlightStyles() {
     }
     .boss-info-tooltip.lawbot-tip {
       padding: 12px 16px;
+      min-width: 280px;
     }
     .boss-info:hover .boss-info-tooltip {
       opacity: 1;
@@ -194,6 +195,10 @@ function injectHighlightStyles() {
       text-align: center;
     }
     .tooltip-header.emerald { color: #10b981; font-size: 13px; }
+    .tooltip-header .tooltip-header-secondary {
+      color: #fff;
+      font-weight: 600;
+    }
     .tooltip-header.gray { color: #9ca3af; }
     .tooltip-section-label {
       grid-column: 1 / -1;
@@ -246,6 +251,37 @@ function injectHighlightStyles() {
     }
     .tooltip-tier-row.tier-stats {
       padding: 4px 8px;
+    }
+    .feeding-round-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 8px;
+    }
+    .feeding-round-grid .tooltip-tier-row {
+      margin: 0;
+      min-width: 0;
+    }
+    .tooltip-bool-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      border: 1px solid transparent;
+    }
+    .tooltip-bool-box.yes {
+      background: #166534;
+      border-color: #22c55e;
+      color: #dcfce7;
+    }
+    .tooltip-bool-box.no {
+      background: #991b1b;
+      border-color: #ef4444;
+      color: #fee2e2;
     }
     .tooltip-note {
       width: 100%;
@@ -932,9 +968,8 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
   }).join('');
 
   const statsList = [
-    { label: 'Lawyers', value: tierData.lawyers },
     { label: 'Gavels', value: tierData.gavels },
-    { label: 'Bonus Weight', value: tierData.hasBonusWeight ? 'Yes' : 'No' },
+    { label: 'Bonus Weight', value: `<span class="tooltip-bool-box ${tierData.hasBonusWeight ? 'yes' : 'no'}">${tierData.hasBonusWeight ? '✓' : 'X'}</span>` },
     { label: 'Evidence Count', value: tierData.evidence },
     { label: 'Evidence Heal', value: tierData.laffHeal + " Laff" }
   ];
@@ -946,8 +981,11 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
       <div class="tooltip-header">Group Average</div>
       <div class="tooltip-sub-header">${suitString}</div>
       <div class="tooltip-divider"></div>
-      <div class="tooltip-header emerald">Tier ${tierData.tier}</div>
-      ${statsHtml}
+      <div class="tooltip-header emerald">Tier ${tierData.tier} <span class="tooltip-header-secondary">- ${tierData.lawyers} Lawyers</span></div>
+      <div class="tooltip-section-label">Evidence Round</div>
+      <div class="feeding-round-grid">
+        ${statsHtml}
+      </div>
       <div class="tooltip-divider"></div>
       <div class="tooltip-header gray">Lawyer Thresholds</div>
       ${lawyerRowsHtml}
@@ -963,13 +1001,13 @@ const renderBossbotTooltip = (tierData: CEODifficultyTier, suitString: string, b
     return renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.slipCount} Slips`, isActive, 'bossbot-info', note);
   }).join('');
 
-  const cogImagesHtml = tierData.cogTypes.map(img => `<img src="https://toonhq.org/static/assets/cogs/${img}" alt="Cog" style="width:20px;height:20px;vertical-align:middle;margin-right:4px;" />`).join('');
+  const cogImagesHtml = tierData.cogTypes.map(img => `<img src="https://toonhq.org/static/assets/cogs/${img}" alt="Cog" style="width:24px;height:24px;vertical-align:middle;margin-right:4px;" />`).join('');
 
   const feedingStatsList = [
     { label: 'Timer', value: tierData.timer },
+    { label: 'Cog Types', value: `<div style="display:flex;justify-content:flex-start;align-items:center;">${cogImagesHtml}</div>` },
     { label: 'Tables', value: tierData.tables },
-    { label: 'Total Cogs', value: tierData.totalCogs },
-    { label: 'Cog Types', value: `<div style="display:flex;justify-content:flex-start;align-items:center;">${cogImagesHtml}</div>` }
+    { label: 'Total Cogs', value: tierData.totalCogs }
   ];
 
   const feedingStatsHtml = feedingStatsList.map(stat => renderTierRow(stat.label, stat.value, false, "tier-stats bossbot-info")).join('');
@@ -979,10 +1017,11 @@ const renderBossbotTooltip = (tierData: CEODifficultyTier, suitString: string, b
       <div class="tooltip-header">Group Average</div>
       <div class="tooltip-sub-header">${suitString}</div>
       <div class="tooltip-divider"></div>
-      <div class="tooltip-header emerald">Tier ${tierData.tier}</div>
-      ${renderTierRow('Pink Slips', tierData.slips, false, 'tier-stats bossbot-info')}
+      <div class="tooltip-header emerald">Tier ${tierData.tier} <span class="tooltip-header-secondary">- ${tierData.slips} Pink Slips</span></div>
       <div class="tooltip-section-label">Feeding Round</div>
-      ${feedingStatsHtml}
+      <div class="feeding-round-grid">
+        ${feedingStatsHtml}
+      </div>
       <div class="tooltip-divider"></div>
       <div class="tooltip-header gray">Pink Slip Thresholds</div>
       ${rowsHtml}
