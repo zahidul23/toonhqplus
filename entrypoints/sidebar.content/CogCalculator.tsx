@@ -115,6 +115,12 @@ interface Cog {
   trapDamage?: number;
   isV2?: boolean;
   isDead?: boolean;
+  isOfficeSpawnedSupport?: boolean;
+  hasTriggeredOfficeImmunity?: boolean;
+  immunitySupportCount?: number;
+  pendingOfficeSupportLevel?: number;
+  simMaxHp?: number;
+  simRemainingHp?: number;
   remote?: {
     roundsLeft: number;
     damageToOthers: number;
@@ -248,9 +254,9 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
       <div className="flex gap-2">
         {cogs.map((cog: any, cogIdx: number) => {
           const choice = COG_CHOICES.find(c => c.id === cog.id);
-          const maxHp = getCogMaxHp(cog, cogs);
+          const maxHp = cog.simMaxHp ?? getCogMaxHp(cog, cogs);
           const dmg = cogDamages[cogIdx] || 0;
-          const remainingTotal = Math.max(0, (cog.isV2 ? maxHp * 2 : maxHp) - dmg);
+          const remainingTotal = cog.simRemainingHp ?? Math.max(0, (cog.isV2 ? maxHp * 2 : maxHp) - dmg);
           const outerHp = cog.isV2 ? Math.max(0, remainingTotal - maxHp) : 0;
           const innerHp = Math.min(maxHp, remainingTotal);
           const pInner = (innerHp / maxHp) * 100;
@@ -278,6 +284,7 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
           if (trackId === 'lure' && !isPinkSlip && !isRemote && cog.isLured && !cog.isDead) isDisabled = true;
           const isRailroadTargeting = trackId === 'trap' && gagIndex === 6;
           if (trackId === 'trap' && !isPinkSlip && !isRailroadTargeting && (cog.isTrapped || cog.isLured) && !cog.isDead) isDisabled = true;
+              const spawnedSupportStyle = cog.isOfficeSpawnedSupport ? { filter: 'sepia(1) saturate(5.5) hue-rotate(-45deg) brightness(0.92)' } : undefined;
 
           return (
             <button
@@ -286,7 +293,7 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
               onClick={(e) => { e.stopPropagation(); onSelectGag(trackId, gagIndex, variant, cogIdx); setActivePopup(null); }}
               className={`group/target relative flex flex-col items-center justify-between p-2 w-20 h-24 rounded-xl border border-white/10 transition-all overflow-hidden ${isDisabled ? 'opacity-20 cursor-not-allowed grayscale bg-black/80' : 'bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 cursor-pointer'}`}
             >
-              {choice?.img && <img src={choice.img as string} alt={labelStr} className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover/target:opacity-60 group-hover/target:scale-110 transition-all duration-500" />}
+              {choice?.img && <img src={choice.img as string} alt={labelStr} className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover/target:opacity-60 group-hover/target:scale-110 transition-all duration-500" style={spawnedSupportStyle} />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
               <div className="relative z-10 flex flex-col items-center">
                 <span className="text-[11px] font-black text-white/90 truncate max-w-full drop-shadow-md">{labelStr}</span>
@@ -582,7 +589,7 @@ export function CogCalculator() {
   };
 
   const roundResults = useMemo(() => {
-    let currentCogs = cogs.map(c => ({
+    let currentCogs: Cog[] = cogs.map(c => ({
       ...c,
       lureDuration: 0,
       trapDamage: 0,
@@ -596,17 +603,109 @@ export function CogCalculator() {
         totalEffectiveDamage: 0,
       };
     });
-    const currentCogCount = currentCogs.length;
-    const currentCogIndexes = currentCogs.map((_, idx) => idx);
 
-    let cumulativeDamages = Array(currentCogCount).fill(0);
+    let cumulativeDamages = currentCogs.map(() => 0);
     const results = [];
 
     for (let r = 0; r < 9; r++) {
+      const currentCogCount = currentCogs.length;
+      const currentCogIndexes = currentCogs.map((_, idx) => idx);
       const selectedGags = selectedGagsByRound[r];
       const cogDamagesThisRound = Array(currentCogCount).fill(0);
       const trackDamages: Record<string, number> = {};
       const trapDamageOnCog = currentCogs.map(c => c.trapDamage || 0);
+
+      const getRemainingHp = (idx: number) => {
+        const state = cogStates[idx];
+        const cog = currentCogs[idx];
+        if (!state || !cog) return 0;
+        const totalHp = state.maxHp * (cog.isV2 ? 2 : 1);
+        return Math.max(0, totalHp - state.totalEffectiveDamage);
+      };
+
+      const getOfficeClerkIndex = () => currentCogs.findIndex(c => c.id === 'office_junior' || c.id === 'office_senior');
+      const countAliveOfficeSupports = (clerkIdx: number) =>
+        currentCogs.reduce((count, _, idx) => count + (idx !== clerkIdx && cogStates[idx]?.layer > 0 ? 1 : 0), 0);
+
+      const syncExistingOfficeClerkImmunity = () => {
+        const clerkIdx = getOfficeClerkIndex();
+        if (clerkIdx === -1) return;
+
+        const clerk = currentCogs[clerkIdx];
+        const clerkState = cogStates[clerkIdx];
+        if (clerkState.layer === 0) {
+          clerk.isImmunity = false;
+          clerk.hasTriggeredOfficeImmunity = false;
+          clerk.immunitySupportCount = undefined;
+          clerk.pendingOfficeSupportLevel = undefined;
+          return;
+        }
+
+        const aliveSupports = countAliveOfficeSupports(clerkIdx);
+
+        if (clerk.isImmunity && (clerk.immunitySupportCount ?? 0) > aliveSupports) {
+          clerk.isImmunity = false;
+          clerk.immunitySupportCount = undefined;
+          clerk.pendingOfficeSupportLevel = undefined;
+        }
+      };
+
+      const activateOfficeClerkImmunity = () => {
+        const clerkIdx = getOfficeClerkIndex();
+        if (clerkIdx === -1) return;
+
+        const clerk = currentCogs[clerkIdx];
+        const clerkState = cogStates[clerkIdx];
+        if (clerkState.layer === 0 || clerk.isImmunity || clerk.hasTriggeredOfficeImmunity) return;
+
+        const totalHp = clerkState.maxHp * (clerk.isV2 ? 2 : 1);
+        const remainingHp = getRemainingHp(clerkIdx);
+        if (remainingHp > 0 && remainingHp <= totalHp / 2) {
+          clerk.isImmunity = true;
+          clerk.hasTriggeredOfficeImmunity = true;
+          clerk.immunitySupportCount = countAliveOfficeSupports(clerkIdx);
+          clerk.pendingOfficeSupportLevel = clerk.id === 'office_junior' ? 8 : 10;
+        }
+      };
+
+      const spawnPendingOfficeSupport = () => {
+        const clerkIdx = getOfficeClerkIndex();
+        if (clerkIdx === -1) return;
+
+        const clerk = currentCogs[clerkIdx];
+        if (!clerk.isImmunity || !clerk.pendingOfficeSupportLevel) return;
+        if (currentCogs.length >= 4) {
+          clerk.pendingOfficeSupportLevel = undefined;
+          clerk.immunitySupportCount = countAliveOfficeSupports(clerkIdx);
+          return;
+        }
+
+        const spawnedCog: Cog = {
+          id: String(clerk.pendingOfficeSupportLevel),
+          isTrapped: false,
+          isLured: false,
+          isV2: false,
+          isOfficeSpawnedSupport: true,
+        };
+        currentCogs.push(spawnedCog);
+        cogStates.push({
+          maxHp: getCogMaxHp(spawnedCog, currentCogs),
+          layer: 1,
+          damageOnCurrentLayer: 0,
+          totalEffectiveDamage: 0,
+        });
+        cumulativeDamages.push(0);
+        clerk.pendingOfficeSupportLevel = undefined;
+        clerk.immunitySupportCount = countAliveOfficeSupports(clerkIdx);
+      };
+
+      const finalizeOfficeClerkImmunity = () => {
+        syncExistingOfficeClerkImmunity();
+        activateOfficeClerkImmunity();
+        spawnPendingOfficeSupport();
+      };
+
+      syncExistingOfficeClerkImmunity();
 
       const hasForeman = currentCogs.some(c => c.id === 'factory_scrap' || c.id === 'factory_steel');
       const hasBullionAuditor = currentCogs.some(c => c.id === 'mint_bullion');
@@ -659,6 +758,7 @@ export function CogCalculator() {
             const choice = COG_CHOICES.find(c => c.id === cog.id);
             const hasMintSup = currentCogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
             const isTenured = cog.isTenure || choice?.type === 'boss' || hasMintSup;
+            const isImmune = !!cog.isImmunity;
 
             if (isRemote && sosData && !isTenured) {
               if (trackId === 'lure' || (sosData as any).isHeal) {
@@ -675,7 +775,7 @@ export function CogCalculator() {
               };
             }
 
-            if (isInstaKill && !isTenured) {
+            if (isInstaKill && !isTenured && !isImmune) {
               instaKillThisPhase[cogIdx] = true;
               return;
             }
@@ -700,6 +800,10 @@ export function CogCalculator() {
 
             if (isBullionVulnerable && !['trap', 'lure'].includes(trackId)) {
               currentDmg = Math.floor(currentDmg * 1.5);
+            }
+
+            if (isImmune && !['trap', 'lure'].includes(trackId)) {
+              currentDmg = 0;
             }
 
             if (trackId === 'trap') {
@@ -808,6 +912,7 @@ export function CogCalculator() {
         const resolveDamage = (dmg: number, idx: number) => {
           const state = cogStates[idx];
           if (state.layer === 0) return;
+          if (currentCogs[idx].isImmunity) return;
           const remainingHpOnLayer = state.maxHp - state.damageOnCurrentLayer;
           if (dmg >= remainingHpOnLayer) {
             state.totalEffectiveDamage += remainingHpOnLayer;
@@ -855,6 +960,7 @@ export function CogCalculator() {
           if (dmg === 0) return;
           resolveDamage(dmg, idx);
         });
+
       });
 
       // NEW: Absolute Final Phase (Remotes)
@@ -879,6 +985,7 @@ export function CogCalculator() {
             // Re-define resolveDamage inside here or make it accessible
             const applyDmg = (d: number, idx: number) => {
               const s = cogStates[idx];
+              if (currentCogs[idx].isImmunity) return;
               const rHp = s.maxHp - s.damageOnCurrentLayer;
               if (d >= rHp) {
                 s.totalEffectiveDamage += rHp;
@@ -907,6 +1014,7 @@ export function CogCalculator() {
           const dmgExpire = remote.damageOnExpire;
           const applyDmg = (d: number, idx: number) => {
             const s = cogStates[idx];
+            if (currentCogs[idx].isImmunity) return;
             const rHp = s.maxHp - s.damageOnCurrentLayer;
             if (d >= rHp) {
               s.totalEffectiveDamage += rHp;
@@ -933,8 +1041,10 @@ export function CogCalculator() {
         }
       }
 
+      finalizeOfficeClerkImmunity();
+
       currentCogs.forEach((cog, i) => {
-        cog.trapDamage = trapDamageOnCog[i];
+        cog.trapDamage = trapDamageOnCog[i] ?? 0;
         if (cog.isLured && cog.lureDuration !== undefined) {
           cog.lureDuration--;
           if (cog.lureDuration <= 0) {
@@ -942,12 +1052,14 @@ export function CogCalculator() {
             cog.lureDuration = 0;
           }
         }
-        cumulativeDamages[i] += cogDamagesThisRound[i];
+        cumulativeDamages[i] += cogDamagesThisRound[i] ?? 0;
       });
 
       results.push({
         finalCogs: currentCogs.map((c, i) => ({
           ...c,
+          simMaxHp: cogStates[i].maxHp,
+          simRemainingHp: Math.max(0, (c.isV2 ? cogStates[i].maxHp * 2 : cogStates[i].maxHp) - cumulativeDamages[i]),
           isDead: cogStates[i].layer === 0,
           remote: c.remote ? { ...c.remote } : undefined
         })),
@@ -961,6 +1073,10 @@ export function CogCalculator() {
   }, [selectedGagsByRound, gagTracks, cogs]);
 
   const activeStats = roundResults[activeRound];
+  const startOfRoundStats = activeRound === 0 ? null : roundResults[activeRound - 1];
+  const selectionCogs = startOfRoundStats?.finalCogs ?? cogs;
+  const selectionDamages = startOfRoundStats?.cogDamages ?? cogs.map(() => 0);
+  const displayCogs = activeStats?.finalCogs ?? cogs;
 
   const getHealthColor = (percentage: number) => {
     if (percentage > 85) return 'bg-emerald-500';
@@ -1027,7 +1143,7 @@ export function CogCalculator() {
                       <div className="flex flex-col gap-0.5 mb-0.5 items-center">
                         {/* Target visualization (X and -) */}
                         <div className="flex gap-0.5 h-2.5 items-center">
-                          {cogs.map((_, cIdx) => {
+                          {[0, 1, 2, 3].map(cIdx => {
                             const isTargeted = gag ? (gag.target === 'all' || gag.targetIdx === cIdx) : false;
 
                             return (
@@ -1143,17 +1259,18 @@ export function CogCalculator() {
           </div>
 
           <div className="grid grid-cols-4 gap-2">
-            {cogs.map((cog, idx) => {
+            {displayCogs.map((cog, idx) => {
               const choice = COG_CHOICES.find(c => c.id === cog.id);
-              const maxHp = getCogMaxHp(cog, cogs);
+              const maxHp = cog.simMaxHp ?? getCogMaxHp(cog, displayCogs);
               const dmg = activeStats.cogDamages[idx] || 0;
               const totalMax = maxHp * (cog.isV2 ? 2 : 1);
-              const remainingTotal = Math.max(0, totalMax - dmg);
+              const remainingTotal = cog.simRemainingHp ?? Math.max(0, totalMax - dmg);
               const outerHp = cog.isV2 ? Math.max(0, remainingTotal - maxHp) : 0;
               const innerHp = Math.min(maxHp, remainingTotal);
               const pInner = (innerHp / maxHp) * 100;
               const pOuter = (outerHp / maxHp) * 100;
               const finalCog = activeStats.finalCogs[idx];
+          const spawnedSupportStyle = cog.isOfficeSpawnedSupport ? { filter: 'sepia(1) saturate(5.5) hue-rotate(-45deg) brightness(0.92)' } : undefined;
 
               return (
                 <div key={idx} className="flex flex-col gap-2">
@@ -1172,7 +1289,7 @@ export function CogCalculator() {
                         if (choice.type === 'normal') {
                           return (
                             <div className="flex flex-col items-center justify-center h-full w-full relative">
-                              <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60" />
+                              <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60" style={spawnedSupportStyle} />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
                               <div className="relative flex flex-col items-center justify-center pointer-events-none">
                                 {cog.isV2 && (
@@ -1188,7 +1305,7 @@ export function CogCalculator() {
                         }
                         return (
                           <>
-                            <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" style={spawnedSupportStyle} />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
                             <div className="absolute bottom-1.5 inset-x-0 pointer-events-none">
                               <span className="block text-center text-[10px] font-bold text-white leading-tight px-1">{choice.label}</span>
@@ -1202,12 +1319,12 @@ export function CogCalculator() {
                         <div className="flex items-center justify-between mb-2 ml-1 mr-1">
                           <div className="text-[10px] uppercase tracking-widest font-bold text-white/40">Levels</div>
                           <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const next = [...cogs];
-                              next[idx] = { ...next[idx], isV2: !next[idx].isV2 };
-                              setCogs(next);
-                            }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const next = [...displayCogs];
+                                next[idx] = { ...next[idx], isV2: !next[idx].isV2 };
+                                setCogs(next);
+                              }}
                             className={`flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors border ${cog.isV2 ? 'bg-fuchsia-900/40 border-fuchsia-500/50 text-fuchsia-300' : 'bg-black/20 border-white/5 text-white/40 hover:bg-black/40 hover:text-white/60'}`}
                           >
                             <span className="text-[9px] font-black uppercase tracking-widest">v2.0</span>
@@ -1217,12 +1334,12 @@ export function CogCalculator() {
                           </div>
                         </div>
                         <div className="grid grid-cols-5 gap-1 mb-3">
-                          {COG_CHOICES.filter(c => c.type === 'normal').map(c => (
-                            <button
-                              key={c.id}
-                              onClick={(e) => { e.stopPropagation(); const next = [...cogs]; next[idx] = { ...next[idx], id: c.id }; setCogs(next); setActiveCogSlot(null); }}
-                              className={`relative w-9 h-9 rounded-md border flex items-center justify-center text-xs font-black transition-all cursor-pointer overflow-hidden ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400 text-emerald-100 shadow-[0_0_10px_rgba(52,211,153,0.3)]' : 'bg-black/30 border-white/5 text-white/60 hover:bg-black/50 hover:text-white'}`}
-                            >
+                                  {COG_CHOICES.filter(c => c.type === 'normal').map(c => (
+                                    <button
+                                      key={c.id}
+                                      onClick={(e) => { e.stopPropagation(); const next = [...displayCogs]; next[idx] = { ...next[idx], id: c.id }; setCogs(next); setActiveCogSlot(null); }}
+                                      className={`relative w-9 h-9 rounded-md border flex items-center justify-center text-xs font-black transition-all cursor-pointer overflow-hidden ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400 text-emerald-100 shadow-[0_0_10px_rgba(52,211,153,0.3)]' : 'bg-black/30 border-white/5 text-white/60 hover:bg-black/50 hover:text-white'}`}
+                                    >
                               <img src={c.img as string} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity" />
                               <span className="relative z-10">{c.id}</span>
                             </button>
@@ -1337,7 +1454,7 @@ export function CogCalculator() {
                           if (effect.id === 'isDefenseDown') {
                             const isPresident = finalCog.id === 'golf_fairway' || finalCog.id === 'golf_fringe';
                             const deadCogsCount = activeStats.finalCogs.filter((c: Cog, i: number) => {
-                              const maxHp = getCogMaxHp(c, cogs);
+                              const maxHp = c.simMaxHp ?? getCogMaxHp(c, activeStats.finalCogs);
                               const cdmg = activeStats.cogDamages[i] || 0;
                               return (c.isV2 ? maxHp * 2 : maxHp) <= cdmg;
                             }).length;
@@ -1375,6 +1492,9 @@ export function CogCalculator() {
                             const hasBullionAny = cogs.some(c => c.id === 'mint_bullion');
                             statusTitle = `Overpaid: +${hasBullionAny ? '200' : '150'} Max HP`;
                           }
+                          if (effect.id === 'isImmunity' && activeLocal) {
+                            statusTitle = 'Immunity: Clerk cannot be damaged until another cog is defeated';
+                          }
 
                           return (
                             <div
@@ -1387,6 +1507,7 @@ export function CogCalculator() {
                                 src={getExtensionImageUrl(`images/statuses/${effect.icon}`)}
                                 alt={effect.label}
                                 className="w-5 h-5 object-contain"
+                                style={effect.id === 'isImmunity' ? { filter: 'hue-rotate(-60deg) saturate(1) brightness(1.5)' } : undefined}
                               />
                               {badgeValue !== undefined && (
                                 <div className={`absolute -top-1.5 -right-1.5 text-[8px] font-black text-white px-1 rounded-full border border-black/20 shadow-sm z-10 min-w-[12px] h-3 flex items-center justify-center ${effect.id === 'isDefenseDown' ? 'bg-red-500' : 'bg-emerald-500'}`}>
@@ -1413,25 +1534,25 @@ export function CogCalculator() {
               {/* Column 1: Gags */}
               <div className="flex flex-col gap-2">
                 {gagTracks.map(track => (
-                  <GagTrackRow key={track.id} track={track} mode="base" onSelectGag={handleSelectGag} cogs={activeRound === 0 ? cogs : activeStats.finalCogs} cogDamages={activeStats.cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                  <GagTrackRow key={track.id} track={track} mode="base" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
 
               {/* Column 2: SOS */}
               <div className="flex flex-col gap-2">
                 {gagTracks.map(track => (
-                  <GagTrackRow key={track.id} track={track} mode="sos" onSelectGag={handleSelectGag} cogs={activeRound === 0 ? cogs : activeStats.finalCogs} cogDamages={activeStats.cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                  <GagTrackRow key={track.id} track={track} mode="sos" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
 
               {/* Column 3: Remotes */}
               <div className="flex flex-col gap-2">
-                <SpecialGagColumn mode="remotes" onSelectGag={handleSelectGag} cogs={activeRound === 0 ? cogs : activeStats.finalCogs} cogDamages={activeStats.cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                <SpecialGagColumn mode="remotes" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
               </div>
 
               {/* Column 4: Pink Slips */}
               <div className="flex flex-col gap-2">
-                <SpecialGagColumn mode="slips" onSelectGag={handleSelectGag} cogs={activeRound === 0 ? cogs : activeStats.finalCogs} cogDamages={activeStats.cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                <SpecialGagColumn mode="slips" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
               </div>
             </div>
           </div>
