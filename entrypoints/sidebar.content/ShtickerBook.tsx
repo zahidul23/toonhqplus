@@ -188,11 +188,11 @@ const BOSSES_INFO = [
     cardBorder: '#8c5d3d',
     department: 'Bossbot',
     tiers: [
-      { tier: 1, cgv: '1-16', cgl: 'Flunky 1 - Micromanager 4', timer: '270s', cogs: 'Head Hunter 10-11', tables: 8, cogsTable: 4, totalCogs: 40, slips: 2 },
-      { tier: 2, cgv: '17-32', cgl: 'Micromanager 5 - Corp Raider 8', timer: '285s', cogs: 'Head Hunter / Corp Raider 10-12', tables: 9, cogsTable: 5, totalCogs: 50, slips: 3 },
+      { tier: 1, cgv: '1-16', cgl: 'Flunky 1 - Micromanager 4', timer: '270s', cogs: 'Head Hunter 10-11', tables: 8, cogsTable: 4, totalCogs: 40, slips: 3 },
+      { tier: 2, cgv: '17-32', cgl: 'Micromanager 5 - Corp Raider 8', timer: '285s', cogs: 'Head Hunter / Corp Raider 10-12', tables: 9, cogsTable: 5, totalCogs: 50, slips: 4 },
       { tier: 3, cgv: '33-47', cgl: 'Corp Raider 9 - Big Cheese 19', timer: '300s', cogs: 'Corporate Raider 11-12', tables: 10, cogsTable: 6, totalCogs: 55, slips: 4 },
       { tier: 4, cgv: '48-62', cgl: 'Big Cheese 20 - Big Cheese 34', timer: '315s', cogs: 'Corp Raider / Big Cheese 11-13', tables: 12, cogsTable: 8, totalCogs: 60, slips: 5 },
-      { tier: 5, cgv: '63+', cgl: 'Big Cheese 35+', timer: '330s', cogs: 'Big Cheese 12-14', tables: 13, cogsTable: 5, totalCogs: 65, slips: 6 },
+      { tier: 5, cgv: '63+', cgl: 'Big Cheese 35+', timer: '330s', cogs: 'Big Cheese 12-14', tables: 13, cogsTable: 5, totalCogs: 65, slips: 5 },
     ],
     attacks: [
       { name: 'Swing', damage: 'Varies', note: 'Stream of golf balls' },

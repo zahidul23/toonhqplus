@@ -175,7 +175,7 @@ function injectHighlightStyles() {
       text-align: right;
     }
     .bossbot-info .tooltip-value {
-      width: 36px;
+      width: 40px;
     }
     .tooltip-divider {
       grid-column: 1 / -1;
@@ -195,6 +195,18 @@ function injectHighlightStyles() {
     }
     .tooltip-header.emerald { color: #10b981; font-size: 13px; }
     .tooltip-header.gray { color: #9ca3af; }
+    .tooltip-section-label {
+      grid-column: 1 / -1;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6b7280;
+      text-align: center;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 6px;
+      margin: 4px -8px 2px;
+    }
     
     .tooltip-sub-header {
       grid-column: 1 / -1;
@@ -840,6 +852,28 @@ const getCJDifficultyTier = (value: number): CJDifficultyTier => {
   return CJ_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CJ_DIFFICULTY_TIERS[8];
 };
 
+interface CEODifficultyTier {
+  tier: number;
+  minlevel: number;
+  timer: string;
+  tables: number;
+  cogTypes: string[];
+  totalCogs: number;
+  slips: number;
+}
+
+const CEO_DIFFICULTY_TIERS: CEODifficultyTier[] = [
+  { tier: 5, minlevel: 63, timer: '330s', tables: 13, cogTypes: ['the_big_cheese.png'], totalCogs: 65, slips: 5 },
+  { tier: 4, minlevel: 48, timer: '315s', tables: 12, cogTypes: ['corporate_raider.png', 'the_big_cheese.png'], totalCogs: 60, slips: 5 },
+  { tier: 3, minlevel: 33, timer: '300s', tables: 10, cogTypes: ['corporate_raider.png'], totalCogs: 55, slips: 4 },
+  { tier: 2, minlevel: 17, timer: '285s', tables: 9, cogTypes: ['head_hunter.png', 'corporate_raider.png'], totalCogs: 50, slips: 4 },
+  { tier: 1, minlevel: 1, timer: '270s', tables: 8, cogTypes: ['head_hunter.png'], totalCogs: 40, slips: 3 },
+];
+
+const getCEODifficultyTier = (value: number): CEODifficultyTier => {
+  return CEO_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CEO_DIFFICULTY_TIERS[4];
+};
+
 const BOSS_CONFIG: Record<string, string> = {
   'CEO': 'bossbot',
   'CJ': 'lawbot',
@@ -852,9 +886,7 @@ const LAWYER_THRESHOLDS = [
 ];
 
 const PINK_SLIP_THRESHOLDS = [
-  { minSuitValue: 63, slipCount: 5 },
   { minSuitValue: 48, slipCount: 5 },
-  { minSuitValue: 33, slipCount: 4 },
   { minSuitValue: 17, slipCount: 4 },
   { minSuitValue: 1, slipCount: 3 }
 ];
@@ -923,18 +955,34 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
   `;
 };
 
-const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, bossKey: string, currentSum: number, currentCount: number) => {
+const renderBossbotTooltip = (tierData: CEODifficultyTier, suitString: string, bossKey: string, currentSum: number, currentCount: number) => {
   const currentAvg = bankersRound(currentSum / currentCount);
   const rowsHtml = PINK_SLIP_THRESHOLDS.map(threshold => {
-    const isActive = currentPinkSlips === threshold.slipCount;
+    const isActive = tierData.slips === threshold.slipCount;
     const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);
     return renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.slipCount} Slips`, isActive, 'bossbot-info', note);
   }).join('');
+
+  const cogImagesHtml = tierData.cogTypes.map(img => `<img src="https://toonhq.org/static/assets/cogs/${img}" alt="Cog" style="width:20px;height:20px;vertical-align:middle;margin-right:4px;" />`).join('');
+
+  const feedingStatsList = [
+    { label: 'Timer', value: tierData.timer },
+    { label: 'Tables', value: tierData.tables },
+    { label: 'Total Cogs', value: tierData.totalCogs },
+    { label: 'Cog Types', value: `<div style="display:flex;justify-content:flex-start;align-items:center;">${cogImagesHtml}</div>` }
+  ];
+
+  const feedingStatsHtml = feedingStatsList.map(stat => renderTierRow(stat.label, stat.value, false, "tier-stats bossbot-info")).join('');
 
   return `
     <div class="tooltip-boss-info">
       <div class="tooltip-header">Group Average</div>
       <div class="tooltip-sub-header">${suitString}</div>
+      <div class="tooltip-divider"></div>
+      <div class="tooltip-header emerald">Tier ${tierData.tier}</div>
+      ${renderTierRow('Pink Slips', tierData.slips, false, 'tier-stats bossbot-info')}
+      <div class="tooltip-section-label">Feeding Round</div>
+      ${feedingStatsHtml}
       <div class="tooltip-divider"></div>
       <div class="tooltip-header gray">Pink Slip Thresholds</div>
       ${rowsHtml}
@@ -942,10 +990,15 @@ const renderBossbotTooltip = (suitString: string, currentPinkSlips: number, boss
   `;
 };
 
-const updateBossInfo = () => {
+const isBossInfoMutationNode = (node: Node | null | undefined): boolean => {
+  if (!(node instanceof HTMLElement)) return false;
+  return !!node.closest('.boss-title-wrapper, .boss-info');
+};
+
+const updateBossInfo = (dialog?: ParentNode | null) => {
   if (bossInfoEnabled === false) {
-    const dialog = document.querySelector('.group-details-dialog');
-    const thisBossInfo = dialog?.querySelector(".boss-info");
+    const targetDialog = dialog ?? document.querySelector('.group-details-dialog');
+    const thisBossInfo = targetDialog?.querySelector(".boss-info");
     if (thisBossInfo) {
       // If it exists but we are disabled, hide/remove it
       thisBossInfo.remove();
@@ -953,15 +1006,15 @@ const updateBossInfo = () => {
     }
     return;
   }
-  const dialog = document.querySelector('.group-details-dialog');
-  const thisBossInfo = dialog?.querySelector(".boss-info");
-  if (!dialog || !thisBossInfo) return;
+  const targetDialog = dialog ?? document.querySelector('.group-details-dialog');
+  const thisBossInfo = targetDialog?.querySelector(".boss-info");
+  if (!targetDialog || !thisBossInfo) return;
 
-  const thisBossName = dialog.querySelector('h4')?.textContent?.trim();
+  const thisBossName = targetDialog.querySelector('h4')?.textContent?.trim();
   const thisBossKey = thisBossName ? BOSS_CONFIG[thisBossName] : null;
   if (!thisBossKey) return;
 
-  const rows = dialog.querySelectorAll('.group-member-row');
+  const rows = targetDialog.querySelectorAll('.group-member-row');
   const suitNames: string[] = [];
   for (const row of rows) {
     const suitImg = row.querySelector('.toon__track--suit');
@@ -978,15 +1031,18 @@ const updateBossInfo = () => {
 
   let infoText = '';
   let html = '';
+  let tierKey = '';
 
   if (thisBossKey === 'lawbot') {
     const tierData = getCJDifficultyTier(averageSuitValue);
+    tierKey = String(tierData.tier);
     infoText = `(${tierData.lawyers} lawyers)`;
     html = renderLawbotTooltip(tierData, suitString, thisBossKey, currentSum, suitNames.length);
   } else {
-    const currentPinkSlips = getPinkSlips(averageSuitValue);
-    infoText = `(${currentPinkSlips} Pink Slips)`;
-    html = renderBossbotTooltip(suitString, currentPinkSlips, thisBossKey, currentSum, suitNames.length);
+    const tierData = getCEODifficultyTier(averageSuitValue);
+    tierKey = String(tierData.tier);
+    infoText = `(${tierData.slips} Pink Slips)`;
+    html = renderBossbotTooltip(tierData, suitString, thisBossKey, currentSum, suitNames.length);
   }
 
   // Ensure tooltip exists
@@ -998,13 +1054,19 @@ const updateBossInfo = () => {
   }
 
   // Update content only if changed
-  if (thisBossInfo.firstChild?.textContent !== infoText || tooltipEl.innerHTML !== html) {
+  const currentInfoText = thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE
+    ? thisBossInfo.firstChild.textContent
+    : '';
+  const cachedTier = tooltipEl.dataset.tooltipTier ?? '';
+
+  if (currentInfoText !== infoText || cachedTier !== tierKey) {
     if (thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE) {
       thisBossInfo.firstChild.textContent = infoText;
     } else {
       thisBossInfo.prepend(document.createTextNode(infoText));
     }
     tooltipEl.innerHTML = html;
+    tooltipEl.dataset.tooltipTier = tierKey;
   }
 }
 const CONFIGURABLE_NAV_ITEMS: Record<string, { label: string, href: string, colorClass: string }> = {
@@ -1786,7 +1848,7 @@ export default defineContentScript({
           wrapper.remove();
         } else {
           // Everything is intact
-          updateBossInfo();
+          updateBossInfo(d);
           return;
         }
       }
@@ -1812,7 +1874,7 @@ export default defineContentScript({
         newWrapper.appendChild(newH4);
 
         setTimeout(() => {
-          updateBossInfo();
+          updateBossInfo(d);
         }, 100);
       }
     };
@@ -1824,13 +1886,13 @@ export default defineContentScript({
       const dialogs = new Set<HTMLElement>();
 
       for (const m of mutations) {
-        if (m.target instanceof HTMLElement && (m.target.classList.contains('boss-title-wrapper') || m.target.classList.contains('boss-info'))) {
+        if (isBossInfoMutationNode(m.target)) {
           continue;
         }
 
         m.addedNodes.forEach((node) => {
+          if (isBossInfoMutationNode(node)) return;
           if (!(node instanceof HTMLElement)) return;
-          if (node.classList?.contains('boss-title-wrapper') || node.classList?.contains('boss-info')) return;
 
           if (node.matches?.('.group-details-dialog')) dialogs.add(node);
           const closest = node.closest?.('.group-details-dialog') as HTMLElement | null;
@@ -1840,8 +1902,8 @@ export default defineContentScript({
         });
 
         m.removedNodes.forEach((node) => {
+          if (isBossInfoMutationNode(node)) return;
           if (!(node instanceof HTMLElement)) return;
-          if (node.classList?.contains('boss-title-wrapper') || node.classList?.contains('boss-info')) return;
 
           if (m.target instanceof HTMLElement) {
             const closest = m.target.closest?.('.group-details-dialog') as HTMLElement | null;

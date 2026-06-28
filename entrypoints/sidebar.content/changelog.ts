@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.8',
+    date: 'June 28, 2026',
+    changes: [
+      'Improved CEO Tier tooltips'
+    ]
+  },
+  {
     version: '1.2.7',
     date: 'June 27, 2026',
     changes: [
