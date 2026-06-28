@@ -700,12 +700,32 @@ export function CogCalculator() {
       };
 
       const finalizeOfficeClerkImmunity = () => {
-        syncExistingOfficeClerkImmunity();
+        const clerkIdx = getOfficeClerkIndex();
+        if (clerkIdx !== -1 && officeClerkHadImmunityAtRoundStart) {
+          const clerk = currentCogs[clerkIdx];
+          const clerkState = cogStates[clerkIdx];
+          if (clerkState.layer === 0) {
+            clerk.isImmunity = false;
+            clerk.hasTriggeredOfficeImmunity = false;
+            clerk.immunitySupportCount = undefined;
+            clerk.pendingOfficeSupportLevel = undefined;
+          } else {
+            const aliveSupports = countAliveOfficeSupports(clerkIdx);
+            if (clerk.isImmunity && officeClerkSupportsAtRoundStart > aliveSupports) {
+              clerk.isImmunity = false;
+              clerk.immunitySupportCount = undefined;
+              clerk.pendingOfficeSupportLevel = undefined;
+            }
+          }
+        }
         activateOfficeClerkImmunity();
         spawnPendingOfficeSupport();
       };
 
       syncExistingOfficeClerkImmunity();
+      const officeClerkIdxAtRoundStart = getOfficeClerkIndex();
+      const officeClerkHadImmunityAtRoundStart = officeClerkIdxAtRoundStart !== -1 && !!currentCogs[officeClerkIdxAtRoundStart].isImmunity;
+      const officeClerkSupportsAtRoundStart = officeClerkIdxAtRoundStart !== -1 ? countAliveOfficeSupports(officeClerkIdxAtRoundStart) : 0;
 
       const hasForeman = currentCogs.some(c => c.id === 'factory_scrap' || c.id === 'factory_steel');
       const hasBullionAuditor = currentCogs.some(c => c.id === 'mint_bullion');
