@@ -75,6 +75,7 @@ export type ListStore = 'toony_toons' | 'stinky_toons';
 // --- DB open / upgrade --------------------------------------------------------
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+let openDbHandle: IDBDatabase | null = null;
 
 export function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
@@ -123,9 +124,16 @@ export function openDB(): Promise<IDBDatabase> {
 
     req.onsuccess = () => {
       const db = req.result;
+      openDbHandle = db;
+      db.onversionchange = () => {
+        db.close();
+        if (openDbHandle === db) openDbHandle = null;
+        dbPromise = null;
+      };
       // Recover from empty DB (e.g. navfouc opened first with a high version and no onupgradeneeded)
       if (db.objectStoreNames.length === 0) {
         db.close();
+        if (openDbHandle === db) openDbHandle = null;
         dbPromise = null;
         const delReq = indexedDB.deleteDatabase(DB_NAME);
         delReq.onsuccess = () => openDB().then(resolve).catch(reject);
@@ -137,6 +145,14 @@ export function openDB(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
+}
+
+export function closeDB(): void {
+  if (openDbHandle) {
+    openDbHandle.close();
+    openDbHandle = null;
+  }
+  dbPromise = null;
 }
 
 // --- Internal helpers ---------------------------------------------------------

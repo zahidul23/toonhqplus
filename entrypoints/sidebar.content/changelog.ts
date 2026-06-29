@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.10',
+    date: 'June 29, 2026',
+    changes: [
+      'Add ability to import and export saved extension data',
+      'Consolidate delete data buttons to a single modal'
+    ]
+  },
+  {
     version: '1.2.9',
     date: 'June 28, 2026',
     changes: [

@@ -1,7 +1,13 @@
-import { getSetting, setSetting } from './sidebar.content/db';
+import { closeDB, getSetting, setSetting } from './sidebar.content/db';
 import { checkRewards, getRewardHistoryKey, pruneRewardHistory, isDeepEqual } from './sidebar.content/trackerUtils';
 import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardHistoryEntry } from './sidebar.content/trackerUtils';
+import {
+  pruneIndexedDbSnapshotForExport,
+  restoreIndexedDatabases,
+  snapshotIndexedDatabases,
+  type ExtensionStorageSnapshot,
+} from './lib/storageTransfer';
 
 export default defineBackground(() => {
   const DEBUG = false; // Set to true to enable verbose interval logging
@@ -15,6 +21,47 @@ export default defineBackground(() => {
   let trackingInterval: ReturnType<typeof setInterval> | null = null;
   let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
   const KEEP_ALIVE_ALARM = 'toontracker-keepalive';
+
+  async function exportExtensionStorage(includeFullToonCache: boolean): Promise<ExtensionStorageSnapshot> {
+    return {
+      localStorage: {},
+      indexedDB: includeFullToonCache
+        ? await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })
+        : pruneIndexedDbSnapshotForExport(await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })),
+      browserStorageLocal: await browser.storage.local.get(null),
+    };
+  }
+
+  async function syncTrackerRuntimeState() {
+    trackerEnabled = await isTrackerEnabled();
+    if (trackerEnabled === true) {
+      startAutoDiscover();
+      startTracking();
+      TRACKED_PORTS.forEach(port => {
+        if (!connections.has(port)) {
+          failedPorts.delete(port);
+          try { connectToPort(port); } catch (e) { }
+        } else {
+          authorizePort(port, connections.get(port));
+        }
+      });
+    } else {
+      stopAutoDiscover();
+      stopTracking();
+      disconnectAll();
+    }
+    broadcastStatus();
+  }
+
+  async function importExtensionStorage(snapshot: ExtensionStorageSnapshot) {
+    closeDB();
+    await browser.storage.local.clear();
+    if (Object.keys(snapshot.browserStorageLocal || {}).length > 0) {
+      await browser.storage.local.set(snapshot.browserStorageLocal);
+    }
+    await restoreIndexedDatabases(snapshot.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
+    await syncTrackerRuntimeState();
+  }
 
   async function isTrackerEnabled() {
     const storedTrackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
@@ -377,6 +424,20 @@ export default defineBackground(() => {
           broadcastStatus();
           sendResponse({ success: true });
         });
+      });
+      return true;
+    } else if (message.type === 'EXPORT_EXTENSION_STORAGE') {
+      exportExtensionStorage(message.includeFullToonCache === true).then((snapshot) => {
+        sendResponse({ snapshot });
+      }).catch((error) => {
+        sendResponse({ error: error instanceof Error ? error.message : String(error) });
+      });
+      return true;
+    } else if (message.type === 'IMPORT_EXTENSION_STORAGE') {
+      importExtensionStorage(message.snapshot as ExtensionStorageSnapshot).then(() => {
+        sendResponse({ success: true });
+      }).catch((error) => {
+        sendResponse({ error: error instanceof Error ? error.message : String(error) });
       });
       return true;
     }

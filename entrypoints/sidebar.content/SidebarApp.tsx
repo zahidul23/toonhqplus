@@ -5,6 +5,7 @@ import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
 import { ShtickerBook } from './ShtickerBook.tsx';
 import {
+  closeDB,
   getAllFromList,
   addToList,
   removeFromList,
@@ -28,6 +29,19 @@ import {
   type ToonRecord,
   type ToonId,
 } from './db';
+import {
+  createTransferDocument,
+  formatBytes,
+  formatTransferFilename,
+  measureBytes,
+  parseTransferDocument,
+  pruneIndexedDbSnapshotForExport,
+  restoreIndexedDatabases,
+  restoreLocalStorage,
+  snapshotIndexedDatabases,
+  snapshotLocalStorage,
+  type TransferSnapshot,
+} from '../lib/storageTransfer';
 
 const STORAGE_KEYS = {
   FAVORITES: 'toonhq-favorites',
@@ -69,12 +83,36 @@ interface ToonData {
 
 interface DialogState {
   isOpen: boolean;
-  type: 'add' | 'move' | 'remove' | 'delete_group' | 'clear_history' | 'clear_toons' | 'reset_navigation';
+  type: 'add' | 'move' | 'remove' | 'delete_group';
   listKey?: (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
   toon?: ToonData;
   source: 'main' | 'sidebar';
   otherListName?: string;
   groupId?: number;
+}
+
+interface ResetSettingsDialogState {
+  isOpen: boolean;
+  isBusy: boolean;
+  selections: {
+    history: boolean;
+    savedToons: boolean;
+    navigation: boolean;
+  };
+  message?: string;
+  error?: string;
+}
+
+interface TransferDialogState {
+  mode: 'import' | 'export';
+  text: string;
+  isBusy: boolean;
+  includeFullToonCache?: boolean;
+  fileName?: string;
+  totalBytes?: number;
+  rawBytes?: number;
+  message?: string;
+  error?: string;
 }
 
 const SPECIES_MAP: Record<number, string> = {
@@ -192,6 +230,57 @@ async function updateToonList(
       await setNote(toonId, note);
     }
   }
+}
+
+async function exportAllData(includeFullToonCache: boolean): Promise<{ json: string; totalBytes: number; rawBytes: number; fileName: string }> {
+  const extensionResponse = await browser.runtime.sendMessage({ type: 'EXPORT_EXTENSION_STORAGE', includeFullToonCache });
+  if (extensionResponse?.error) {
+    throw new Error(extensionResponse.error);
+  }
+
+  const snapshot: TransferSnapshot = {
+    app: 'toonhqplus',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    origins: {
+      site: {
+        localStorage: snapshotLocalStorage(window.localStorage),
+        indexedDB: includeFullToonCache
+          ? await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })
+          : pruneIndexedDbSnapshotForExport(await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })),
+      },
+      extension: extensionResponse?.snapshot ?? {
+        localStorage: {},
+        indexedDB: {},
+        browserStorageLocal: {},
+      },
+    },
+  };
+
+  const { json, document } = await createTransferDocument(snapshot);
+  return {
+    json,
+    totalBytes: measureBytes(json),
+    rawBytes: document.rawBytes,
+    fileName: formatTransferFilename(new Date(snapshot.exportedAt)),
+  };
+}
+
+async function importAllData(text: string): Promise<void> {
+  const snapshot = await parseTransferDocument(text);
+
+  const extensionResponse = await browser.runtime.sendMessage({
+    type: 'IMPORT_EXTENSION_STORAGE',
+    snapshot: snapshot.origins.extension,
+  });
+
+  if (extensionResponse?.error) {
+    throw new Error(extensionResponse.error);
+  }
+
+  closeDB();
+  restoreLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {});
+  await restoreIndexedDatabases(snapshot.origins.site.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
 }
 
 // GAG_TRACKS is replaced by gagsConfig from gags.ts
@@ -855,6 +944,8 @@ export function SidebarApp() {
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [resetSettingsDialog, setResetSettingsDialog] = useState<ResetSettingsDialogState | null>(null);
+  const [transferDialog, setTransferDialog] = useState<TransferDialogState | null>(null);
   const [dialogNote, setDialogNote] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [toonyCollapsed, setToonyCollapsed] = useState(false);
@@ -865,6 +956,7 @@ export function SidebarApp() {
   const pageSize = 10;
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const startCollapseAnimation = () => {
     setIsAnimatingCollapse(true);
@@ -960,17 +1052,194 @@ export function SidebarApp() {
     setHistoryGroupMembers(historyGroupMembersMap);
   }, []);
 
-  const handleClearHistory = useCallback(() => {
-    setDialog({ isOpen: true, type: 'clear_history', source: 'sidebar' });
+  const handleOpenResetSettings = useCallback(() => {
+    setResetSettingsDialog({
+      isOpen: true,
+      isBusy: false,
+      selections: {
+        history: false,
+        savedToons: false,
+        navigation: false,
+      },
+    });
   }, []);
 
-  const handleClearToons = useCallback(() => {
-    setDialog({ isOpen: true, type: 'clear_toons', source: 'sidebar' });
+  const buildExportDialog = useCallback((includeFullToonCache: boolean) => {
+    setTransferDialog({
+      mode: 'export',
+      text: '',
+      isBusy: true,
+      includeFullToonCache,
+      message: 'Building compressed backup...',
+    });
+
+    exportAllData(includeFullToonCache).then((result) => {
+      setTransferDialog({
+        mode: 'export',
+        text: result.json,
+        isBusy: false,
+        includeFullToonCache,
+        fileName: result.fileName,
+        totalBytes: result.totalBytes,
+        rawBytes: result.rawBytes,
+        message: 'Backup ready to copy or download.',
+      });
+    }).catch((error) => {
+      setTransferDialog({
+        mode: 'export',
+        text: '',
+        isBusy: false,
+        includeFullToonCache,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }, []);
 
-  const handleResetNavbar = useCallback(() => {
-    setDialog({ isOpen: true, type: 'reset_navigation', source: 'sidebar' });
+  const handleOpenExport = useCallback(() => {
+    buildExportDialog(false);
+  }, [buildExportDialog]);
+
+  const handleOpenImport = useCallback(() => {
+    setTransferDialog({
+      mode: 'import',
+      text: '',
+      isBusy: false,
+    });
   }, []);
+
+  const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    setTransferDialog((current) => current && current.mode === 'import'
+      ? {
+        ...current,
+        text,
+        fileName: file.name,
+        error: undefined,
+        message: undefined,
+      }
+      : current);
+    event.target.value = '';
+  }, []);
+
+  const handleCopyExport = useCallback(async () => {
+    if (!transferDialog?.text) return;
+    await navigator.clipboard.writeText(transferDialog.text);
+    setTransferDialog((current) => current && current.mode === 'export'
+      ? { ...current, message: 'Backup copied to clipboard.', error: undefined }
+      : current);
+  }, [transferDialog]);
+
+  const handleDownloadExport = useCallback(() => {
+    if (!transferDialog?.text) return;
+    const blob = new Blob([transferDialog.text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = transferDialog.fileName || formatTransferFilename();
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setTransferDialog((current) => current && current.mode === 'export'
+      ? { ...current, message: 'Backup downloaded.', error: undefined }
+      : current);
+  }, [transferDialog]);
+
+  const handleToggleFullExport = useCallback((includeFullToonCache: boolean) => {
+    buildExportDialog(includeFullToonCache);
+  }, [buildExportDialog]);
+
+  const handleConfirmResetSettings = useCallback(async () => {
+    if (!resetSettingsDialog) return;
+
+    const { history, savedToons, navigation } = resetSettingsDialog.selections;
+    if (!history && !savedToons && !navigation) {
+      setResetSettingsDialog((current) => current
+        ? { ...current, error: 'Select at least one item to reset.' }
+        : current);
+      return;
+    }
+
+    setResetSettingsDialog((current) => current
+      ? { ...current, isBusy: true, error: undefined, message: 'Resetting selected settings...' }
+      : current);
+
+    try {
+      if (history) {
+        await clearAllGroups();
+        setHistoryGroups({});
+        setHistoryGroupMembers({});
+        setSelectedHistoryGroup(null);
+      }
+
+      if (savedToons) {
+        await Promise.all([
+          clearList('toony_toons'),
+          clearList('stinky_toons'),
+          clearNotes(),
+        ]);
+        setFavorites([]);
+        setBlocked([]);
+        setNotes({});
+      }
+
+      if (navigation) {
+        const defaultConfig = {
+          pinned: ['invasions', 'groups', 'fishing', 'ccg'],
+          dropdown: ['field-offices', 'gardening', 'doodles']
+        };
+        await setSetting('navbar-config', defaultConfig);
+        setNavbarConfig(defaultConfig);
+      }
+
+      await refresh();
+      setResetSettingsDialog((current) => current
+        ? { ...current, isBusy: true, message: 'Delete complete. Reloading ToonHQ...', error: undefined }
+        : current);
+      setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      setResetSettingsDialog((current) => current
+        ? {
+          ...current,
+          isBusy: false,
+          error: error instanceof Error ? error.message : String(error),
+        }
+        : current);
+    }
+  }, [resetSettingsDialog, refresh]);
+
+  const hasSelectedResetSetting = !!resetSettingsDialog && Object.values(resetSettingsDialog.selections).some(Boolean);
+  const groupHistoryDeleteCount = Object.keys(historyGroups).length;
+  const savedToonsDeleteCount = favorites.length + blocked.length + Object.keys(notes).length;
+
+  const handleConfirmImport = useCallback(async () => {
+    if (!transferDialog?.text.trim()) {
+      setTransferDialog((current) => current && current.mode === 'import'
+        ? { ...current, error: 'Paste backup data or upload a backup file first.' }
+        : current);
+      return;
+    }
+
+    setTransferDialog((current) => current && current.mode === 'import'
+      ? { ...current, isBusy: true, error: undefined, message: 'Importing backup and replacing existing data...' }
+      : current);
+
+    try {
+      await importAllData(transferDialog.text);
+      setTransferDialog((current) => current && current.mode === 'import'
+        ? { ...current, isBusy: true, message: 'Import complete. Reloading ToonHQ...', error: undefined }
+        : current);
+      setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      setTransferDialog((current) => current && current.mode === 'import'
+        ? {
+          ...current,
+          isBusy: false,
+          error: error instanceof Error ? error.message : String(error),
+        }
+        : current);
+    }
+  }, [transferDialog]);
 
   const handleDeleteGroup = useCallback((e: React.MouseEvent, groupId: number) => {
     e.stopPropagation();
@@ -1150,6 +1419,7 @@ export function SidebarApp() {
     let port: ReturnType<typeof browser.runtime.connect> | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
     let backoff = 1000;
+    let handleDisconnect: (() => void) | null = null;
 
     function connect() {
       port = browser.runtime.connect({ name: 'toonhqplus-tracker' });
@@ -1159,7 +1429,7 @@ export function SidebarApp() {
         backoff = 1000;
       }, 2000);
 
-      port.onDisconnect.addListener(() => {
+      handleDisconnect = () => {
         clearTimeout(resetBackoff);
 
         const err = browser.runtime.lastError;
@@ -1171,15 +1441,17 @@ export function SidebarApp() {
         // Try reconnecting with a progressively longer delay up to max 10 seconds
         reconnectTimeout = setTimeout(connect, backoff);
         backoff = Math.min(backoff * 1.5, 10000);
-      });
+      };
+
+      port.onDisconnect.addListener(handleDisconnect);
     }
 
     connect();
 
     return () => {
       clearTimeout(reconnectTimeout);
-      if (port) {
-        port.onDisconnect.removeListener(); // type definition workaround: some browser implementations use varying removeListener approaches, this is standard enough for polyfills
+      if (port && handleDisconnect) {
+        port.onDisconnect.removeListener(handleDisconnect);
         port.disconnect();
       }
     };
@@ -1734,10 +2006,6 @@ export function SidebarApp() {
                             const next = !(trackerEnabled !== false);
                             setTrackerEnabled(next);
                             setSetting('tracker-enabled', next).catch(console.error);
-                            if (!next && activeTab === 'tracker') {
-                              setActiveTab('history');
-                              setSetting('active-tab', 'history').catch(console.error);
-                            }
                             // Notify background script about the change
                             browser.runtime.sendMessage({ type: 'TRACKER_PREF_CHANGED', enabled: next });
                           }}
@@ -1753,33 +2021,39 @@ export function SidebarApp() {
 
                       <div className="grid grid-cols-1 gap-2">
                         <button
-                          onClick={handleClearHistory}
+                          onClick={handleOpenExport}
+                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-sky-500/10 group transition-all cursor-pointer border border-white/5"
+                        >
+                          <div className="h-7 w-7 rounded bg-sky-500/10 flex items-center justify-center text-sky-300 group-hover:bg-sky-500 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                          </div>
+                          <div className="flex flex-col">
+                            <div className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors">Export Data</div>
+                            <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">Export your data so you can copy or download it for safekeeping.</div>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={handleOpenImport}
+                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-amber-500/10 group transition-all cursor-pointer border border-white/5"
+                        >
+                          <div className="h-7 w-7 rounded bg-amber-500/10 flex items-center justify-center text-amber-300 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21V9" /><path d="m17 14-5-5-5 5" /><path d="M5 3h14" /></svg>
+                          </div>
+                          <div className="flex flex-col">
+                            <div className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">Import Data</div>
+                            <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">Paste or upload an export file to replace your current saved ToonHQ+ data.</div>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={handleOpenResetSettings}
                           className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
                         >
                           <div className="h-7 w-7 rounded bg-red-500/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
                           </div>
-                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Group History</div>
-                        </button>
-
-                        <button
-                          onClick={handleClearToons}
-                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-red-500/10 group transition-all cursor-pointer border border-white/5"
-                        >
-                          <div className="h-7 w-7 rounded bg-red-400/10 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m22 19-3-3 3-3" /></svg>
-                          </div>
-                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Clear Toons Lists</div>
-                        </button>
-
-                        <button
-                          onClick={handleResetNavbar}
-                          className="flex items-center gap-3 w-full rounded-lg bg-black/20 p-2.5 text-left hover:bg-emerald-500/10 group transition-all cursor-pointer border border-white/5"
-                        >
-                          <div className="h-7 w-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
-                          </div>
-                          <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">Reset Navigation</div>
+                          <div className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Delete Settings</div>
                         </button>
                       </div>
                     </div>
@@ -1799,26 +2073,15 @@ export function SidebarApp() {
             className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-[#450a0a]' : 'bg-[#0c3622]'} ${dialog.source === 'main' ? '' : 'mr-4'}`}
             onClick={(e) => e.stopPropagation()}
           >
-            {(dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.type === 'reset_navigation') ? (
+            {dialog.type === 'delete_group' ? (
               <div className="mb-4 flex flex-col items-center gap-3 text-center">
-                <div className={`h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 ${dialog.type === 'reset_navigation' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                  {dialog.type === 'reset_navigation' ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                  )}
+                <div className="h-16 w-16 rounded-full flex items-center justify-center border-2 border-red-500/30 bg-red-500/10 border-red-500/30">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-white leading-tight">
-                    {dialog.type === 'delete_group' ? 'Delete Group' :
-                      dialog.type === 'clear_history' ? 'Clear History' :
-                        dialog.type === 'clear_toons' ? 'Clear Toons Lists' : 'Reset Navigation'}
-                  </h4>
+                  <h4 className="text-lg font-bold text-white leading-tight">Delete Group</h4>
                   <p className="mt-1 text-sm text-red-100 opacity-90">
-                    {dialog.type === 'delete_group' ? 'Are you sure you want to remove this group from your history?' :
-                      dialog.type === 'clear_history' ? 'Are you sure you want to clear all group history? This cannot be undone.' :
-                        dialog.type === 'clear_toons' ? 'Are you sure you want to clear your lists of Toony Toons, Stinky Toons, and all Toon Notes? This cannot be undone.' :
-                          'Are you sure you want to reset your navigation bar to its default settings?'}
+                    Are you sure you want to remove this group from your history?
                   </p>
                 </div>
               </div>
@@ -1873,31 +2136,6 @@ export function SidebarApp() {
                         setDialog(null);
                       });
                     });
-                  } else if (dialog.type === 'clear_history') {
-                    clearAllGroups().then(() => {
-                      setHistoryGroups({});
-                      setDialog(null);
-                    });
-                  } else if (dialog.type === 'clear_toons') {
-                    Promise.all([
-                      clearList('toony_toons'),
-                      clearList('stinky_toons'),
-                      clearNotes(),
-                    ]).then(() => {
-                      setFavorites([]);
-                      setBlocked([]);
-                      setNotes({});
-                      setDialog(null);
-                    });
-                  } else if (dialog.type === 'reset_navigation') {
-                    const defaultConfig = {
-                      pinned: ['invasions', 'groups', 'fishing', 'ccg'],
-                      dropdown: ['field-offices', 'gardening', 'doodles']
-                    };
-                    setSetting('navbar-config', defaultConfig).then(() => {
-                      setNavbarConfig(defaultConfig);
-                      setDialog(null);
-                    });
                   } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
                     updateToonList(dialog.type, dialog.listKey!, dialog.toon, dialogNote).then(() => {
                       if (dialog.type === 'add' || dialog.type === 'move') {
@@ -1909,17 +2147,14 @@ export function SidebarApp() {
                     });
                   }
                 }}
-                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.type === 'clear_history' || dialog.type === 'clear_toons' || dialog.listKey === STORAGE_KEYS.BLOCKED)
+                className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-lg transition-all active:scale-95 cursor-pointer ${(dialog.type === 'remove' || dialog.type === 'delete_group' || dialog.listKey === STORAGE_KEYS.BLOCKED)
                   ? 'bg-red-600 hover:bg-red-700 ring-red-400/50'
                   : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
                   } focus:outline-none focus:ring-2`}
               >
                 {dialog.type === 'remove' ? 'Remove Toon' :
                   dialog.type === 'delete_group' ? 'Delete Group' :
-                    dialog.type === 'clear_history' ? 'Clear History' :
-                      dialog.type === 'clear_toons' ? 'Clear Toons' :
-                        dialog.type === 'reset_navigation' ? 'Reset Navigation' :
-                          dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
+                    dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
               </button>
               {dialog.type === 'remove' && dialog.listKey && (
                 <button
@@ -1942,6 +2177,308 @@ export function SidebarApp() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {transferDialog && (
+        <div
+          className="fixed inset-0 z-[2147483647] bg-black/50 animate-in fade-in duration-200 flex items-center justify-center p-4"
+          onClick={() => {
+            if (!transferDialog.isBusy) setTransferDialog(null);
+          }}
+        >
+          <div
+            className="w-full max-w-2xl rounded-xl border border-white/20 bg-[#0c3622] p-5 shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h4 className="text-lg font-bold text-white leading-tight">
+                  {transferDialog.mode === 'export' ? 'Export Data' : 'Import Data'}
+                </h4>
+                <p className={`mt-1 text-sm ${transferDialog.mode === 'export' ? 'text-green-100/80' : 'text-amber-100/90'}`}>
+                  {transferDialog.mode === 'export'
+                    ? 'This export includes your saved ToonHQ+ data from both the website and the extension.'
+                    : 'Importing a file will replace your current saved ToonHQ+ data with the data in that export.'}
+                </p>
+              </div>
+              {!transferDialog.isBusy && (
+                <button
+                  onClick={() => setTransferDialog(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/20 text-green-100 hover:bg-black/40 transition-colors cursor-pointer"
+                  aria-label="Close import or export dialog"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                </button>
+              )}
+            </div>
+
+            {transferDialog.mode === 'export' && (
+              <>
+                {/*
+                <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                  <input
+                    type="checkbox"
+                    checked={transferDialog.includeFullToonCache === true}
+                    onChange={(e) => handleToggleFullExport(e.target.checked)}
+                    disabled={transferDialog.isBusy}
+                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/30 text-emerald-500 focus:ring-emerald-400 disabled:cursor-not-allowed"
+                  />
+                  <div>
+                    <div className="text-sm font-bold text-white">Include All Searchable Toons</div>
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-green-100/70">
+                      Turn this on to include all searchable toons too. Leave unchecked if you are not sure.
+                    </div>
+                  </div>
+                </label>
+                */}
+                <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-green-300/70">Compressed Size</div>
+                    <div className="mt-1 text-sm font-bold text-white">{transferDialog.totalBytes != null ? formatBytes(transferDialog.totalBytes) : 'Calculating...'}</div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-green-300/70">Uncompressed Size</div>
+                    <div className="mt-1 text-sm font-bold text-white">{transferDialog.rawBytes != null ? formatBytes(transferDialog.rawBytes) : 'Calculating...'}</div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {transferDialog.mode === 'import' && (
+              <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+                Importing will overwrite your current saved data in both the site and the extension.
+                <button
+                  onClick={() => buildExportDialog(false)}
+                  disabled={transferDialog.isBusy}
+                  className="text-amber-200 underline underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Backup your current data first to be safe.
+                </button>
+              </div>
+            )}
+
+            <textarea
+              value={transferDialog.text}
+              readOnly={transferDialog.mode === 'export'}
+              onChange={(e) => {
+                const nextText = e.target.value;
+                setTransferDialog((current) => current
+                  ? {
+                    ...current,
+                    text: nextText,
+                    error: undefined,
+                    message: current.mode === 'import' ? current.message : undefined,
+                  }
+                  : current);
+              }}
+              className="h-72 w-full rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-400 shadow-inner custom-scrollbar"
+              placeholder={transferDialog.mode === 'export' ? 'Preparing your export...' : 'Paste your ToonHQ+ export here.'}
+            />
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-green-100/80">
+              {transferDialog.fileName && <span className="rounded-full bg-black/20 px-2.5 py-1">{transferDialog.fileName}</span>}
+              {transferDialog.message && <span>{transferDialog.message}</span>}
+              {transferDialog.error && <span className="text-red-300">{transferDialog.error}</span>}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap gap-2">
+                {transferDialog.mode === 'export' ? (
+                  <>
+                    <button
+                      onClick={handleCopyExport}
+                      disabled={transferDialog.isBusy || !transferDialog.text}
+                      className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-700 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Copy Export
+                    </button>
+                    <button
+                      onClick={handleDownloadExport}
+                      disabled={transferDialog.isBusy || !transferDialog.text}
+                      className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Download Export
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => importFileInputRef.current?.click()}
+                      disabled={transferDialog.isBusy}
+                      className="rounded-lg bg-black/20 px-4 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Upload Export File
+                    </button>
+                    <button
+                      onClick={handleConfirmImport}
+                      disabled={transferDialog.isBusy}
+                      className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Import Data
+                    </button>
+                  </>
+                )}
+              </div>
+              {!transferDialog.isBusy && (
+                <button
+                  onClick={() => setTransferDialog(null)}
+                  className="ml-auto rounded-lg bg-black/20 px-4 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-colors active:scale-95 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {resetSettingsDialog?.isOpen && (
+        <div
+          className="fixed inset-0 z-[2147483647] bg-black/50 animate-in fade-in duration-200 flex items-center justify-center p-4"
+          onClick={() => {
+            if (!resetSettingsDialog.isBusy) setResetSettingsDialog(null);
+          }}
+        >
+          <div
+            className="w-full max-w-2xl rounded-xl border border-white/20 bg-[#0c3622] p-5 shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h4 className="text-lg font-bold text-white leading-tight">Delete Settings</h4>
+                <p className="mt-1 text-sm text-amber-100/90">
+                  Choose which saved settings you want to delete.
+                </p>
+              </div>
+              {!resetSettingsDialog.isBusy && (
+                <button
+                  onClick={() => setResetSettingsDialog(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/20 text-green-100 hover:bg-black/40 transition-colors cursor-pointer"
+                  aria-label="Close reset settings dialog"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                </button>
+              )}
+            </div>
+
+            <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+              This will permanently remove your saved data for the selected categories.
+              <button
+                onClick={() => {
+                  setResetSettingsDialog(null);
+                  buildExportDialog(false);
+                }}
+                disabled={resetSettingsDialog.isBusy}
+                className="text-amber-200 underline underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Backup your current data first to be safe.
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                <input
+                  type="checkbox"
+                  checked={resetSettingsDialog.selections.history}
+                  onChange={(e) => setResetSettingsDialog((current) => current
+                    ? {
+                      ...current,
+                      selections: { ...current.selections, history: e.target.checked },
+                      error: undefined,
+                    }
+                    : current)}
+                  disabled={resetSettingsDialog.isBusy}
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/30 text-red-500 focus:ring-red-400 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <div className="text-sm font-bold text-white">Group History</div>
+                  <div className="mt-0.5 text-[11px] leading-relaxed text-green-100/70">
+                    Clears your saved group history and past group member records.
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold text-red-300">
+                    {groupHistoryDeleteCount} {groupHistoryDeleteCount === 1 ? 'group' : 'groups'} will be deleted.
+                  </div>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                <input
+                  type="checkbox"
+                  checked={resetSettingsDialog.selections.savedToons}
+                  onChange={(e) => setResetSettingsDialog((current) => current
+                    ? {
+                      ...current,
+                      selections: { ...current.selections, savedToons: e.target.checked },
+                      error: undefined,
+                    }
+                    : current)}
+                  disabled={resetSettingsDialog.isBusy}
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/30 text-red-500 focus:ring-red-400 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <div className="text-sm font-bold text-white">Saved Toon Lists and Notes</div>
+                  <div className="mt-0.5 text-[11px] leading-relaxed text-green-100/70">
+                    Clears your Toony Toons, Stinky Toons, and Toon Notes.
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold text-red-300">
+                    {savedToonsDeleteCount} total toon entries will be deleted.
+                  </div>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                <input
+                  type="checkbox"
+                  checked={resetSettingsDialog.selections.navigation}
+                  onChange={(e) => setResetSettingsDialog((current) => current
+                    ? {
+                      ...current,
+                      selections: { ...current.selections, navigation: e.target.checked },
+                      error: undefined,
+                    }
+                    : current)}
+                  disabled={resetSettingsDialog.isBusy}
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/30 text-red-500 focus:ring-red-400 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <div className="text-sm font-bold text-white">Navigation Layout</div>
+                  <div className="mt-0.5 text-[11px] leading-relaxed text-green-100/70">
+                    Resets your ToonHQ navigation layout back to the default arrangement.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-green-100/80">
+              {resetSettingsDialog.message && <span>{resetSettingsDialog.message}</span>}
+              {resetSettingsDialog.error && <span className="text-red-300">{resetSettingsDialog.error}</span>}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleConfirmResetSettings}
+                disabled={resetSettingsDialog.isBusy || !hasSelectedResetSetting}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Delete
+              </button>
+              {!resetSettingsDialog.isBusy && (
+                <button
+                  onClick={() => setResetSettingsDialog(null)}
+                  className="ml-auto rounded-lg bg-black/20 px-4 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-colors active:scale-95 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
             </div>
           </div>
         </div>
