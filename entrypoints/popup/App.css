@@ -32,17 +32,17 @@
 }
 
 .version-tag {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-weight: bold;
   align-self: flex-end;
   margin-bottom: 0.25rem;
 }
 
 h1 {
-  font-size: 1.8rem;
   margin: 0;
   color: #2c6eb5;
-  font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif
+  font-family: "Fredoka One", cursive;
+  text-shadow: rgba(0, 0, 0, 0.45) 0px 4px 28px;
 }
 
 .card {
