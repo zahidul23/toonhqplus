@@ -273,6 +273,11 @@ function injectHighlightStyles() {
       line-height: 1;
       border: 1px solid transparent;
     }
+    .tooltip-bool-box svg {
+      width: 12px;
+      height: 12px;
+      stroke-width: 6;
+    }
     .tooltip-bool-box.yes {
       background: #166534;
       border-color: #22c55e;
@@ -959,6 +964,15 @@ const getTooltipNoteForThreshold = (
   return '';
 };
 
+const renderTooltipBoolIcon = (value: boolean) => `
+  <span class="tooltip-bool-box ${value ? 'yes' : 'no'}" aria-label="${value ? 'Yes' : 'No'}">
+    ${value
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>'
+  }
+  </span>
+`;
+
 const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bossKey: string, currentSum: number, currentCount: number) => {
   const currentAvg = bankersRound(currentSum / currentCount);
   const lawyerRowsHtml = LAWYER_THRESHOLDS.map(threshold => {
@@ -969,7 +983,7 @@ const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bos
 
   const statsList = [
     { label: 'Gavels', value: tierData.gavels },
-    { label: 'Bonus Weight', value: `<span class="tooltip-bool-box ${tierData.hasBonusWeight ? 'yes' : 'no'}">${tierData.hasBonusWeight ? '✓' : 'X'}</span>` },
+    { label: 'Bonus Weight', value: renderTooltipBoolIcon(tierData.hasBonusWeight) },
     { label: 'Evidence Count', value: tierData.evidence },
     { label: 'Evidence Heal', value: tierData.laffHeal + " Laff" }
   ];
