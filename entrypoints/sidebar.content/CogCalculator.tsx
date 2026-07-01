@@ -62,9 +62,9 @@ const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; rounds?
   ],
   special: [
     { gagIndex: 0, damage: 9999, image: getExtensionImageUrl('images/pinkslips.png'), name: "Pink Slip", isInstaKill: true },
-    { gagIndex: 1, damage: 0, rounds: 2, dmgOthers: 45, dmgExpire: 45, image: getExtensionImageUrl('images/remotes.png'), name: "1-Star Remote", isRemote: true, stars: 1 },
-    { gagIndex: 2, damage: 0, rounds: 3, dmgOthers: 60, dmgExpire: 90, image: getExtensionImageUrl('images/remotes.png'), name: "2-Star Remote", isRemote: true, stars: 2 },
-    { gagIndex: 3, damage: 0, rounds: 4, dmgOthers: 75, dmgExpire: 150, image: getExtensionImageUrl('images/remotes.png'), name: "3-Star Remote", isRemote: true, stars: 3 },
+    { gagIndex: 1, damage: 0, rounds: 2, dmgOthers: 45, dmgExpire: 45, image: getExtensionImageUrl('images/remotes.png'), name: "1-Star Damage Remote", isRemote: true, stars: 1 },
+    { gagIndex: 2, damage: 0, rounds: 3, dmgOthers: 60, dmgExpire: 90, image: getExtensionImageUrl('images/remotes.png'), name: "2-Star Damage Remote", isRemote: true, stars: 2 },
+    { gagIndex: 3, damage: 0, rounds: 4, dmgOthers: 75, dmgExpire: 150, image: getExtensionImageUrl('images/remotes.png'), name: "3-Star Damage Remote", isRemote: true, stars: 3 },
     { gagIndex: 4, damage: 0, rounds: 2, dmgOthers: 0, dmgExpire: 45, image: getExtensionImageUrl('images/remotesheal.png'), name: "1-Star Heal Remote", isRemote: true, stars: 1, isHeal: true },
     { gagIndex: 5, damage: 0, rounds: 3, dmgOthers: 0, dmgExpire: 90, image: getExtensionImageUrl('images/remotesheal.png'), name: "2-Star Heal Remote", isRemote: true, stars: 2, isHeal: true },
     { gagIndex: 6, damage: 0, rounds: 4, dmgOthers: 0, dmgExpire: 150, image: getExtensionImageUrl('images/remotesheal.png'), name: "3-Star Heal Remote", isRemote: true, stars: 3, isHeal: true },
@@ -318,6 +318,14 @@ const RemoteStarsPopup = ({ gagIndex, activePopup, setActivePopup }: any) => {
 
   const isHeal = gagIndex === 4;
   const items = isHeal ? [4, 5, 6] : [1, 2, 3];
+  const getRemoteTitle = (remote: any) => {
+    if (!remote) return '';
+
+    const selfDamage = `${remote.dmgExpire} self damage after ${remote.rounds} rounds`;
+    if (remote.isHeal) return `${remote.name} (${selfDamage})`;
+
+    return `${remote.name} (${remote.dmgOthers} damage for ${remote.rounds} rounds, ${selfDamage})`;
+  };
 
   return (
     <div className="absolute bottom-full mb-3 right-0 w-max bg-[#0c3622] p-4 rounded-2xl border border-white/10 shadow-2xl z-[70] animate-in fade-in slide-in-from-bottom-2">
@@ -330,6 +338,7 @@ const RemoteStarsPopup = ({ gagIndex, activePopup, setActivePopup }: any) => {
               key={idx}
               onClick={(e) => { e.stopPropagation(); setActivePopup({ trackId: 'special', gagIndex: idx, variant: 'sos' }); }}
               className="group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-violet-500/20 hover:border-violet-500/50 rounded-xl border border-white/5 transition-all cursor-pointer min-w-[64px]"
+              title={getRemoteTitle(rem)}
             >
               <div className="relative">
                 <img src={rem?.image} className="w-10 h-10 object-contain group-hover/star:scale-110 transition-transform" />
@@ -350,6 +359,22 @@ const RemoteStarsPopup = ({ gagIndex, activePopup, setActivePopup }: any) => {
 function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
   const isBase = mode === 'base';
   const items = isBase ? track.gags : (SOS_GAGS[track.id] || []).filter((s: any) => [3, 4, 5].includes(s.gagIndex));
+
+  const getBaseTitle = (gag: any, idx: number) => {
+    if (track.id === 'lure') return `${gag.name} (${LURE_DURATIONS[idx]} rounds)`;
+    return `${gag.name} (${gag.base})`;
+  };
+
+  const getOrganicTitle = (gag: any, idx: number) => {
+    const organicValue = gag.organic ?? gag.base;
+    if (track.id === 'lure') return `${gag.name} (Organic ${organicValue}%, ${LURE_DURATIONS[idx]} rounds)`;
+    return `${gag.name} (Organic ${organicValue})`;
+  };
+
+  const getSosTitle = (gag: any) => {
+    if (track.id === 'lure' && gag.rounds) return `${gag.name} (${gag.rounds} rounds)`;
+    return `${gag.name} (${gag.damage})`;
+  };
 
   const handleGagClick = (e: React.MouseEvent, idx: number, variant: GagVariant) => {
     e.stopPropagation();
@@ -377,7 +402,8 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColo
       {items.map((gag: any, idx: number) => {
         const itemIdx = isBase ? idx : gag.gagIndex;
         const variant = isBase ? 'base' : 'sos';
-        const titleText = isBase ? (track.id === 'lure' ? `${gag.name} (${LURE_DURATIONS[idx]} rounds)` : `${gag.name} (${gag.base})`) : `${gag.name} (${gag.damage})`;
+        const titleText = isBase ? getBaseTitle(gag, idx) : getSosTitle(gag);
+        const organicTitle = isBase ? getOrganicTitle(gag, idx) : undefined;
 
         let gagDisabled = false;
         if (cogs.filter((c: any) => !c.isDead).length === 0) gagDisabled = true;
@@ -389,6 +415,7 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColo
             imageAlt={gag.name}
             color={track.color}
             title={titleText}
+            organicTitle={organicTitle}
             disabled={gagDisabled}
             onClick={(e: any) => handleGagClick(e, itemIdx, variant)}
             onOrganicClick={isBase ? ((e: any) => handleGagClick(e, itemIdx, 'organic')) : undefined}
@@ -848,6 +875,9 @@ export function CogCalculator() {
                 let trapDmg = trapDamageOnCog[cogIdx];
                 if (defenseDownStacks > 0) {
                   trapDmg = Math.floor(trapDmg * (1 + 0.20 * defenseDownStacks));
+                }
+                if (isBullionVulnerable) {
+                  trapDmg = Math.floor(trapDmg * 1.5);
                 }
                 phaseDamage[cogIdx] += trapDmg;
                 trackDamages['trap'] = (trackDamages['trap'] || 0) + trapDmg;
