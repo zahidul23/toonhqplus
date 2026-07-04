@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.13',
+    date: 'July 4, 2026',
+    changes: [
+      'Bug fixes for synced toon lists and notes'
+    ]
+  },
+  {
     version: '1.2.12',
     date: 'July 4, 2026',
     changes: [

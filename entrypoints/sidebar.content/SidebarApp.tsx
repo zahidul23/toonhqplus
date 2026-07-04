@@ -33,6 +33,7 @@ import {
   type SavedToonDataSnapshot,
 } from './db';
 import {
+  createLocalSyncNotesPayload,
   importSyncNotesPayload,
   initSyncNotesRemoteListener,
   isSyncNotesEnabled,
@@ -41,7 +42,6 @@ import {
   setSyncNotesEnabled,
   syncSavedToonsAfterLocalMutation,
   writeSyncNotesPayload,
-  writeCurrentSavedToonsToSync,
   type SyncNotesPayload,
 } from './syncNotes';
 import {
@@ -614,7 +614,7 @@ async function stageSyncNotesForImport(
     ...stagedSavedToons,
   };
 
-  await writeSyncNotesPayload(payload);
+  await writeSyncNotesPayload(payload, { allowRemoteOverwrite: true });
   return true;
 }
 
@@ -660,7 +660,7 @@ async function importAllData(text: string, options: { mode: ImportMode; conflict
           schemaVersion: 1,
           updatedAt: new Date().toISOString(),
           ...savedToonRollback,
-        });
+        }, { allowRemoteOverwrite: true });
       } catch (rollbackError) {
         console.warn('[ToonHQ+] Failed to roll back staged Sync Notes import.', rollbackError);
       }
@@ -1474,7 +1474,8 @@ export function SidebarApp() {
   }, []);
 
   const enableSyncNotesWithThisDevice = useCallback(async () => {
-    await writeCurrentSavedToonsToSync();
+    const payload = await createLocalSyncNotesPayload();
+    await writeSyncNotesPayload(payload, { allowRemoteOverwrite: true });
     await setSyncNotesEnabled(true);
     setSyncNotesEnabledState(true);
     setSyncNotesChoiceDialog(null);
@@ -1905,8 +1906,8 @@ export function SidebarApp() {
 
 
   useEffect(() => {
-    refresh();
     initSyncNotesRemoteListener(refresh);
+    refresh();
     getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);

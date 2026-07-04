@@ -10,6 +10,7 @@ export const SYNC_NOTES_SETTING_KEY = 'sync-notes-enabled';
 
 const SYNC_META_KEY = 'toonhqplus-sync-notes-meta';
 const SYNC_CHUNK_PREFIX = 'toonhqplus-sync-notes-chunk-';
+const SYNC_LAST_APPLIED_UPDATED_AT_KEY = 'sync-notes-last-applied-updated-at';
 const SCHEMA_VERSION = 1;
 const CHUNK_SIZE = 7000;
 const MAX_TOTAL_BYTES = 100 * 1024;
@@ -28,9 +29,15 @@ interface SyncNotesMeta {
   compression: 'gzip-base64';
 }
 
+interface WriteSyncNotesOptions {
+  allowRemoteOverwrite?: boolean;
+}
+
 let lastLocalWriteUpdatedAt: string | null = null;
 let listenerInitialized = false;
 let importTimer: ReturnType<typeof setTimeout> | null = null;
+let remoteImportInFlight: Promise<void> | null = null;
+let remoteImportPending = false;
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -71,6 +78,25 @@ function assertOnlineForSync(): void {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new Error('Sync Notes needs an internet connection. Reconnect and try again.');
   }
+}
+
+function parseTimestamp(value: string | null | undefined): number {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+async function getLastAppliedSyncUpdatedAt(): Promise<string | null> {
+  return (await getSetting<string>(SYNC_LAST_APPLIED_UPDATED_AT_KEY)) || null;
+}
+
+async function setLastAppliedSyncUpdatedAt(updatedAt: string): Promise<void> {
+  if (updatedAt) await setSetting(SYNC_LAST_APPLIED_UPDATED_AT_KEY, updatedAt);
+}
+
+function hasUnappliedRemoteUpdate(meta: SyncNotesMeta | undefined, lastAppliedUpdatedAt: string | null): boolean {
+  if (!meta?.updatedAt || meta.updatedAt === lastLocalWriteUpdatedAt) return false;
+  return parseTimestamp(meta.updatedAt) > parseTimestamp(lastAppliedUpdatedAt);
 }
 
 function normalizePayload(value: SyncNotesPayload): SyncNotesPayload {
@@ -122,7 +148,7 @@ export async function readSyncNotesPayload(): Promise<SyncNotesPayload | null> {
   return normalizePayload({ ...parsed, updatedAt: meta.updatedAt });
 }
 
-export async function writeSyncNotesPayload(payload: SyncNotesPayload): Promise<void> {
+export async function writeSyncNotesPayload(payload: SyncNotesPayload, options: WriteSyncNotesOptions = {}): Promise<void> {
   assertOnlineForSync();
   const normalized = normalizePayload(payload);
   const compressed = await compressString(JSON.stringify(normalized));
@@ -147,9 +173,15 @@ export async function writeSyncNotesPayload(payload: SyncNotesPayload): Promise<
   }
 
   const existing = await browser.storage.sync.get(SYNC_META_KEY);
-  const oldChunkCount = Math.max(0, Number((existing[SYNC_META_KEY] as SyncNotesMeta | undefined)?.chunkCount || 0));
+  const existingMeta = existing[SYNC_META_KEY] as SyncNotesMeta | undefined;
+  if (!options.allowRemoteOverwrite && hasUnappliedRemoteUpdate(existingMeta, await getLastAppliedSyncUpdatedAt())) {
+    throw new Error('Newer synced toon notes are available from another device. Open Sync Notes and use the synced data before saving local changes.');
+  }
+
+  const oldChunkCount = Math.max(0, Number(existingMeta?.chunkCount || 0));
   await browser.storage.sync.set(update);
   lastLocalWriteUpdatedAt = normalized.updatedAt;
+  await setLastAppliedSyncUpdatedAt(normalized.updatedAt);
 
   const staleKeys: string[] = [];
   for (let index = chunkCount; index < oldChunkCount; index += 1) staleKeys.push(`${SYNC_CHUNK_PREFIX}${index}`);
@@ -162,6 +194,39 @@ export async function writeCurrentSavedToonsToSync(): Promise<void> {
 
 export async function importSyncNotesPayload(payload: SyncNotesPayload): Promise<void> {
   await replaceSavedToonData(payload);
+  await setLastAppliedSyncUpdatedAt(payload.updatedAt);
+}
+
+async function importLatestRemoteSyncNotesIfNewer(onImported?: () => void): Promise<void> {
+  if (!(await isSyncNotesEnabled())) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+  const payload = await readSyncNotesPayload();
+  if (!payload) return;
+  if (payload.updatedAt === lastLocalWriteUpdatedAt) return;
+  if (parseTimestamp(payload.updatedAt) <= parseTimestamp(await getLastAppliedSyncUpdatedAt())) return;
+
+  await importSyncNotesPayload(payload);
+  onImported?.();
+}
+
+function scheduleRemoteSyncNotesImport(onImported?: () => void, delayMs = 250): void {
+  if (importTimer) clearTimeout(importTimer);
+  importTimer = setTimeout(() => {
+    importTimer = null;
+    if (remoteImportInFlight) {
+      remoteImportPending = true;
+      return;
+    }
+    remoteImportInFlight = importLatestRemoteSyncNotesIfNewer(onImported)
+      .catch((error) => console.warn('[ToonHQ+] Failed to import Sync Notes update.', error))
+      .finally(() => {
+        const shouldImportPendingUpdate = remoteImportPending;
+        remoteImportPending = false;
+        remoteImportInFlight = null;
+        if (shouldImportPendingUpdate) scheduleRemoteSyncNotesImport(onImported, 0);
+      });
+  }, delayMs);
 }
 
 export async function setSyncNotesEnabled(enabled: boolean): Promise<void> {
@@ -195,21 +260,19 @@ export function initSyncNotesRemoteListener(onImported?: () => void): void {
   if (listenerInitialized || !browser.storage?.onChanged) return;
   listenerInitialized = true;
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+      scheduleRemoteSyncNotesImport(onImported, 0);
+    });
+  }
+  scheduleRemoteSyncNotesImport(onImported, 0);
+
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync' || !Object.keys(changes).some(isSyncKey)) return;
     const nextMeta = changes[SYNC_META_KEY]?.newValue as SyncNotesMeta | undefined;
     if (nextMeta?.updatedAt && nextMeta.updatedAt === lastLocalWriteUpdatedAt) {
       return;
     }
-    if (importTimer) clearTimeout(importTimer);
-    importTimer = setTimeout(async () => {
-      importTimer = null;
-      if (!(await isSyncNotesEnabled())) return;
-      const payload = await readSyncNotesPayload();
-      if (!payload) return;
-      if (payload.updatedAt === lastLocalWriteUpdatedAt) return;
-      await importSyncNotesPayload(payload);
-      onImported?.();
-    }, 250);
+    scheduleRemoteSyncNotesImport(onImported);
   });
 }
