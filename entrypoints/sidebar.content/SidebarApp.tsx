@@ -2223,6 +2223,12 @@ export function SidebarApp() {
                             const toonyToons = [...new Set(favorites)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
                             const stinkyToons = [...new Set(blocked)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
                             const neutralToons = [...new Set(Object.keys(notes))].filter(id => !favorites.includes(id) && !blocked.includes(id) && historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
+                            const getSectionClass = (collapsed: boolean) =>
+                              `transition-all duration-300 ease-in-out flex flex-col min-h-2 ${collapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`;
+                            const sectionStyle = (collapsed: boolean): React.CSSProperties | undefined =>
+                              collapsed ? undefined : { maxHeight: 'max-content' };
+                            const getSectionBodyClass = (collapsed: boolean) =>
+                              `transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${collapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-1 mb-1'}`;
 
                             const renderToonRow = (id: string) => {
                               const toon = historyToons[id];
@@ -2262,7 +2268,7 @@ export function SidebarApp() {
                             return (
                               <>
                                 {toonyToons.length > 0 && (
-                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${toonyCollapsed ? 'flex-[0_0_auto]' : (toonyToons.length <= 4 ? 'flex-none' : 'flex-auto')}`}>
+                                  <section className={getSectionClass(toonyCollapsed)} style={sectionStyle(toonyCollapsed)}>
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -2275,7 +2281,7 @@ export function SidebarApp() {
                                       <span>Toony Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
-                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${toonyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${toonyToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
+                                    <div className={getSectionBodyClass(toonyCollapsed)}>
                                       <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {toonyToons.map(renderToonRow)}
                                       </ul>
@@ -2283,7 +2289,7 @@ export function SidebarApp() {
                                   </section>
                                 )}
                                 {stinkyToons.length > 0 && (
-                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${stinkyCollapsed ? 'flex-[0_0_auto]' : (stinkyToons.length <= 4 ? 'flex-none' : 'flex-auto')}`}>
+                                  <section className={getSectionClass(stinkyCollapsed)} style={sectionStyle(stinkyCollapsed)}>
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -2296,7 +2302,7 @@ export function SidebarApp() {
                                       <span>Stinky Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${stinkyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
-                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${stinkyCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${stinkyToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
+                                    <div className={getSectionBodyClass(stinkyCollapsed)}>
                                       <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {stinkyToons.map(renderToonRow)}
                                       </ul>
@@ -2304,7 +2310,7 @@ export function SidebarApp() {
                                   </section>
                                 )}
                                 {neutralToons.length > 0 && (
-                                  <section className={`transition-all duration-300 ease-in-out flex flex-col min-h-2 ${neutralCollapsed ? 'flex-[0_0_auto]' : (neutralToons.length <= 4 ? 'flex-none' : 'flex-auto')}`}>
+                                  <section className={getSectionClass(neutralCollapsed)} style={sectionStyle(neutralCollapsed)}>
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -2317,7 +2323,7 @@ export function SidebarApp() {
                                       <span>Notes</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
-                                    <div className={`transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${neutralCollapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : `opacity-100 ${neutralToons.length <= 4 ? 'flex-none' : 'flex-auto'} mb-1`}`}>
+                                    <div className={getSectionBodyClass(neutralCollapsed)}>
                                       <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {neutralToons.map(renderToonRow)}
                                       </ul>

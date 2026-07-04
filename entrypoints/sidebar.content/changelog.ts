@@ -6,8 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.12',
+    date: 'July 4, 2026',
+    changes: [
+      'Fix display sizes of Toon sections in Sidebar',
+    ]
+  },
+  {
     version: '1.2.11',
-    date: 'July 1, 2026',
+    date: 'July 4, 2026',
     changes: [
       'Fix Cog Calculator for Mint bonus damages and update gag titles',
       'Allow data imports to merge with existing data',
