@@ -1658,17 +1658,61 @@ export default defineContentScript({
     }
 
     // 3) Then start websocket to listen for group changes
-    // Run cleanup on startup and every 30 minutes
-    cleanupToonCacheTask();
-    setInterval(cleanupToonCacheTask, 30 * 60 * 1000);
+    // Run cleanup on startup and every 30 minutes. Use a restartable timeout so
+    // content-script invalidation can cancel long-lived background work cleanly.
+    let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
+    let groupTrackerDisposed = false;
+    const scheduleCleanupToonCache = () => {
+      if (groupTrackerDisposed) return;
+      cleanupTimeout = setTimeout(async () => {
+        cleanupTimeout = null;
+        if (groupTrackerDisposed) return;
+        await cleanupToonCacheTask();
+        scheduleCleanupToonCache();
+      }, 30 * 60 * 1000);
+    };
+    cleanupToonCacheTask().finally(scheduleCleanupToonCache);
+
     let isReconnecting = false;
+    let plannedSocketRestart = false;
+    let activeGroupSocket: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let socketRestartTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleSocketRestart = () => {
+      if (groupTrackerDisposed) return;
+      if (socketRestartTimeout) clearTimeout(socketRestartTimeout);
+      socketRestartTimeout = setTimeout(() => {
+        socketRestartTimeout = null;
+        if (groupTrackerDisposed) return;
+        if (!activeGroupSocket || activeGroupSocket.readyState === WebSocket.CLOSED) {
+          connectWebSocket();
+          return;
+        }
+        plannedSocketRestart = true;
+        activeGroupSocket.close();
+      }, 60 * 60 * 1000);
+    };
+
     const connectWebSocket = () => {
+      if (groupTrackerDisposed) return;
       const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');
+      activeGroupSocket = ws;
 
       ws.addEventListener('open', () => {
         if (isReconnecting) {
-          console.log('[ToonHQ+] Reconnected! Reloading page...');
-          window.location.reload();
+          if (plannedSocketRestart) {
+            console.log('[ToonHQ+] Group tracker socket restarted.');
+            plannedSocketRestart = false;
+            isReconnecting = false;
+          } else {
+            console.log('[ToonHQ+] Reconnected! Reloading page...');
+            window.location.reload();
+            return;
+          }
+        }
+
+        if (activeGroupSocket !== ws) {
           return;
         }
 
@@ -1748,19 +1792,41 @@ export default defineContentScript({
       });
 
       ws.addEventListener('close', () => {
+        if (activeGroupSocket === ws) activeGroupSocket = null;
+        if (groupTrackerDisposed) return;
         if (!isReconnecting) {
-          console.log('[ToonHQ+] WebSocket closed. Attempting to reconnect...');
+          console.log(plannedSocketRestart
+            ? '[ToonHQ+] Restarting group tracker socket...'
+            : '[ToonHQ+] WebSocket closed. Attempting to reconnect...');
           isReconnecting = true;
         }
-        setTimeout(connectWebSocket, 5000);
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(() => {
+          reconnectTimeout = null;
+          connectWebSocket();
+        }, plannedSocketRestart ? 250 : 5000);
       });
 
       ws.addEventListener('error', () => {
         console.log('[ToonHQ+] WebSocket error.');
       });
+
+      scheduleSocketRestart();
     };
 
     connectWebSocket();
+
+    ctx.onInvalidated(() => {
+      groupTrackerDisposed = true;
+      if (cleanupTimeout) clearTimeout(cleanupTimeout);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (socketRestartTimeout) clearTimeout(socketRestartTimeout);
+      plannedSocketRestart = false;
+      if (activeGroupSocket) {
+        activeGroupSocket.close();
+        activeGroupSocket = null;
+      }
+    });
 
     const bossValuesExist = () => {
       const dialog = document.querySelector(".group-details-dialog .modal-body");

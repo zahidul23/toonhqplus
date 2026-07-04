@@ -108,7 +108,6 @@ function App() {
         </div>
       )}
 
-
       <h2 className="settings-title">Contact</h2>
       <div className="bottom-section">
         <div className="image-side">

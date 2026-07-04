@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.11',
+    date: 'July 1, 2026',
+    changes: [
+      'Fix Cog Calculator for Mint bonus damages and update gag titles',
+      'Allow data imports to merge with existing data',
+      'Sync lists and notes between browser profiles'
+    ]
+  },
+  {
     version: '1.2.10',
     date: 'June 29, 2026',
     changes: [

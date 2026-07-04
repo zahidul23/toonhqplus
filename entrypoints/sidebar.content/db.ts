@@ -324,7 +324,7 @@ export async function searchToons(query: string, page: number, pageSize: number)
 const toonWriteBuffer = new Map<string, ToonRecord>();
 let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
-async function flushToonWriteBuffer() {
+export async function flushToonWriteBuffer() {
   if (toonWriteBuffer.size === 0) return;
   const toonsToSave = Array.from(toonWriteBuffer.values());
   toonWriteBuffer.clear();
@@ -518,6 +518,61 @@ export async function clearNotes(): Promise<void> {
   notifyChanged('notes');
 }
 
+export interface SavedToonDataSnapshot {
+  toons: ToonRecord[];
+  toonyToonIds: ToonId[];
+  stinkyToonIds: ToonId[];
+  notes: Record<string, string>;
+}
+
+export async function exportSavedToonData(): Promise<SavedToonDataSnapshot> {
+  await flushToonWriteBuffer();
+  const [toonyToonIds, stinkyToonIds, notes] = await Promise.all([
+    getAllFromList('toony_toons'),
+    getAllFromList('stinky_toons'),
+    getAllNotes(),
+  ]);
+  const referencedIds = [...new Set([...toonyToonIds, ...stinkyToonIds, ...Object.keys(notes)])];
+  const toons = await getToons(referencedIds);
+  return { toons, toonyToonIds, stinkyToonIds, notes };
+}
+
+export async function replaceSavedToonData(snapshot: SavedToonDataSnapshot): Promise<void> {
+  const db = await openDB();
+  const t = tx(db, ['toons', 'toony_toons', 'stinky_toons', 'notes'], 'readwrite');
+  const toonStore = t.objectStore('toons');
+  const toonyStore = t.objectStore('toony_toons');
+  const stinkyStore = t.objectStore('stinky_toons');
+  const notesStore = t.objectStore('notes');
+
+  toonyStore.clear();
+  stinkyStore.clear();
+  notesStore.clear();
+
+  for (const toon of snapshot.toons) {
+    const id = normalizeToonId(toon.id);
+    if (id) toonStore.put({ ...toon, id });
+  }
+  for (const toonId of snapshot.toonyToonIds) {
+    const id = normalizeToonId(toonId);
+    if (id) toonyStore.put({ toonId: id });
+  }
+  for (const toonId of snapshot.stinkyToonIds) {
+    const id = normalizeToonId(toonId);
+    if (id) stinkyStore.put({ toonId: id });
+  }
+  for (const [toonId, text] of Object.entries(snapshot.notes)) {
+    const id = normalizeToonId(toonId);
+    if (id && text.trim()) notesStore.put({ toonId: id, text: text.trim() });
+  }
+
+  await promisifyTx(t);
+  notifyChanged('toons');
+  notifyChanged('toony_toons');
+  notifyChanged('stinky_toons');
+  notifyChanged('notes');
+}
+
 // --- Groups -------------------------------------------------------------------
 
 export async function getGroup(groupId: number): Promise<GroupRecord | undefined> {
@@ -661,10 +716,17 @@ export async function getSettings(keys: string[]): Promise<Record<string, any>> 
   return out;
 }
 
-export async function cleanupHistory(limit: number = 100): Promise<void> {
+export async function cleanupHistory(limit: number = 20, maxMembers: number = 20): Promise<void> {
   const db = await openDB();
-  const allGroups = await promisifyRequest<GroupRecord[]>(tx(db, 'groups').objectStore('groups').getAll());
-  if (allGroups.length <= limit) return;
+  const readTx = tx(db, ['groups', 'group_members']);
+  const groupsRequest = promisifyRequest<GroupRecord[]>(readTx.objectStore('groups').getAll());
+  const membersRequest = promisifyRequest<GroupMemberRecord[]>(readTx.objectStore('group_members').getAll());
+  const [allGroups, allMembers] = await Promise.all([groupsRequest, membersRequest]);
+
+  const memberCounts = new Map<number, number>();
+  for (const member of allMembers) {
+    memberCounts.set(member.groupId, (memberCounts.get(member.groupId) || 0) + 1);
+  }
 
   allGroups.sort((a, b) => {
     const timeA = new Date(a.userJoinedAt || a.created).getTime();
@@ -672,8 +734,17 @@ export async function cleanupHistory(limit: number = 100): Promise<void> {
     return timeB - timeA;
   });
 
-  const toDelete = allGroups.slice(limit);
-  const deleteGroupIds = toDelete.map(g => g.groupId);
+  const keepGroupIds = new Set(
+    allGroups
+      .filter((group) => (memberCounts.get(group.groupId) || 0) <= maxMembers)
+      .slice(0, limit)
+      .map((group) => group.groupId)
+  );
+  const deleteGroupIds = allGroups
+    .map((group) => group.groupId)
+    .filter((groupId) => !keepGroupIds.has(groupId));
+
+  if (deleteGroupIds.length === 0) return;
 
   const t = tx(db, ['groups', 'group_members'], 'readwrite');
   const groupStore = t.objectStore('groups');
@@ -700,9 +771,9 @@ export async function cleanupHistory(limit: number = 100): Promise<void> {
 }
 
 export async function cleanupToonCache(): Promise<void> {
-  // 1. Prune old groups (keeping only last 100)
+  // 1. Prune old/oversized groups to match the history UI/export window.
   try {
-    await cleanupHistory(100);
+    await cleanupHistory(20, 20);
   } catch (e) {
     console.error('[ToonHQ+] History cleanup failed:', e);
   }

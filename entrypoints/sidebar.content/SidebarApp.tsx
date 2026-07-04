@@ -26,13 +26,31 @@ import {
   setSetting,
   deleteGroup as dbDeleteGroup,
   clearAllGroups,
+  exportSavedToonData,
+  replaceSavedToonData,
   type ToonRecord,
   type ToonId,
+  type SavedToonDataSnapshot,
 } from './db';
+import {
+  importSyncNotesPayload,
+  initSyncNotesRemoteListener,
+  isSyncNotesEnabled,
+  mutateSavedToonsWithSyncRollback,
+  readSyncNotesPayload,
+  setSyncNotesEnabled,
+  syncSavedToonsAfterLocalMutation,
+  writeSyncNotesPayload,
+  writeCurrentSavedToonsToSync,
+  type SyncNotesPayload,
+} from './syncNotes';
 import {
   createTransferDocument,
   formatBytes,
   formatTransferFilename,
+  mergeImportPlanSummaries,
+  mergeIndexedDatabases,
+  mergeLocalStorage,
   measureBytes,
   parseTransferDocument,
   pruneIndexedDbSnapshotForExport,
@@ -40,7 +58,13 @@ import {
   restoreLocalStorage,
   snapshotIndexedDatabases,
   snapshotLocalStorage,
+  analyzeOriginStorageMerge,
+  type ImportComparisonKind,
+  type ImportConflictPolicy,
+  type ImportMode,
+  type ImportPlanSummary,
   type TransferSnapshot,
+  type IndexedDbDatabaseSnapshot,
 } from '../lib/storageTransfer';
 
 const STORAGE_KEYS = {
@@ -107,6 +131,10 @@ interface TransferDialogState {
   mode: 'import' | 'export';
   text: string;
   isBusy: boolean;
+  importMode?: ImportMode;
+  conflictPolicy?: ImportConflictPolicy;
+  parsedSnapshot?: TransferSnapshot;
+  importPlan?: ImportPlanSummary;
   includeFullToonCache?: boolean;
   fileName?: string;
   totalBytes?: number;
@@ -154,6 +182,158 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+interface SyncNotesChoiceDialogState {
+  payload: SyncNotesPayload;
+  localSnapshot: SavedToonDataSnapshot;
+  isBusy: boolean;
+  error?: string;
+}
+
+function getImportPlanTotals(plan?: ImportPlanSummary) {
+  if (!plan) return { added: 0, updated: 0, conflicts: 0, unchanged: 0 };
+  return {
+    added: plan.localStorage.added + plan.indexedDB.added + plan.browserStorageLocal.added,
+    updated: plan.localStorage.updated + plan.indexedDB.updated + plan.browserStorageLocal.updated,
+    conflicts: plan.localStorage.conflicts + plan.indexedDB.conflicts + plan.browserStorageLocal.conflicts,
+    unchanged: plan.localStorage.unchanged + plan.indexedDB.unchanged + plan.browserStorageLocal.unchanged,
+  };
+}
+
+const browserSyncProfileName = import.meta.env.FIREFOX ? 'Firefox' : 'Chrome';
+
+function getSyncNotesDescription(): string {
+  return `Syncs your saved Stinky and Toony toons lists and notes across your devices through ${browserSyncProfileName} Profile Sync.`;
+}
+
+const importAnalysisLabels: Record<ImportComparisonKind, string> = {
+  added: 'New Data',
+  updated: 'Updated Data',
+  conflict: 'Conflicts',
+  unchanged: 'Unchanged Data',
+};
+
+function formatComparisonValue(value: unknown): string {
+  if (value === undefined) return 'No existing value';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+type SyncPreviewKind = 'toony' | 'stinky' | 'notes';
+
+function getSyncPreviewCount(snapshot: SavedToonDataSnapshot, kind: SyncPreviewKind): number {
+  if (kind === 'toony') return snapshot.toonyToonIds.length;
+  if (kind === 'stinky') return snapshot.stinkyToonIds.length;
+  return Object.keys(snapshot.notes).length;
+}
+
+function getSyncPreviewToonLabel(snapshot: SavedToonDataSnapshot, toonId: string): string {
+  const toon = snapshot.toons.find((entry) => String(entry.id) === String(toonId));
+  if (!toon) return String(toonId);
+  return `${toon.name || toon.id}${toon.laff != null ? ` (${toon.laff})` : ''}`;
+}
+
+function getSyncPreviewItems(snapshot: SavedToonDataSnapshot, kind: SyncPreviewKind): string[] {
+  if (kind === 'toony') {
+    return snapshot.toonyToonIds.map((toonId) => getSyncPreviewToonLabel(snapshot, toonId));
+  }
+  if (kind === 'stinky') {
+    return snapshot.stinkyToonIds.map((toonId) => getSyncPreviewToonLabel(snapshot, toonId));
+  }
+  return Object.entries(snapshot.notes).map(([toonId, text]) => {
+    const label = getSyncPreviewToonLabel(snapshot, toonId);
+    return `${label}: ${text}`;
+  });
+}
+
+function SyncNotesPreviewCell({ snapshot, kind }: { snapshot: SavedToonDataSnapshot; kind: SyncPreviewKind }) {
+  const items = getSyncPreviewItems(snapshot, kind);
+  return (
+    <div className="min-h-0 rounded-lg border border-white/5 bg-black/15 p-2">
+      {items.length === 0 ? (
+        <div className="py-4 text-center text-[11px] italic text-green-100/35">No saved data</div>
+      ) : (
+        <ul className="max-h-[6.5rem] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+          {items.map((item, index) => (
+            <li
+              key={`${kind}-${item}-${index}`}
+              className="rounded bg-white/5 px-2 py-1.5 text-[11px] leading-snug text-green-50/90"
+              title={item}
+            >
+              <span className="line-clamp-2">{item}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SyncNotesPreviewGrid({
+  synced,
+  local,
+  onUseSynced,
+  onUseLocal,
+  disabled,
+}: {
+  synced: SavedToonDataSnapshot;
+  local: SavedToonDataSnapshot;
+  onUseSynced: () => void;
+  onUseLocal: () => void;
+  disabled: boolean;
+}) {
+  const rows: Array<{ kind: SyncPreviewKind; label: string }> = [
+    { kind: 'toony', label: 'Toony' },
+    { kind: 'stinky', label: 'Stinky' },
+    { kind: 'notes', label: 'Notes' },
+  ];
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+        <div />
+        <button
+          type="button"
+          onClick={onUseSynced}
+          disabled={disabled}
+          className="rounded-lg bg-emerald-600 px-2 py-2 text-center text-white shadow-lg transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="block text-[10px] font-black uppercase tracking-widest">Use Synced Data</span>
+          <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wider text-emerald-100/80">(Overwrites Local)</span>
+        </button>
+        <button
+          type="button"
+          onClick={onUseLocal}
+          disabled={disabled}
+          className="rounded-lg bg-amber-600 px-2 py-2 text-center text-white shadow-lg transition-all hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="block text-[10px] font-black uppercase tracking-widest">Use Local Data</span>
+          <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wider text-amber-100/80">(Overwrites Sync)</span>
+        </button>
+
+        {rows.map((row) => (
+          <React.Fragment key={row.kind}>
+            <div className="flex flex-col justify-center rounded-lg border border-white/5 bg-black/20 px-2 py-2">
+              <span className="text-xs font-bold text-white">{row.label}</span>
+              <span className="mt-0.5 text-[10px] font-semibold text-green-200/55">
+                {getSyncPreviewCount(synced, row.kind)} synced
+              </span>
+              <span className="text-[10px] font-semibold text-amber-200/60">
+                {getSyncPreviewCount(local, row.kind)} local
+              </span>
+            </div>
+            <SyncNotesPreviewCell snapshot={synced} kind={row.kind} />
+            <SyncNotesPreviewCell snapshot={local} kind={row.kind} />
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const RelativeTime = memo(({ date }: { date: string }) => {
   const [display, setDisplay] = useState(() => formatRelativeTime(date));
 
@@ -195,41 +375,43 @@ async function updateToonList(
     toonStore === 'toony_toons' ? 'stinky_toons' : 'toony_toons';
   const toonId = toon.id;
 
-  if (type === 'remove') {
-    await removeFromList(toonStore, toonId);
-  } else {
-    await addToList(toonStore, toonId);
-    await removeFromList(otherStore, toonId);
-    await putToon({
-      id: toonId,
-      name: toon.name || '',
-      species: toon.species,
-      color: toon.color,
-      laff: toon.laff,
-      level: toon.level,
-      photo: toon.photo,
-      photo_bg: toon.photo_bg,
-      ring: toon.ring,
-      toonup: toon.toonup,
-      trap: toon.trap,
-      lure: toon.lure,
-      sound: toon.sound,
-      throw: toon.throw,
-      squirt: toon.squirt,
-      drop: toon.drop,
-      prestiges: toon.prestiges,
-      organic_level: toon.organic_level,
-      sellbot: toon.sellbot,
-      cashbot: toon.cashbot,
-      lawbot: toon.lawbot,
-      bossbot: toon.bossbot,
-      lastSeen: new Date().toISOString(),
-    });
+  await mutateSavedToonsWithSyncRollback(async () => {
+    if (type === 'remove') {
+      await removeFromList(toonStore, toonId);
+    } else {
+      await addToList(toonStore, toonId);
+      await removeFromList(otherStore, toonId);
+      await putToon({
+        id: toonId,
+        name: toon.name || '',
+        species: toon.species,
+        color: toon.color,
+        laff: toon.laff,
+        level: toon.level,
+        photo: toon.photo,
+        photo_bg: toon.photo_bg,
+        ring: toon.ring,
+        toonup: toon.toonup,
+        trap: toon.trap,
+        lure: toon.lure,
+        sound: toon.sound,
+        throw: toon.throw,
+        squirt: toon.squirt,
+        drop: toon.drop,
+        prestiges: toon.prestiges,
+        organic_level: toon.organic_level,
+        sellbot: toon.sellbot,
+        cashbot: toon.cashbot,
+        lawbot: toon.lawbot,
+        bossbot: toon.bossbot,
+        lastSeen: new Date().toISOString(),
+      });
 
-    if (note !== undefined) {
-      await setNote(toonId, note);
+      if (note !== undefined) {
+        await setNote(toonId, note);
+      }
     }
-  }
+  });
 }
 
 async function exportAllData(includeFullToonCache: boolean): Promise<{ json: string; totalBytes: number; rawBytes: number; fileName: string }> {
@@ -266,11 +448,15 @@ async function exportAllData(includeFullToonCache: boolean): Promise<{ json: str
   };
 }
 
-async function importAllData(text: string): Promise<void> {
-  const snapshot = await parseTransferDocument(text);
+async function buildImportPlan(snapshot: TransferSnapshot): Promise<ImportPlanSummary> {
+  const siteCurrent = {
+    localStorage: snapshotLocalStorage(window.localStorage),
+    indexedDB: await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] }),
+  };
+  const sitePlan = analyzeOriginStorageMerge(siteCurrent, snapshot.origins.site, 'Site');
 
   const extensionResponse = await browser.runtime.sendMessage({
-    type: 'IMPORT_EXTENSION_STORAGE',
+    type: 'ANALYZE_EXTENSION_IMPORT',
     snapshot: snapshot.origins.extension,
   });
 
@@ -278,9 +464,209 @@ async function importAllData(text: string): Promise<void> {
     throw new Error(extensionResponse.error);
   }
 
-  closeDB();
-  restoreLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {});
-  await restoreIndexedDatabases(snapshot.origins.site.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
+  if (!extensionResponse?.plan) {
+    throw new Error('Extension storage analysis did not return an import plan.');
+  }
+
+  return mergeImportPlanSummaries(sitePlan, extensionResponse.plan);
+}
+
+function stableImportSerializeJsonValue(value: unknown, inArray: boolean = false): string | undefined {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
+    return inArray ? 'null' : undefined;
+  }
+  if (Array.isArray(value)) return `[${value.map((entry) => stableImportSerializeJsonValue(entry, true) ?? 'null').join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const entries = Object.keys(record)
+      .sort()
+      .map((key) => {
+        const serialized = stableImportSerializeJsonValue(record[key]);
+        return serialized === undefined ? null : `${JSON.stringify(key)}:${serialized}`;
+      })
+      .filter((entry): entry is string => entry !== null);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function stableImportStringify(value: unknown): string {
+  return stableImportSerializeJsonValue(value) ?? 'undefined';
+}
+
+function importValuesEqual(a: unknown, b: unknown): boolean {
+  return stableImportStringify(a) === stableImportStringify(b);
+}
+
+function normalizeSavedToonId(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function getToonLastSeenTime(toon: unknown): number | null {
+  if (!toon || typeof toon !== 'object') return null;
+  const time = Date.parse(String((toon as Record<string, unknown>).lastSeen ?? ''));
+  return Number.isFinite(time) ? time : null;
+}
+
+function mergeStagedToonRecord(current: ToonRecord | undefined, incoming: ToonRecord, conflictPolicy: ImportConflictPolicy): ToonRecord {
+  if (!current || importValuesEqual(current, incoming)) return incoming;
+
+  const currentSeen = getToonLastSeenTime(current);
+  const incomingSeen = getToonLastSeenTime(incoming);
+  if (currentSeen != null && incomingSeen != null) {
+    return incomingSeen >= currentSeen ? incoming : current;
+  }
+
+  return conflictPolicy === 'use-import' ? incoming : current;
+}
+
+function getSavedToonSnapshotFromIndexedDb(database?: IndexedDbDatabaseSnapshot): SavedToonDataSnapshot {
+  const toons = (database?.stores.toons?.records ?? [])
+    .map((record) => {
+      const id = normalizeSavedToonId(record?.id);
+      return id ? { ...record, id } as ToonRecord : null;
+    })
+    .filter((record): record is ToonRecord => record !== null);
+
+  const toonyToonIds = (database?.stores.toony_toons?.records ?? [])
+    .map((record) => normalizeSavedToonId(record?.toonId))
+    .filter((id): id is string => id !== null);
+
+  const stinkyToonIds = (database?.stores.stinky_toons?.records ?? [])
+    .map((record) => normalizeSavedToonId(record?.toonId))
+    .filter((id): id is string => id !== null);
+
+  const notes: Record<string, string> = {};
+  for (const record of database?.stores.notes?.records ?? []) {
+    const id = normalizeSavedToonId(record?.toonId);
+    if (id && typeof record?.text === 'string') notes[id] = record.text;
+  }
+
+  const referencedIds = new Set([...toonyToonIds, ...stinkyToonIds, ...Object.keys(notes)]);
+  return {
+    toons: toons.filter((toon) => referencedIds.has(String(toon.id))),
+    toonyToonIds,
+    stinkyToonIds,
+    notes,
+  };
+}
+
+function mergeUniqueToonIds(current: string[], incoming: string[]): string[] {
+  return [...new Set([...current, ...incoming])];
+}
+
+function mergeSavedToonSnapshots(
+  current: SavedToonDataSnapshot,
+  incoming: SavedToonDataSnapshot,
+  conflictPolicy: ImportConflictPolicy
+): SavedToonDataSnapshot {
+  const toonsById = new Map<string, ToonRecord>();
+  for (const toon of current.toons) {
+    const id = normalizeSavedToonId(toon.id);
+    if (id) toonsById.set(id, { ...toon, id });
+  }
+  for (const toon of incoming.toons) {
+    const id = normalizeSavedToonId(toon.id);
+    if (!id) continue;
+    toonsById.set(id, mergeStagedToonRecord(toonsById.get(id), { ...toon, id }, conflictPolicy));
+  }
+
+  const notes = { ...current.notes };
+  for (const [toonId, text] of Object.entries(incoming.notes)) {
+    if (!(toonId in notes) || notes[toonId] === text || conflictPolicy === 'use-import') {
+      notes[toonId] = text;
+    }
+  }
+
+  const toonyToonIds = mergeUniqueToonIds(current.toonyToonIds.map(String), incoming.toonyToonIds.map(String));
+  const stinkyToonIds = mergeUniqueToonIds(current.stinkyToonIds.map(String), incoming.stinkyToonIds.map(String));
+  const referencedIds = new Set([...toonyToonIds, ...stinkyToonIds, ...Object.keys(notes)]);
+
+  return {
+    toons: Array.from(toonsById.values()).filter((toon) => referencedIds.has(String(toon.id))),
+    toonyToonIds,
+    stinkyToonIds,
+    notes,
+  };
+}
+
+async function stageSyncNotesForImport(
+  snapshot: TransferSnapshot,
+  options: { mode: ImportMode; conflictPolicy: ImportConflictPolicy },
+  currentSavedToons: SavedToonDataSnapshot
+): Promise<boolean> {
+  if (!(await isSyncNotesEnabled())) return false;
+
+  const incomingSavedToons = getSavedToonSnapshotFromIndexedDb(snapshot.origins.site.indexedDB?.toonhqplus);
+  const stagedSavedToons = options.mode === 'replace'
+    ? incomingSavedToons
+    : mergeSavedToonSnapshots(currentSavedToons, incomingSavedToons, options.conflictPolicy);
+
+  const payload: SyncNotesPayload = {
+    app: 'toonhqplus',
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+    ...stagedSavedToons,
+  };
+
+  await writeSyncNotesPayload(payload);
+  return true;
+}
+
+async function importAllData(text: string, options: { mode: ImportMode; conflictPolicy: ImportConflictPolicy; parsedSnapshot?: TransferSnapshot }): Promise<void> {
+  const snapshot = options.parsedSnapshot ?? await parseTransferDocument(text);
+  const savedToonRollback = await exportSavedToonData();
+  const syncStaged = await stageSyncNotesForImport(snapshot, options, savedToonRollback);
+
+  try {
+    const extensionResponse = await browser.runtime.sendMessage({
+      type: 'IMPORT_EXTENSION_STORAGE',
+      snapshot: snapshot.origins.extension,
+      mode: options.mode,
+      conflictPolicy: options.conflictPolicy,
+    });
+
+    if (extensionResponse?.error) {
+      throw new Error(extensionResponse.error);
+    }
+
+    closeDB();
+    if (options.mode === 'replace') {
+      restoreLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {});
+      await restoreIndexedDatabases(snapshot.origins.site.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
+    } else {
+      mergeLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {}, {
+        conflictPolicy: options.conflictPolicy,
+      });
+      await mergeIndexedDatabases(snapshot.origins.site.indexedDB || {}, {
+        conflictPolicy: options.conflictPolicy,
+      });
+    }
+
+    if (!syncStaged) {
+      await syncSavedToonsAfterLocalMutation();
+    }
+  } catch (error) {
+    await replaceSavedToonData(savedToonRollback);
+    if (syncStaged) {
+      try {
+        await writeSyncNotesPayload({
+          app: 'toonhqplus',
+          schemaVersion: 1,
+          updatedAt: new Date().toISOString(),
+          ...savedToonRollback,
+        });
+      } catch (rollbackError) {
+        console.warn('[ToonHQ+] Failed to roll back staged Sync Notes import.', rollbackError);
+      }
+    }
+    throw error;
+  }
 }
 
 // GAG_TRACKS is replaced by gagsConfig from gags.ts
@@ -496,6 +882,7 @@ const ToonRow = memo(({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState(note || '');
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   useEffect(() => {
     setNoteDraft(note || '');
@@ -523,8 +910,15 @@ const ToonRow = memo(({
   }
 
   const saveNote = () => {
-    setNote(toon.id, noteDraft).then(refresh);
-    setIsEditing(false);
+    setNoteError(null);
+    mutateSavedToonsWithSyncRollback(() => setNote(toon.id, noteDraft))
+      .then(() => {
+        refresh();
+        setIsEditing(false);
+      })
+      .catch((error) => {
+        setNoteError(error instanceof Error ? error.message : String(error));
+      });
   };
 
   const rowRef = React.useRef<HTMLLIElement>(null);
@@ -664,8 +1058,15 @@ const ToonRow = memo(({
           <div className="flex gap-2 justify-end">
             <button
               onClick={() => {
-                setNote(toon.id, '').then(refresh);
-                setIsEditing(false);
+                setNoteError(null);
+                mutateSavedToonsWithSyncRollback(() => setNote(toon.id, ''))
+                  .then(() => {
+                    refresh();
+                    setIsEditing(false);
+                  })
+                  .catch((error) => {
+                    setNoteError(error instanceof Error ? error.message : String(error));
+                  });
               }}
               className="mr-auto shrink-0 rounded bg-red-500/10 px-2 py-1 text-xs text-red-300-400 hover:bg-red-500 hover:text-white cursor-pointer transition-all flex items-center gap-1 border border-red-500/20"
               title="Remove note"
@@ -686,6 +1087,7 @@ const ToonRow = memo(({
               Cancel
             </button>
           </div>
+          {noteError && <div className="text-[10px] font-semibold text-red-300">{noteError}</div>}
         </div>
       ) : note ? (
         <div className={`ml-8 whitespace-pre-wrap text-xs leading-snug italic ${isBlocked ? 'text-red-300/80' : 'text-green-100/80'}`}>
@@ -939,6 +1341,9 @@ export function SidebarApp() {
   });
   const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
   const [notesEnabled, setNotesEnabled] = useState(true);
+  const [syncNotesEnabledState, setSyncNotesEnabledState] = useState(false);
+  const [syncNotesError, setSyncNotesError] = useState<string | null>(null);
+  const [syncNotesChoiceDialog, setSyncNotesChoiceDialog] = useState<SyncNotesChoiceDialogState | null>(null);
   const [highlightGroupsEnabled, setHighlightGroupsEnabled] = useState(false);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
@@ -946,6 +1351,8 @@ export function SidebarApp() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [resetSettingsDialog, setResetSettingsDialog] = useState<ResetSettingsDialogState | null>(null);
   const [transferDialog, setTransferDialog] = useState<TransferDialogState | null>(null);
+  const [openImportMenu, setOpenImportMenu] = useState<'mode' | 'conflicts' | null>(null);
+  const [importAnalysisKind, setImportAnalysisKind] = useState<ImportComparisonKind | null>(null);
   const [dialogNote, setDialogNote] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [toonyCollapsed, setToonyCollapsed] = useState(false);
@@ -957,6 +1364,8 @@ export function SidebarApp() {
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const importAnalysisRequestIdRef = useRef(0);
+  const lastAutoAnalyzedImportTextRef = useRef('');
 
   const startCollapseAnimation = () => {
     setIsAnimatingCollapse(true);
@@ -1064,6 +1473,67 @@ export function SidebarApp() {
     });
   }, []);
 
+  const enableSyncNotesWithThisDevice = useCallback(async () => {
+    await writeCurrentSavedToonsToSync();
+    await setSyncNotesEnabled(true);
+    setSyncNotesEnabledState(true);
+    setSyncNotesChoiceDialog(null);
+    setSyncNotesError(null);
+  }, []);
+
+  const handleToggleSyncNotes = useCallback(async () => {
+    const next = !syncNotesEnabledState;
+    setSyncNotesError(null);
+
+    if (!next) {
+      setSyncNotesEnabledState(false);
+      await setSyncNotesEnabled(false);
+      return;
+    }
+
+    try {
+      const payload = await readSyncNotesPayload();
+      if (payload) {
+        const localSnapshot = await exportSavedToonData();
+        setSyncNotesChoiceDialog({ payload, localSnapshot, isBusy: false });
+      } else {
+        await enableSyncNotesWithThisDevice();
+      }
+    } catch (error) {
+      setSyncNotesEnabledState(false);
+      setSyncNotesError(error instanceof Error ? error.message : String(error));
+    }
+  }, [enableSyncNotesWithThisDevice, syncNotesEnabledState]);
+
+  const handleUseSyncedNotesData = useCallback(async () => {
+    const payload = syncNotesChoiceDialog?.payload;
+    if (!payload) return;
+    setSyncNotesChoiceDialog((current) => current ? { ...current, isBusy: true, error: undefined } : current);
+    try {
+      await importSyncNotesPayload(payload);
+      await setSyncNotesEnabled(true);
+      setSyncNotesEnabledState(true);
+      setSyncNotesChoiceDialog(null);
+      setSyncNotesError(null);
+      await refresh();
+    } catch (error) {
+      setSyncNotesChoiceDialog((current) => current
+        ? { ...current, isBusy: false, error: error instanceof Error ? error.message : String(error) }
+        : current);
+    }
+  }, [refresh, syncNotesChoiceDialog]);
+
+  const handleUseLocalNotesData = useCallback(async () => {
+    setSyncNotesChoiceDialog((current) => current ? { ...current, isBusy: true, error: undefined } : current);
+    try {
+      await enableSyncNotesWithThisDevice();
+    } catch (error) {
+      setSyncNotesChoiceDialog((current) => current
+        ? { ...current, isBusy: false, error: error instanceof Error ? error.message : String(error) }
+        : current);
+    }
+  }, [enableSyncNotesWithThisDevice]);
+
   const buildExportDialog = useCallback((includeFullToonCache: boolean) => {
     setTransferDialog({
       mode: 'export',
@@ -1104,24 +1574,111 @@ export function SidebarApp() {
       mode: 'import',
       text: '',
       isBusy: false,
+      importMode: 'merge',
+      conflictPolicy: 'keep-local',
     });
+    setImportAnalysisKind(null);
+    setOpenImportMenu(null);
   }, []);
+
+  const setImportMode = useCallback((importMode: ImportMode) => {
+    setTransferDialog((current) => current && current.mode === 'import'
+      ? { ...current, importMode }
+      : current);
+    setOpenImportMenu(null);
+  }, []);
+
+  const setImportConflictPolicy = useCallback((conflictPolicy: ImportConflictPolicy) => {
+    setTransferDialog((current) => current && current.mode === 'import'
+      ? { ...current, conflictPolicy }
+      : current);
+    setOpenImportMenu(null);
+  }, []);
+
+  const analyzeImportText = useCallback(async (text: string, fileName?: string) => {
+    if (!text.trim()) {
+      importAnalysisRequestIdRef.current += 1;
+      setTransferDialog((current) => current && current.mode === 'import'
+        ? { ...current, error: 'Paste backup data or upload a backup file first.' }
+        : current);
+      return;
+    }
+
+    const requestId = importAnalysisRequestIdRef.current + 1;
+    importAnalysisRequestIdRef.current = requestId;
+    lastAutoAnalyzedImportTextRef.current = text;
+    setTransferDialog((current) => current && current.mode === 'import'
+      ? {
+        ...current,
+        text,
+        fileName: fileName ?? current.fileName,
+        isBusy: true,
+        error: undefined,
+        message: 'Analyzing backup...',
+        parsedSnapshot: undefined,
+        importPlan: undefined,
+      }
+      : current);
+    setImportAnalysisKind(null);
+
+    try {
+      const snapshot = await parseTransferDocument(text);
+      const plan = await buildImportPlan(snapshot);
+      if (importAnalysisRequestIdRef.current !== requestId) return;
+      setTransferDialog((current) => current && current.mode === 'import' && current.text === text
+        ? {
+          ...current,
+          text,
+          fileName: fileName ?? current.fileName,
+          isBusy: false,
+          parsedSnapshot: snapshot,
+          importPlan: plan,
+          message: 'Backup analyzed. Review the import options below.',
+          error: undefined,
+        }
+        : current);
+    } catch (error) {
+      if (importAnalysisRequestIdRef.current !== requestId) return;
+      setTransferDialog((current) => current && current.mode === 'import' && current.text === text
+        ? {
+          ...current,
+          text,
+          fileName: fileName ?? current.fileName,
+          isBusy: false,
+          parsedSnapshot: undefined,
+          importPlan: undefined,
+          message: undefined,
+          error: error instanceof Error ? error.message : String(error),
+        }
+        : current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!transferDialog || transferDialog.mode !== 'import') return;
+
+    const text = transferDialog.text;
+    if (!text.trim()) {
+      lastAutoAnalyzedImportTextRef.current = '';
+      return;
+    }
+    if (lastAutoAnalyzedImportTextRef.current === text) return;
+
+    const timer = setTimeout(() => {
+      lastAutoAnalyzedImportTextRef.current = text;
+      analyzeImportText(text, transferDialog.fileName);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [transferDialog?.mode, transferDialog?.text, transferDialog?.fileName, analyzeImportText]);
 
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    setTransferDialog((current) => current && current.mode === 'import'
-      ? {
-        ...current,
-        text,
-        fileName: file.name,
-        error: undefined,
-        message: undefined,
-      }
-      : current);
+    await analyzeImportText(text, file.name);
     event.target.value = '';
-  }, []);
+  }, [analyzeImportText]);
 
   const handleCopyExport = useCallback(async () => {
     if (!transferDialog?.text) return;
@@ -1173,11 +1730,13 @@ export function SidebarApp() {
       }
 
       if (savedToons) {
-        await Promise.all([
-          clearList('toony_toons'),
-          clearList('stinky_toons'),
-          clearNotes(),
-        ]);
+        await mutateSavedToonsWithSyncRollback(async () => {
+          await Promise.all([
+            clearList('toony_toons'),
+            clearList('stinky_toons'),
+            clearNotes(),
+          ]);
+        });
         setFavorites([]);
         setBlocked([]);
         setNotes({});
@@ -1220,12 +1779,42 @@ export function SidebarApp() {
       return;
     }
 
+    let parsedSnapshot = transferDialog.parsedSnapshot;
+    if (!parsedSnapshot) {
+      try {
+        parsedSnapshot = await parseTransferDocument(transferDialog.text);
+      } catch (error) {
+        setTransferDialog((current) => current && current.mode === 'import'
+          ? {
+            ...current,
+            isBusy: false,
+            error: error instanceof Error ? error.message : String(error),
+          }
+          : current);
+        return;
+      }
+    }
+
+    const importMode = transferDialog.importMode ?? 'merge';
+    const conflictPolicy = transferDialog.conflictPolicy ?? 'keep-local';
+
     setTransferDialog((current) => current && current.mode === 'import'
-      ? { ...current, isBusy: true, error: undefined, message: 'Importing backup and replacing existing data...' }
+      ? {
+        ...current,
+        isBusy: true,
+        error: undefined,
+        message: importMode === 'replace'
+          ? 'Importing backup and replacing existing data...'
+          : 'Merging backup into existing data...',
+      }
       : current);
 
     try {
-      await importAllData(transferDialog.text);
+      await importAllData(transferDialog.text, {
+        mode: importMode,
+        conflictPolicy,
+        parsedSnapshot,
+      });
       setTransferDialog((current) => current && current.mode === 'import'
         ? { ...current, isBusy: true, message: 'Import complete. Reloading ToonHQ...', error: undefined }
         : current);
@@ -1317,11 +1906,13 @@ export function SidebarApp() {
 
   useEffect(() => {
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
+    initSyncNotesRemoteListener(refresh);
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
       if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
+      if (values['sync-notes-enabled'] !== undefined) setSyncNotesEnabledState(values['sync-notes-enabled'] === true);
       if (values['highlight-groups'] !== undefined) setHighlightGroupsEnabled(!!values['highlight-groups']);
       if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
 
@@ -1379,6 +1970,7 @@ export function SidebarApp() {
         getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(c => { if (c) setNavbarConfig(c); });
         getSetting<boolean>('boss-info-enabled').then(v => { if (v !== undefined) setBossInfoEnabled(v !== false); });
         getSetting<boolean>('notes-enabled').then(v => { if (v !== undefined) setNotesEnabled(v !== false); });
+        getSetting<boolean>('sync-notes-enabled').then(v => { if (v !== undefined) setSyncNotesEnabledState(v === true); });
         getSetting<boolean>('tracker-enabled').then(v => { if (v !== undefined) setTrackerEnabled(v !== false); });
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
@@ -1976,6 +2568,29 @@ export function SidebarApp() {
 
                       <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
                         <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">Sync Notes</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            {getSyncNotesDescription()}
+                          </div>
+                          {syncNotesError && (
+                            <div className="mt-1 text-[10px] font-semibold text-red-300">{syncNotesError}</div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            handleToggleSyncNotes().catch((error) => {
+                              setSyncNotesEnabledState(false);
+                              setSyncNotesError(error instanceof Error ? error.message : String(error));
+                            });
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${syncNotesEnabledState ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${syncNotesEnabledState ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
                           <div className="text-sm font-bold text-white">Highlight Groups</div>
                           <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
                             Highlight groups that have toony or stinky toons on the main page.
@@ -2144,6 +2759,8 @@ export function SidebarApp() {
                       }
                       refresh();
                       setDialog(null);
+                    }).catch((error) => {
+                      setSyncNotesError(error instanceof Error ? error.message : String(error));
                     });
                   }
                 }}
@@ -2208,12 +2825,15 @@ export function SidebarApp() {
                 <p className={`mt-1 text-sm ${transferDialog.mode === 'export' ? 'text-green-100/80' : 'text-amber-100/90'}`}>
                   {transferDialog.mode === 'export'
                     ? 'This export includes your saved ToonHQ+ data from both the website and the extension.'
-                    : 'Importing a file will replace your current saved ToonHQ+ data with the data in that export.'}
+                    : 'Merge an export into your current ToonHQ+ data, or replace everything with that export.'}
                 </p>
               </div>
               {!transferDialog.isBusy && (
                 <button
-                  onClick={() => setTransferDialog(null)}
+                  onClick={() => {
+                    setTransferDialog(null);
+                    setImportAnalysisKind(null);
+                  }}
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/20 text-green-100 hover:bg-black/40 transition-colors cursor-pointer"
                   aria-label="Close import or export dialog"
                 >
@@ -2255,15 +2875,123 @@ export function SidebarApp() {
             )}
 
             {transferDialog.mode === 'import' && (
-              <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-                Importing will overwrite your current saved data in both the site and the extension.
-                <button
-                  onClick={() => buildExportDialog(false)}
-                  disabled={transferDialog.isBusy}
-                  className="text-amber-200 underline underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Backup your current data first to be safe.
-                </button>
+              <div className="mb-4 space-y-3">
+                <div className="rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+                  Merge adds data from the export without deleting anything already saved here. If the same item differs, your conflict choice decides which version to keep.
+                  <button
+                    onClick={() => buildExportDialog(false)}
+                    disabled={transferDialog.isBusy}
+                    className="ml-1 text-amber-200 underline underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Backup your current data first to be safe.
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="relative rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-green-300/70">Import Mode</div>
+                    <button
+                      type="button"
+                      onClick={() => setOpenImportMenu((current) => current === 'mode' ? null : 'mode')}
+                      disabled={transferDialog.isBusy}
+                      className="mt-2 flex min-h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-left text-sm font-bold text-white shadow-inner transition-colors hover:bg-black/40 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span>{(transferDialog.importMode ?? 'merge') === 'merge' ? 'Merge with current data' : 'Replace current data'}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-green-200/70 transition-transform ${openImportMenu === 'mode' ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                    {openImportMenu === 'mode' && !transferDialog.isBusy && (
+                      <div className="absolute left-3 right-3 top-[calc(100%-0.5rem)] z-10 overflow-hidden rounded-lg border border-white/15 bg-[#082818] shadow-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setImportMode('merge')}
+                          className={`w-full px-3 py-2.5 text-left text-sm font-bold transition-colors ${transferDialog.importMode !== 'replace' ? 'bg-emerald-500/15 text-white' : 'text-green-100 hover:bg-white/10'}`}
+                        >
+                          <span>Merge with current data</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportMode('replace')}
+                          className={`w-full px-3 py-2.5 text-left text-sm font-bold transition-colors ${transferDialog.importMode === 'replace' ? 'bg-amber-500/15 text-white' : 'text-green-100 hover:bg-white/10'}`}
+                        >
+                          <span>Replace current data</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-green-300/70">Conflicts</div>
+                    <button
+                      type="button"
+                      onClick={() => setOpenImportMenu((current) => current === 'conflicts' ? null : 'conflicts')}
+                      disabled={transferDialog.isBusy || transferDialog.importMode === 'replace'}
+                      className="mt-2 flex min-h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-left text-sm font-bold text-white shadow-inner transition-colors hover:bg-black/40 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span>{(transferDialog.conflictPolicy ?? 'keep-local') === 'keep-local' ? 'Keep local version' : 'Use imported version'}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-green-200/70 transition-transform ${openImportMenu === 'conflicts' ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                    {openImportMenu === 'conflicts' && !transferDialog.isBusy && transferDialog.importMode !== 'replace' && (
+                      <div className="absolute left-3 right-3 top-[calc(100%-0.5rem)] z-10 overflow-hidden rounded-lg border border-white/15 bg-[#082818] shadow-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setImportConflictPolicy('keep-local')}
+                          className={`w-full px-3 py-2.5 text-left text-sm font-bold transition-colors ${(transferDialog.conflictPolicy ?? 'keep-local') === 'keep-local' ? 'bg-emerald-500/15 text-white' : 'text-green-100 hover:bg-white/10'}`}
+                        >
+                          <span>Keep local version</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportConflictPolicy('use-import')}
+                          className={`w-full px-3 py-2.5 text-left text-sm font-bold transition-colors ${transferDialog.conflictPolicy === 'use-import' ? 'bg-amber-500/15 text-white' : 'text-green-100 hover:bg-white/10'}`}
+                        >
+                          <span>Use imported version</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {transferDialog.importPlan && (() => {
+                  const totals = getImportPlanTotals(transferDialog.importPlan);
+                  const analysisCardClass = 'rounded-lg border border-white/10 bg-black/20 p-3 text-left transition-colors hover:bg-black/35 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60';
+                  return (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <button
+                        type="button"
+                        onClick={() => setImportAnalysisKind('added')}
+                        disabled={totals.added === 0}
+                        className={analysisCardClass}
+                      >
+                        <div className="text-[10px] uppercase tracking-widest text-green-300/70">New</div>
+                        <div className="mt-1 text-sm font-bold text-white">{totals.added}</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImportAnalysisKind('updated')}
+                        disabled={totals.updated === 0}
+                        className={analysisCardClass}
+                      >
+                        <div className="text-[10px] uppercase tracking-widest text-sky-300/80">Updated</div>
+                        <div className="mt-1 text-sm font-bold text-white">{totals.updated}</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImportAnalysisKind('conflict')}
+                        disabled={totals.conflicts === 0}
+                        className={analysisCardClass}
+                      >
+                        <div className="text-[10px] uppercase tracking-widest text-amber-300/80">Conflicts</div>
+                        <div className="mt-1 text-sm font-bold text-white">{totals.conflicts}</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImportAnalysisKind('unchanged')}
+                        disabled={totals.unchanged === 0}
+                        className={analysisCardClass}
+                      >
+                        <div className="text-[10px] uppercase tracking-widest text-green-300/70">Unchanged</div>
+                        <div className="mt-1 text-sm font-bold text-white">{totals.unchanged}</div>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -2272,12 +3000,20 @@ export function SidebarApp() {
               readOnly={transferDialog.mode === 'export'}
               onChange={(e) => {
                 const nextText = e.target.value;
+                importAnalysisRequestIdRef.current += 1;
+                if (!nextText.trim()) lastAutoAnalyzedImportTextRef.current = '';
+                setImportAnalysisKind(null);
                 setTransferDialog((current) => current
                   ? {
                     ...current,
                     text: nextText,
+                    isBusy: false,
                     error: undefined,
-                    message: current.mode === 'import' ? current.message : undefined,
+                    parsedSnapshot: undefined,
+                    importPlan: undefined,
+                    message: current.mode === 'import' && nextText.trim()
+                      ? 'Waiting to analyze pasted backup...'
+                      : undefined,
                   }
                   : current);
               }}
@@ -2320,6 +3056,13 @@ export function SidebarApp() {
                       Upload Export File
                     </button>
                     <button
+                      onClick={() => analyzeImportText(transferDialog.text, transferDialog.fileName)}
+                      disabled={transferDialog.isBusy || !transferDialog.text.trim()}
+                      className="rounded-lg bg-black/20 px-4 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Analyze Backup
+                    </button>
+                    <button
                       onClick={handleConfirmImport}
                       disabled={transferDialog.isBusy}
                       className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 transition-colors active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
@@ -2331,7 +3074,10 @@ export function SidebarApp() {
               </div>
               {!transferDialog.isBusy && (
                 <button
-                  onClick={() => setTransferDialog(null)}
+                  onClick={() => {
+                    setTransferDialog(null);
+                    setImportAnalysisKind(null);
+                  }}
                   className="ml-auto rounded-lg bg-black/20 px-4 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-colors active:scale-95 cursor-pointer"
                 >
                   Cancel
@@ -2341,6 +3087,124 @@ export function SidebarApp() {
           </div>
         </div>
       )}
+      {transferDialog?.mode === 'import' && transferDialog.importPlan && importAnalysisKind && (() => {
+        const comparisons = (transferDialog.importPlan.comparisons || []).filter((entry) => entry.kind === importAnalysisKind);
+        return (
+          <div
+            className="fixed inset-0 z-[2147483647] bg-black/60 animate-in fade-in duration-200 flex items-center justify-center p-4"
+            onClick={() => setImportAnalysisKind(null)}
+          >
+            <div
+              className="w-full max-w-4xl rounded-xl border border-white/20 bg-[#0a2f1e] p-5 shadow-2xl animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h4 className="text-lg font-bold text-white leading-tight">{importAnalysisLabels[importAnalysisKind]}</h4>
+                  <p className="mt-1 text-sm text-green-100/80">
+                    {comparisons.length} {comparisons.length === 1 ? 'record' : 'records'} found in the analyzed backup.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setImportAnalysisKind(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/20 text-green-100 hover:bg-black/40 transition-colors cursor-pointer"
+                  aria-label="Close import analysis details"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1 custom-scrollbar">
+                {comparisons.length === 0 ? (
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-green-100/80">
+                    No comparison rows are available for this category.
+                  </div>
+                ) : comparisons.map((entry, index) => (
+                  <div key={`${entry.kind}-${entry.area}-${entry.location}-${entry.key}-${index}`} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100">{entry.area}</span>
+                      <span className="rounded-full bg-black/30 px-2.5 py-1 text-green-100/80">{entry.location}</span>
+                      <span className="break-all rounded-full bg-black/30 px-2.5 py-1 font-mono text-green-100/80">{entry.key}</span>
+                    </div>
+                    <div className={`grid grid-cols-1 gap-3 ${entry.merged !== undefined ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                      <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-widest text-green-300/70">Existing</div>
+                        <pre className="max-h-56 overflow-auto rounded-lg border border-white/10 bg-black/30 p-3 text-[11px] leading-relaxed text-green-50/90 custom-scrollbar whitespace-pre-wrap break-words">{formatComparisonValue(entry.existing)}</pre>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-widest text-sky-300/80">Incoming</div>
+                        <pre className="max-h-56 overflow-auto rounded-lg border border-white/10 bg-black/30 p-3 text-[11px] leading-relaxed text-green-50/90 custom-scrollbar whitespace-pre-wrap break-words">{formatComparisonValue(entry.incoming)}</pre>
+                      </div>
+                      {entry.merged !== undefined && (
+                        <div>
+                          <div className="mb-1 text-[10px] uppercase tracking-widest text-emerald-300/80">Merged Result</div>
+                          <pre className="max-h-56 overflow-auto rounded-lg border border-white/10 bg-black/30 p-3 text-[11px] leading-relaxed text-green-50/90 custom-scrollbar whitespace-pre-wrap break-words">{formatComparisonValue(entry.merged)}</pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {syncNotesChoiceDialog && (
+        <div
+          className="fixed inset-0 z-[2147483647] bg-black/50 animate-in fade-in duration-200 flex items-center justify-center p-4"
+          onClick={() => {
+            if (!syncNotesChoiceDialog.isBusy) setSyncNotesChoiceDialog(null);
+          }}
+        >
+          <div
+            className="w-full max-w-4xl rounded-xl border border-white/20 bg-[#0c3622] p-5 shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h4 className="text-lg font-bold text-white leading-tight">Sync Notes</h4>
+                <p className="mt-1 text-sm text-amber-100/90">
+                  Synced saved toon lists and notes already exist for this browser profile. Compare the saved data below, then choose which copy to keep.
+                </p>
+              </div>
+              {!syncNotesChoiceDialog.isBusy && (
+                <button
+                  onClick={() => setSyncNotesChoiceDialog(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/20 text-green-100 hover:bg-black/40 transition-colors cursor-pointer"
+                  aria-label="Close sync notes dialog"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                </button>
+              )}
+            </div>
+            {syncNotesChoiceDialog.error && (
+              <div className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+                {syncNotesChoiceDialog.error}
+              </div>
+            )}
+            <div className="mb-4">
+              <SyncNotesPreviewGrid
+                synced={syncNotesChoiceDialog.payload}
+                local={syncNotesChoiceDialog.localSnapshot}
+                onUseSynced={handleUseSyncedNotesData}
+                onUseLocal={handleUseLocalNotesData}
+                disabled={syncNotesChoiceDialog.isBusy}
+              />
+            </div>
+            <div className="flex justify-end">
+              {!syncNotesChoiceDialog.isBusy && (
+                <button
+                  onClick={() => setSyncNotesChoiceDialog(null)}
+                  className="rounded-lg bg-black/20 px-4 py-2.5 text-sm font-medium text-green-100 hover:bg-black/40 transition-all"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {resetSettingsDialog?.isOpen && (
         <div
           className="fixed inset-0 z-[2147483647] bg-black/50 animate-in fade-in duration-200 flex items-center justify-center p-4"
@@ -2429,6 +3293,11 @@ export function SidebarApp() {
                   <div className="mt-0.5 text-[11px] leading-relaxed text-green-100/70">
                     Clears your Toony Toons, Stinky Toons, and Toon Notes.
                   </div>
+                  {syncNotesEnabledState && (
+                    <div className="mt-1 text-[11px] font-semibold text-amber-200">
+                      Sync Notes is enabled. These saved toon lists and notes will be deleted from all synced devices.
+                    </div>
+                  )}
                   <div className="mt-1 text-[11px] font-semibold text-red-300">
                     {savedToonsDeleteCount} total toon entries will be deleted.
                   </div>

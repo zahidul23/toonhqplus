@@ -45,6 +45,309 @@ export interface TransferDocument {
   payload: string;
 }
 
+export type ImportMode = 'merge' | 'replace';
+export type ImportConflictPolicy = 'keep-local' | 'use-import';
+
+export interface ImportOptions {
+  mode: ImportMode;
+  conflictPolicy: ImportConflictPolicy;
+}
+
+export interface ImportPlanSummary {
+  localStorage: {
+    added: number;
+    updated: number;
+    conflicts: number;
+    unchanged: number;
+  };
+  indexedDB: {
+    databases: number;
+    stores: number;
+    added: number;
+    updated: number;
+    conflicts: number;
+    unchanged: number;
+  };
+  browserStorageLocal: {
+    added: number;
+    updated: number;
+    conflicts: number;
+    unchanged: number;
+  };
+  comparisons?: ImportComparisonDetail[];
+}
+
+export type ImportComparisonKind = 'added' | 'updated' | 'conflict' | 'unchanged';
+
+export interface ImportComparisonDetail {
+  kind: ImportComparisonKind;
+  area: string;
+  location: string;
+  key: string;
+  existing?: unknown;
+  incoming: unknown;
+  merged?: unknown;
+}
+
+function createEmptyImportPlanSummary(): ImportPlanSummary {
+  return {
+    localStorage: { added: 0, updated: 0, conflicts: 0, unchanged: 0 },
+    indexedDB: { databases: 0, stores: 0, added: 0, updated: 0, conflicts: 0, unchanged: 0 },
+    browserStorageLocal: { added: 0, updated: 0, conflicts: 0, unchanged: 0 },
+    comparisons: [],
+  };
+}
+
+export function mergeImportPlanSummaries(...summaries: ImportPlanSummary[]): ImportPlanSummary {
+  const out = createEmptyImportPlanSummary();
+  for (const summary of summaries) {
+    for (const key of ['added', 'updated', 'conflicts', 'unchanged'] as const) {
+      out.localStorage[key] += summary.localStorage[key];
+      out.browserStorageLocal[key] += summary.browserStorageLocal[key];
+      out.indexedDB[key] += summary.indexedDB[key];
+    }
+    out.indexedDB.databases += summary.indexedDB.databases;
+    out.indexedDB.stores += summary.indexedDB.stores;
+    out.comparisons?.push(...(summary.comparisons || []));
+  }
+  return out;
+}
+
+function isObject(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stableSerializeJsonValue(value: unknown, inArray: boolean = false): string | undefined {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
+    return inArray ? 'null' : undefined;
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableSerializeJsonValue(entry, true) ?? 'null').join(',')}]`;
+  }
+  if (isObject(value)) {
+    const entries = Object.keys(value)
+      .sort()
+      .map((key) => {
+        const serialized = stableSerializeJsonValue(value[key]);
+        return serialized === undefined ? null : `${JSON.stringify(key)}:${serialized}`;
+      })
+      .filter((entry): entry is string => entry !== null);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function stableStringify(value: unknown): string {
+  return stableSerializeJsonValue(value) ?? 'undefined';
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  return stableStringify(a) === stableStringify(b);
+}
+
+function getRecordKey(record: any, keyPath: string | string[] | null): string {
+  if (Array.isArray(keyPath)) {
+    return stableStringify(keyPath.map((key) => record?.[key]));
+  }
+  if (typeof keyPath === 'string') {
+    return stableStringify(record?.[keyPath]);
+  }
+  return stableStringify(record);
+}
+
+function isTrackerRewardHistoryRecord(record: any): boolean {
+  return typeof record?.key === 'string'
+    && record.key.startsWith('tracker-reward-history-')
+    && Array.isArray(record.value);
+}
+
+function getRewardHistoryEntryKey(entry: any): string {
+  return stableStringify({
+    category: entry?.category,
+    item: entry?.item,
+    amount: entry?.amount,
+    timestamp: entry?.timestamp,
+    metadata: entry?.metadata,
+    message: entry?.message,
+  });
+}
+
+function mergeRewardHistoryValues(localValue: unknown, importedValue: unknown): unknown {
+  if (!Array.isArray(localValue) || !Array.isArray(importedValue)) return importedValue;
+
+  const byEntryKey = new Map<string, any>();
+  for (const entry of [...localValue, ...importedValue]) {
+    if (!isObject(entry) || typeof entry.timestamp !== 'number') continue;
+    byEntryKey.set(getRewardHistoryEntryKey(entry), entry);
+  }
+
+  const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  return Array.from(byEntryKey.values())
+    .filter((entry) => entry.timestamp >= cutoff)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 500);
+}
+
+function mergeIndexedDbRecord(storeName: string, current: any, incoming: any): any {
+  if (storeName === 'settings' && isTrackerRewardHistoryRecord(current) && isTrackerRewardHistoryRecord(incoming)) {
+    return {
+      ...incoming,
+      value: mergeRewardHistoryValues(current.value, incoming.value),
+    };
+  }
+  if (storeName === 'toons' && isObject(current) && isObject(incoming)) {
+    const currentSeen = Date.parse(String(current.lastSeen ?? ''));
+    const incomingSeen = Date.parse(String(incoming.lastSeen ?? ''));
+    if (Number.isFinite(currentSeen) && Number.isFinite(incomingSeen)) {
+      return incomingSeen >= currentSeen ? incoming : current;
+    }
+  }
+  return incoming;
+}
+
+function canMergeIndexedDbRecord(storeName: string, current: any, incoming: any): boolean {
+  return (storeName === 'settings' && isTrackerRewardHistoryRecord(current) && isTrackerRewardHistoryRecord(incoming))
+    || (storeName === 'toons'
+      && isObject(current)
+      && isObject(incoming)
+      && Number.isFinite(Date.parse(String(current.lastSeen ?? '')))
+      && Number.isFinite(Date.parse(String(incoming.lastSeen ?? ''))));
+}
+
+function compareMapRecords(
+  current: Record<string, any>,
+  incoming: Record<string, any>,
+  bucket: { added: number; updated: number; conflicts: number; unchanged: number },
+  comparisons: ImportComparisonDetail[] | undefined,
+  area: string,
+  location: string
+): void {
+  for (const [key, incomingValue] of Object.entries(incoming)) {
+    if (!(key in current)) {
+      bucket.added += 1;
+      comparisons?.push({ kind: 'added', area, location, key, incoming: incomingValue });
+    } else if (valuesEqual(current[key], incomingValue)) {
+      bucket.unchanged += 1;
+      comparisons?.push({ kind: 'unchanged', area, location, key, existing: current[key], incoming: incomingValue });
+    } else {
+      bucket.conflicts += 1;
+      comparisons?.push({ kind: 'conflict', area, location, key, existing: current[key], incoming: incomingValue });
+    }
+  }
+}
+
+export function analyzeLocalStorageMerge(current: Record<string, string>, incoming: Record<string, string>, area = 'Local Storage'): ImportPlanSummary {
+  const summary = createEmptyImportPlanSummary();
+  compareMapRecords(
+    filterLocalStorageSnapshot(current),
+    filterLocalStorageSnapshot(incoming),
+    summary.localStorage,
+    summary.comparisons,
+    area,
+    'localStorage'
+  );
+  return summary;
+}
+
+export function analyzeBrowserStorageLocalMerge(current: Record<string, any>, incoming: Record<string, any>, area = 'Browser Storage Local'): ImportPlanSummary {
+  const summary = createEmptyImportPlanSummary();
+  compareMapRecords(current, incoming, summary.browserStorageLocal, summary.comparisons, area, 'browser.storage.local');
+  return summary;
+}
+
+export function analyzeIndexedDbMerge(
+  current: Record<string, IndexedDbDatabaseSnapshot>,
+  incoming: Record<string, IndexedDbDatabaseSnapshot>,
+  area = 'IndexedDB'
+): ImportPlanSummary {
+  const summary = createEmptyImportPlanSummary();
+
+  for (const [databaseName, incomingDatabase] of Object.entries(incoming)) {
+    summary.indexedDB.databases += 1;
+    const currentDatabase = current[databaseName];
+
+    for (const [storeName, incomingStore] of Object.entries(incomingDatabase.stores)) {
+      summary.indexedDB.stores += 1;
+      const currentStore = currentDatabase?.stores?.[storeName];
+      if (!currentStore) {
+        summary.indexedDB.added += incomingStore.records.length;
+        for (const incomingRecord of incomingStore.records) {
+          summary.comparisons?.push({
+            kind: 'added',
+            area,
+            location: `${databaseName}.${storeName}`,
+            key: getRecordKey(incomingRecord, incomingStore.keyPath),
+            incoming: incomingRecord,
+          });
+        }
+        continue;
+      }
+
+      const currentByKey = new Map<string, any>();
+      for (const record of currentStore.records) {
+        currentByKey.set(getRecordKey(record, incomingStore.keyPath), record);
+      }
+
+      for (const incomingRecord of incomingStore.records) {
+        const key = getRecordKey(incomingRecord, incomingStore.keyPath);
+        const existingRecord = currentByKey.get(key);
+        const location = `${databaseName}.${storeName}`;
+        if (!currentByKey.has(key)) {
+          summary.indexedDB.added += 1;
+          summary.comparisons?.push({ kind: 'added', area, location, key, incoming: incomingRecord });
+        } else if (valuesEqual(currentByKey.get(key), incomingRecord)) {
+          summary.indexedDB.unchanged += 1;
+          summary.comparisons?.push({ kind: 'unchanged', area, location, key, existing: existingRecord, incoming: incomingRecord });
+        } else if (canMergeIndexedDbRecord(storeName, currentByKey.get(key), incomingRecord)) {
+          const merged = mergeIndexedDbRecord(storeName, existingRecord, incomingRecord);
+          if (valuesEqual(existingRecord, merged)) {
+            summary.indexedDB.unchanged += 1;
+            summary.comparisons?.push({
+              kind: 'unchanged',
+              area,
+              location,
+              key,
+              existing: existingRecord,
+              incoming: incomingRecord,
+              merged,
+            });
+            continue;
+          }
+          summary.indexedDB.updated += 1;
+          summary.comparisons?.push({
+            kind: 'updated',
+            area,
+            location,
+            key,
+            existing: existingRecord,
+            incoming: incomingRecord,
+            merged,
+          });
+        } else {
+          summary.indexedDB.conflicts += 1;
+          summary.comparisons?.push({ kind: 'conflict', area, location, key, existing: existingRecord, incoming: incomingRecord });
+        }
+      }
+    }
+  }
+
+  return summary;
+}
+
+export function analyzeOriginStorageMerge(current: OriginStorageSnapshot, incoming: OriginStorageSnapshot, areaPrefix = 'Site'): ImportPlanSummary {
+  return mergeImportPlanSummaries(
+    analyzeLocalStorageMerge(current.localStorage || {}, incoming.localStorage || {}, `${areaPrefix} Local Storage`),
+    analyzeIndexedDbMerge(current.indexedDB || {}, incoming.indexedDB || {}, `${areaPrefix} IndexedDB`),
+  );
+}
+
+export function analyzeExtensionStorageMerge(current: ExtensionStorageSnapshot, incoming: ExtensionStorageSnapshot): ImportPlanSummary {
+  return mergeImportPlanSummaries(
+    analyzeOriginStorageMerge(current, incoming, 'Extension'),
+    analyzeBrowserStorageLocalMerge(current.browserStorageLocal || {}, incoming.browserStorageLocal || {}, 'Extension Browser Storage'),
+  );
+}
+
 function extractSettingValue<T = any>(records: any[], key: string): T | undefined {
   const record = records.find((entry) => String(entry?.key) === key);
   return record?.value as T | undefined;
@@ -81,6 +384,36 @@ function collectReferencedToonIds(database: IndexedDbDatabaseSnapshot): Set<stri
   return referenced;
 }
 
+const EXPORT_GROUP_HISTORY_LIMIT = 20;
+const EXPORT_GROUP_MEMBER_LIMIT = 20;
+
+function getGroupTime(group: any): number {
+  const time = new Date(group?.userJoinedAt || group?.created || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getExportableGroupIds(database: IndexedDbDatabaseSnapshot): Set<number> | null {
+  const groupsStore = database.stores.groups;
+  const membersStore = database.stores.group_members;
+  if (!groupsStore || !membersStore) return null;
+
+  const memberCounts = new Map<number, number>();
+  for (const member of membersStore.records) {
+    const groupId = Number(member?.groupId);
+    if (!Number.isFinite(groupId)) continue;
+    memberCounts.set(groupId, (memberCounts.get(groupId) || 0) + 1);
+  }
+
+  return new Set(
+    groupsStore.records
+      .filter((group) => (memberCounts.get(Number(group?.groupId)) || 0) <= EXPORT_GROUP_MEMBER_LIMIT)
+      .sort((a, b) => getGroupTime(b) - getGroupTime(a))
+      .slice(0, EXPORT_GROUP_HISTORY_LIMIT)
+      .map((group) => Number(group?.groupId))
+      .filter((groupId) => Number.isFinite(groupId))
+  );
+}
+
 export function pruneIndexedDbSnapshotForExport(snapshot: Record<string, IndexedDbDatabaseSnapshot>): Record<string, IndexedDbDatabaseSnapshot> {
   const pruned: Record<string, IndexedDbDatabaseSnapshot> = {};
 
@@ -91,11 +424,29 @@ export function pruneIndexedDbSnapshotForExport(snapshot: Record<string, Indexed
       continue;
     }
 
-    const referencedToonIds = collectReferencedToonIds(database);
+    const exportableGroupIds = getExportableGroupIds(database);
+    const stores = { ...database.stores };
+    if (exportableGroupIds) {
+      if (stores.groups) {
+        stores.groups = {
+          ...stores.groups,
+          records: stores.groups.records.filter((record) => exportableGroupIds.has(Number(record?.groupId))),
+        };
+      }
+      if (stores.group_members) {
+        stores.group_members = {
+          ...stores.group_members,
+          records: stores.group_members.records.filter((record) => exportableGroupIds.has(Number(record?.groupId))),
+        };
+      }
+    }
+
+    const databaseForReferences = { ...database, stores };
+    const referencedToonIds = collectReferencedToonIds(databaseForReferences);
     pruned[databaseName] = {
       ...database,
       stores: {
-        ...database.stores,
+        ...stores,
         toons: {
           ...toonsStore,
           records: toonsStore.records.filter((record) => referencedToonIds.has(String(record?.id))),
@@ -287,19 +638,102 @@ async function importIndexedDatabase(name: string, snapshot: IndexedDbDatabaseSn
   });
 }
 
+function hasMissingMergeSchema(db: IDBDatabase, snapshot: IndexedDbDatabaseSnapshot): boolean {
+  for (const [storeName, storeSnapshot] of Object.entries(snapshot.stores)) {
+    if (!db.objectStoreNames.contains(storeName)) return true;
+    const store = db.transaction(storeName, 'readonly').objectStore(storeName);
+    for (const indexName of Object.keys(storeSnapshot.indexes)) {
+      if (!store.indexNames.contains(indexName)) return true;
+    }
+  }
+  return false;
+}
+
+async function ensureIndexedDbMergeSchema(name: string, snapshot: IndexedDbDatabaseSnapshot): Promise<void> {
+  const existing = await openExistingDatabase(name);
+  const currentVersion = existing?.version ?? 0;
+  const needsSchemaUpgrade = existing ? hasMissingMergeSchema(existing, snapshot) : true;
+  existing?.close();
+
+  const snapshotVersion = Math.max(snapshot.version || 1, 1);
+  const targetVersion = currentVersion === 0
+    ? snapshotVersion
+    : Math.max(snapshotVersion, needsSchemaUpgrade ? currentVersion + 1 : currentVersion);
+
+  if (currentVersion > 0 && targetVersion === currentVersion && !needsSchemaUpgrade) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(name, targetVersion);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      for (const [storeName, storeSnapshot] of Object.entries(snapshot.stores)) {
+        let store: IDBObjectStore;
+        if (!db.objectStoreNames.contains(storeName)) {
+          store = db.createObjectStore(storeName, {
+            keyPath: storeSnapshot.keyPath,
+            autoIncrement: storeSnapshot.autoIncrement,
+          });
+        } else {
+          store = request.transaction!.objectStore(storeName);
+        }
+
+        for (const [indexName, indexSnapshot] of Object.entries(storeSnapshot.indexes)) {
+          if (!store.indexNames.contains(indexName)) {
+            store.createIndex(indexName, indexSnapshot.keyPath as any, {
+              unique: indexSnapshot.unique,
+              multiEntry: indexSnapshot.multiEntry,
+            });
+          }
+        }
+      }
+    };
+
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+    request.onerror = () => reject(request.error ?? new Error(`Failed to prepare IndexedDB database "${name}" for merge.`));
+    request.onblocked = () => reject(new Error(`Preparing IndexedDB database "${name}" for merge was blocked by another open connection.`));
+  });
+}
+
 export function snapshotLocalStorage(storage: Storage): Record<string, string> {
   const snapshot: Record<string, string> = {};
   for (let i = 0; i < storage.length; i += 1) {
     const key = storage.key(i);
-    if (key != null) snapshot[key] = storage.getItem(key) ?? '';
+    if (key != null && isToonHqPlusLocalStorageKey(key)) snapshot[key] = storage.getItem(key) ?? '';
   }
   return snapshot;
 }
 
+function isToonHqPlusLocalStorageKey(key: string): boolean {
+  return key.startsWith('toonhqplus')
+    || key.startsWith('toonhq-plus')
+    || key.startsWith('cog-calc-');
+}
+
+function filterLocalStorageSnapshot(snapshot: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(snapshot).filter(([key]) => isToonHqPlusLocalStorageKey(key)));
+}
+
 export function restoreLocalStorage(storage: Storage, snapshot: Record<string, string>): void {
-  storage.clear();
-  for (const [key, value] of Object.entries(snapshot)) {
+  for (let i = storage.length - 1; i >= 0; i -= 1) {
+    const key = storage.key(i);
+    if (key != null && isToonHqPlusLocalStorageKey(key)) storage.removeItem(key);
+  }
+  for (const [key, value] of Object.entries(filterLocalStorageSnapshot(snapshot))) {
     storage.setItem(key, value);
+  }
+}
+
+export function mergeLocalStorage(storage: Storage, snapshot: Record<string, string>, options: Pick<ImportOptions, 'conflictPolicy'>): void {
+  for (const [key, value] of Object.entries(filterLocalStorageSnapshot(snapshot))) {
+    const current = storage.getItem(key);
+    if (current == null || current === value || options.conflictPolicy === 'use-import') {
+      storage.setItem(key, value);
+    }
   }
 }
 
@@ -328,6 +762,53 @@ export async function restoreIndexedDatabases(
 
   for (const [name, databaseSnapshot] of Object.entries(snapshot)) {
     await importIndexedDatabase(name, databaseSnapshot);
+  }
+}
+
+export async function mergeIndexedDatabases(
+  snapshot: Record<string, IndexedDbDatabaseSnapshot>,
+  options: Pick<ImportOptions, 'conflictPolicy'>
+): Promise<void> {
+  for (const [name, databaseSnapshot] of Object.entries(snapshot)) {
+    await ensureIndexedDbMergeSchema(name, databaseSnapshot);
+
+    const currentSnapshot = await exportIndexedDatabase(name);
+    const db = await openExistingDatabase(name);
+    if (!db) continue;
+
+    try {
+      const storeNames = Object.keys(databaseSnapshot.stores).filter((storeName) => db.objectStoreNames.contains(storeName));
+      if (storeNames.length === 0) continue;
+
+      const transaction = db.transaction(storeNames, 'readwrite');
+      for (const [storeName, incomingStore] of Object.entries(databaseSnapshot.stores)) {
+        if (!db.objectStoreNames.contains(storeName)) continue;
+        const currentStore = currentSnapshot?.stores?.[storeName];
+        const currentByKey = new Map<string, any>();
+        if (currentStore) {
+          for (const record of currentStore.records) {
+            currentByKey.set(getRecordKey(record, incomingStore.keyPath), record);
+          }
+        }
+
+        const store = transaction.objectStore(storeName);
+        for (const record of incomingStore.records) {
+          const key = getRecordKey(record, incomingStore.keyPath);
+          const current = currentByKey.get(key);
+          if (current !== undefined && canMergeIndexedDbRecord(storeName, current, record)) {
+            const merged = mergeIndexedDbRecord(storeName, current, record);
+            if (!valuesEqual(current, merged)) {
+              store.put(merged);
+            }
+          } else if (current === undefined || valuesEqual(current, record) || options.conflictPolicy === 'use-import') {
+            store.put(record);
+          }
+        }
+      }
+      await transactionToPromise(transaction);
+    } finally {
+      db.close();
+    }
   }
 }
 

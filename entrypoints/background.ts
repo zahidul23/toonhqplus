@@ -3,9 +3,13 @@ import { checkRewards, getRewardHistoryKey, pruneRewardHistory, isDeepEqual } fr
 import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardHistoryEntry } from './sidebar.content/trackerUtils';
 import {
+  analyzeExtensionStorageMerge,
+  mergeIndexedDatabases,
   pruneIndexedDbSnapshotForExport,
   restoreIndexedDatabases,
   snapshotIndexedDatabases,
+  type ImportConflictPolicy,
+  type ImportMode,
   type ExtensionStorageSnapshot,
 } from './lib/storageTransfer';
 
@@ -16,11 +20,20 @@ export default defineBackground(() => {
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
   const failedPorts = new Set<string>();
   const connectingPorts = new Set<string>();
+  const intentionalDisconnectSockets = new WeakSet<WebSocket>();
   const TRACKER_ENABLED_KEY = 'tracker-enabled';
   let trackerEnabled: boolean | undefined = undefined;
-  let trackingInterval: ReturnType<typeof setInterval> | null = null;
-  let autoDiscoverInterval: ReturnType<typeof setInterval> | null = null;
+  let trackingTimeout: ReturnType<typeof setTimeout> | null = null;
+  let autoDiscoverTimeout: ReturnType<typeof setTimeout> | null = null;
+  let trackerRecycleTimeout: ReturnType<typeof setTimeout> | null = null;
+  let trackerResumeTimeout: ReturnType<typeof setTimeout> | null = null;
   const KEEP_ALIVE_ALARM = 'toontracker-keepalive';
+  const TRACKING_POLL_MS = 5000;
+  const AUTO_DISCOVER_MS = 60000;
+  const TRACKER_RECYCLE_MS = 60 * 60 * 1000;
+  const TRACKER_RECYCLE_IDLE_MS = 10 * 60 * 1000;
+  const TRACKER_RECYCLE_PAUSE_MS = 2000;
+  let lastGameMessageAt = 0;
 
   async function exportExtensionStorage(includeFullToonCache: boolean): Promise<ExtensionStorageSnapshot> {
     return {
@@ -48,18 +61,52 @@ export default defineBackground(() => {
     } else {
       stopAutoDiscover();
       stopTracking();
+      clearTrackerRecycleTimers();
       disconnectAll();
     }
     broadcastStatus();
   }
 
-  async function importExtensionStorage(snapshot: ExtensionStorageSnapshot) {
+  async function getExtensionStorageSnapshot(includeFullToonCache: boolean = true): Promise<ExtensionStorageSnapshot> {
+    return {
+      localStorage: {},
+      indexedDB: includeFullToonCache
+        ? await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })
+        : pruneIndexedDbSnapshotForExport(await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })),
+      browserStorageLocal: await browser.storage.local.get(null),
+    };
+  }
+
+  async function analyzeExtensionImport(snapshot: ExtensionStorageSnapshot) {
+    return analyzeExtensionStorageMerge(await getExtensionStorageSnapshot(true), snapshot);
+  }
+
+  async function importExtensionStorage(
+    snapshot: ExtensionStorageSnapshot,
+    options: { mode: ImportMode; conflictPolicy: ImportConflictPolicy }
+  ) {
     closeDB();
-    await browser.storage.local.clear();
-    if (Object.keys(snapshot.browserStorageLocal || {}).length > 0) {
-      await browser.storage.local.set(snapshot.browserStorageLocal);
+
+    if (options.mode === 'replace') {
+      await browser.storage.local.clear();
+      if (Object.keys(snapshot.browserStorageLocal || {}).length > 0) {
+        await browser.storage.local.set(snapshot.browserStorageLocal);
+      }
+      await restoreIndexedDatabases(snapshot.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
+    } else {
+      const currentBrowserStorage = await browser.storage.local.get(null);
+      const updates: Record<string, any> = {};
+      for (const [key, value] of Object.entries(snapshot.browserStorageLocal || {})) {
+        if (!(key in currentBrowserStorage) || JSON.stringify(currentBrowserStorage[key]) === JSON.stringify(value) || options.conflictPolicy === 'use-import') {
+          updates[key] = value;
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        await browser.storage.local.set(updates);
+      }
+      await mergeIndexedDatabases(snapshot.indexedDB || {}, { conflictPolicy: options.conflictPolicy });
     }
-    await restoreIndexedDatabases(snapshot.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
+
     await syncTrackerRuntimeState();
   }
 
@@ -190,6 +237,7 @@ export default defineBackground(() => {
     };
 
     conn.onmessage = (event) => {
+      lastGameMessageAt = Date.now();
       const info = connections.get(port);
       if (!info) return;
 
@@ -242,8 +290,13 @@ export default defineBackground(() => {
 
     conn.onclose = () => {
       connectingPorts.delete(port);
-      connections.delete(port);
-      failedPorts.add(port);
+      const wasIntentionalDisconnect = intentionalDisconnectSockets.has(conn);
+      if (connections.get(port)?.ws === conn) {
+        connections.delete(port);
+      }
+      if (!wasIntentionalDisconnect && trackerEnabled === true) {
+        failedPorts.add(port);
+      }
       if (primaryPort === port) {
         primaryPort = connections.size > 0 ? connections.keys().next().value ?? null : null;
       }
@@ -260,14 +313,22 @@ export default defineBackground(() => {
 
   async function startTracking() {
     if (trackerEnabled !== true) return;
-    if (trackingInterval) return;
+    if (trackingTimeout) return;
     console.log("[ToonTracker BG] Starting active tracking...");
 
     TRACKED_PORTS.forEach(port => {
       try { connectToPort(port); } catch (e) { }
     });
 
-    trackingInterval = setInterval(() => {
+    const scheduleTrackingPoll = () => {
+      trackingTimeout = setTimeout(() => {
+        trackingTimeout = null;
+        pollTrackedPorts();
+        if (trackerEnabled === true) scheduleTrackingPoll();
+      }, TRACKING_POLL_MS);
+    };
+
+    const pollTrackedPorts = () => {
       if (DEBUG) console.log("[ToonTracker BG] Sending all request...");
       if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
@@ -278,14 +339,18 @@ export default defineBackground(() => {
           try { info.ws.send(JSON.stringify({ request: "all" })); } catch (e) { }
         }
       });
-    }, 5000);
+    };
+
+    scheduleTrackingPoll();
 
     browser.alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: 1 });
+    scheduleTrackerRecycle();
   }
 
   function startAutoDiscover() {
-    if (autoDiscoverInterval) return;
-    autoDiscoverInterval = setInterval(() => {
+    if (autoDiscoverTimeout) return;
+    const discover = () => {
+      autoDiscoverTimeout = null;
       if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
         if (!connections.has(port)) {
@@ -293,23 +358,64 @@ export default defineBackground(() => {
           try { connectToPort(port); } catch (e) { }
         }
       });
-    }, 60000);
+      autoDiscoverTimeout = setTimeout(discover, AUTO_DISCOVER_MS);
+    };
+    autoDiscoverTimeout = setTimeout(discover, AUTO_DISCOVER_MS);
   }
   function stopAutoDiscover() {
-    if (autoDiscoverInterval) clearInterval(autoDiscoverInterval);
-    autoDiscoverInterval = null;
+    if (autoDiscoverTimeout) clearTimeout(autoDiscoverTimeout);
+    autoDiscoverTimeout = null;
   }
 
   function stopTracking() {
-    if (!trackingInterval) return;
-    console.log("[ToonTracker BG] No active clients, stopping tracker...");
-    clearInterval(trackingInterval);
-    trackingInterval = null;
+    if (trackingTimeout) {
+      console.log("[ToonTracker BG] No active clients, stopping tracker...");
+      clearTimeout(trackingTimeout);
+      trackingTimeout = null;
+    }
     browser.alarms.clear(KEEP_ALIVE_ALARM).catch(() => { });
+  }
+
+  function scheduleTrackerRecycle() {
+    if (trackerEnabled !== true) return;
+    if (trackerRecycleTimeout) clearTimeout(trackerRecycleTimeout);
+    trackerRecycleTimeout = setTimeout(() => {
+      trackerRecycleTimeout = null;
+      recycleTrackerRuntime();
+    }, TRACKER_RECYCLE_MS);
+  }
+
+  function clearTrackerRecycleTimers() {
+    if (trackerRecycleTimeout) clearTimeout(trackerRecycleTimeout);
+    if (trackerResumeTimeout) clearTimeout(trackerResumeTimeout);
+    trackerRecycleTimeout = null;
+    trackerResumeTimeout = null;
+  }
+
+  function recycleTrackerRuntime() {
+    if (trackerEnabled !== true) return;
+    const idleForMs = Date.now() - lastGameMessageAt;
+    if (lastGameMessageAt > 0 && idleForMs < TRACKER_RECYCLE_IDLE_MS) {
+      if (DEBUG) console.log("[ToonTracker BG] Skipping tracker recycle; game client was recently active.");
+      scheduleTrackerRecycle();
+      return;
+    }
+    console.log("[ToonTracker BG] Recycling tracker runtime to allow extension updates...");
+    stopAutoDiscover();
+    stopTracking();
+    disconnectAll();
+    trackerResumeTimeout = setTimeout(() => {
+      trackerResumeTimeout = null;
+      if (trackerEnabled !== true) return;
+      startAutoDiscover();
+      startTracking();
+      broadcastStatus();
+    }, TRACKER_RECYCLE_PAUSE_MS);
   }
 
   function disconnectAll() {
     for (const [port, info] of connections.entries()) {
+      intentionalDisconnectSockets.add(info.ws);
       try { info.ws.close(); } catch (e) { }
       connections.delete(port);
     }
@@ -355,6 +461,7 @@ export default defineBackground(() => {
       } else if (trackerEnabled === false) {
         stopAutoDiscover();
         stopTracking();
+        clearTrackerRecycleTimers();
         disconnectAll();
       }
       broadcastStatus();
@@ -434,8 +541,18 @@ export default defineBackground(() => {
       });
       return true;
     } else if (message.type === 'IMPORT_EXTENSION_STORAGE') {
-      importExtensionStorage(message.snapshot as ExtensionStorageSnapshot).then(() => {
+      importExtensionStorage(message.snapshot as ExtensionStorageSnapshot, {
+        mode: message.mode === 'replace' ? 'replace' : 'merge',
+        conflictPolicy: message.conflictPolicy === 'use-import' ? 'use-import' : 'keep-local',
+      }).then(() => {
         sendResponse({ success: true });
+      }).catch((error) => {
+        sendResponse({ error: error instanceof Error ? error.message : String(error) });
+      });
+      return true;
+    } else if (message.type === 'ANALYZE_EXTENSION_IMPORT') {
+      analyzeExtensionImport(message.snapshot as ExtensionStorageSnapshot).then((plan) => {
+        sendResponse({ plan });
       }).catch((error) => {
         sendResponse({ error: error instanceof Error ? error.message : String(error) });
       });
