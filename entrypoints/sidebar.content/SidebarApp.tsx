@@ -2277,7 +2277,7 @@ export function SidebarApp() {
                                         setToonyCollapsed(next);
                                         setSetting('toony-collapsed', next).catch(console.error);
                                       }}
-                                      className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                      className="mb-1 ml-2 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
                                     >
                                       <span>Toony Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
@@ -2298,7 +2298,7 @@ export function SidebarApp() {
                                         setStinkyCollapsed(next);
                                         setSetting('stinky-collapsed', next).catch(console.error);
                                       }}
-                                      className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                      className="mb-1 ml-2 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
                                     >
                                       <span>Stinky Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${stinkyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
@@ -2319,7 +2319,7 @@ export function SidebarApp() {
                                         setNeutralCollapsed(next);
                                         setSetting('neutral-collapsed', next).catch(console.error);
                                       }}
-                                      className="mb-1 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                      className="mb-1 ml-2 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
                                     >
                                       <span>Notes</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
@@ -2345,7 +2345,7 @@ export function SidebarApp() {
                 <section className="flex-1 flex flex-col min-h-0">
                   {selectedHistoryGroup === null ? (
                     <div className="flex-1 flex flex-col min-h-0">
-                      <div className="mb-2 shrink-0 flex items-center justify-between">
+                      <div className="mb-2 ml-2 shrink-0 flex items-center justify-between">
                         <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
                       </div>
                       <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar p-1.5 min-h-0">

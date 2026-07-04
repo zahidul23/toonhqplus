@@ -9,7 +9,8 @@ export const changelog: ChangelogEntry[] = [
     version: '1.2.13',
     date: 'July 4, 2026',
     changes: [
-      'Bug fixes for synced toon lists and notes'
+      'Bug fixes for synced toon lists and notes',
+      'Update padding for headers in History and Toon tabs in sidebar'
     ]
   },
   {
