@@ -2387,9 +2387,9 @@ function BossesTabContent({
 
 // ─── ShtickerBook shell subcomponents ─────────────────────────────────────────
 
-function OpenBookButton({ onClick }: { onClick: () => void }) {
+function OpenBookButton({ onClick, sidebarOnLeft }: { onClick: () => void; sidebarOnLeft: boolean }) {
   return (
-    <div className="fixed bottom-4 left-4 z-[2147483646] pointer-events-auto">
+    <div className={`fixed bottom-4 z-[2147483646] pointer-events-auto ${sidebarOnLeft ? 'right-4' : 'left-4'}`}>
       <button
         type="button"
         onClick={onClick}
@@ -2421,6 +2421,7 @@ function BookSidebar({
   onFacilityChange,
   trackerEnabled,
   hasLoadedSettings,
+  sidebarOnLeft,
 }: {
   activeTab: InfoBookTab;
   activeFacility: number | null;
@@ -2428,13 +2429,14 @@ function BookSidebar({
   onFacilityChange: (idx: number | null) => void;
   trackerEnabled: boolean | undefined;
   hasLoadedSettings: boolean;
+  sidebarOnLeft: boolean;
 }) {
   const navButtonClass = (tab: InfoBookTab, extra = '') =>
     `w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer ${extra} ${activeTab === tab ? 'bg-[#145837] text-white shadow-inner' : 'text-green-100/80 hover:bg-black/20 hover:text-white'
     }`;
 
   return (
-    <div className="w-48 shrink-0 border-r border-[#0a2e1d]/80 bg-[#0f3f28] p-2 flex flex-col h-full">
+    <div className={`w-48 shrink-0 bg-[#0f3f28] p-2 flex flex-col h-full ${sidebarOnLeft ? 'border-l border-[#0a2e1d]/80 order-last' : 'border-r border-[#0a2e1d]/80'}`}>
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
         <button
           type="button"
@@ -2550,12 +2552,12 @@ function BookSidebar({
   );
 }
 
-function CloseBookButton({ onClick }: { onClick: () => void }) {
+function CloseBookButton({ onClick, sidebarOnLeft }: { onClick: () => void; sidebarOnLeft: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-4 left-4 z-20 inline-flex transition-all cursor-pointer"
+      className={`absolute bottom-4 z-20 inline-flex transition-all cursor-pointer ${sidebarOnLeft ? 'right-4' : 'left-4'}`}
       aria-label="Close Shticker Book"
       title="Close Shticker Book"
     >
@@ -2568,10 +2570,12 @@ function CloseBookButton({ onClick }: { onClick: () => void }) {
 
 export function ShtickerBook({
   selectedToonId,
-  onToonSelect
+  onToonSelect,
+  sidebarOnLeft = false,
 }: {
   selectedToonId?: string | null;
   onToonSelect?: (id: string | null) => void;
+  sidebarOnLeft?: boolean;
 }) {
   const CLOSE_ANIMATION_MS = 260;
   const [isOpen, setIsOpen] = useState(false);
@@ -2672,7 +2676,7 @@ export function ShtickerBook({
   return (
     <>
       {!isOpen && (
-        <OpenBookButton onClick={() => { setIsClosing(false); setIsOpen(true); }} />
+        <OpenBookButton onClick={() => { setIsClosing(false); setIsOpen(true); }} sidebarOnLeft={sidebarOnLeft} />
       )}
 
       {isOpen && (
@@ -2681,7 +2685,7 @@ export function ShtickerBook({
           onClick={closeBook}
         >
           <div
-            className={`info-book-panel absolute bottom-4 left-4 overflow-hidden rounded-2xl border border-[#0a2e1d] bg-[#0c3622] shadow-2xl ${isClosing ? 'is-closing' : ''}`}
+            className={`info-book-panel absolute bottom-4 overflow-hidden rounded-2xl border border-[#0a2e1d] bg-[#0c3622] shadow-2xl ${sidebarOnLeft ? 'right-4' : 'left-4'} ${isClosing ? 'is-closing' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
             <BookHeader />
@@ -2694,6 +2698,7 @@ export function ShtickerBook({
                 onFacilityChange={setActiveFacility}
                 trackerEnabled={trackerEnabled}
                 hasLoadedSettings={hasLoadedSettings}
+                sidebarOnLeft={sidebarOnLeft}
               />
 
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
@@ -2733,7 +2738,7 @@ export function ShtickerBook({
               </div>
             </div>
 
-            <CloseBookButton onClick={closeBook} />
+            <CloseBookButton onClick={closeBook} sidebarOnLeft={sidebarOnLeft} />
           </div>
         </div>
       )}

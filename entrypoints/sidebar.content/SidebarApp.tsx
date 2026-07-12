@@ -1353,6 +1353,7 @@ export function SidebarApp() {
   const [syncNotesError, setSyncNotesError] = useState<string | null>(null);
   const [syncNotesChoiceDialog, setSyncNotesChoiceDialog] = useState<SyncNotesChoiceDialogState | null>(null);
   const [highlightGroupsEnabled, setHighlightGroupsEnabled] = useState(false);
+  const [sidebarOnLeft, setSidebarOnLeft] = useState(false);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
@@ -1916,13 +1917,14 @@ export function SidebarApp() {
   useEffect(() => {
     initSyncNotesRemoteListener(refresh);
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled']).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
       if (values['notes-enabled'] !== undefined) setNotesEnabled(!!values['notes-enabled']);
       if (values['sync-notes-enabled'] !== undefined) setSyncNotesEnabledState(values['sync-notes-enabled'] === true);
       if (values['highlight-groups'] !== undefined) setHighlightGroupsEnabled(!!values['highlight-groups']);
+      if (values['sidebar-on-left'] !== undefined) setSidebarOnLeft(!!values['sidebar-on-left']);
       if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
 
       let initialTab = values['active-tab'];
@@ -2063,10 +2065,11 @@ export function SidebarApp() {
       <ShtickerBook
         selectedToonId={selectedToonId}
         onToonSelect={setSelectedToonId}
+        sidebarOnLeft={sidebarOnLeft}
       />
 
 
-      <div className="fixed top-0 right-0 z-[2147483647] flex h-screen max-h-screen flex-col items-end p-4 pointer-events-none overflow-hidden">
+      <div className={`fixed top-0 z-[2147483647] flex h-screen max-h-screen flex-col p-4 pointer-events-none overflow-hidden ${sidebarOnLeft ? 'left-0 items-start' : 'right-0 items-end'}`}>
         <div className="mb-2 pointer-events-auto">
           <button
             onClick={() => {
@@ -2621,6 +2624,25 @@ export function SidebarApp() {
                           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${highlightGroupsEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${highlightGroupsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">Sidebar on Left</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Move the sidebar to the left side of the screen, with the Shticker Book on the right.
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const next = !sidebarOnLeft;
+                            setSidebarOnLeft(next);
+                            setSetting('sidebar-on-left', next).catch(console.error);
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${sidebarOnLeft ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${sidebarOnLeft ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
 

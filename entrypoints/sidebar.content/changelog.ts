@@ -10,6 +10,7 @@ export const changelog: ChangelogEntry[] = [
     date: 'July 11, 2026',
     changes: [
       'Fix non-synced toons not saving to group history.',
+      'Setting to swap sidebar and shticker book positions.',
       'Add auto reload of inactive ToonHQ tabs'
     ]
   },
