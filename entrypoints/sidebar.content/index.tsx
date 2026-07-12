@@ -1314,6 +1314,7 @@ const activeToons: Record<string, any> = {};
 let bossInfoEnabled = true;
 let notesEnabled = true;
 let highlightGroupsEnabled = true;
+const IDLE_RELOAD_AFTER_MS = 60 * 60 * 1000;
 
 const DEFAULT_SETTINGS: Record<string, any> = {
   'boss-info-enabled': true,
@@ -1368,13 +1369,6 @@ function applyGroupHighlights(
     const bottomRight = groupCard.querySelector('.info-card__bottom-right');
     if (!bottomRight) return;
 
-    let countsDiv = bottomRight.querySelector('.saved-toons-counts') as HTMLElement | null;
-    if (!countsDiv) {
-      countsDiv = document.createElement('div');
-      countsDiv.className = 'saved-toons-counts';
-      bottomRight.insertBefore(countsDiv, bottomRight.firstChild);
-    }
-
     let toonyCount = 0;
     let stinkyCount = 0;
     const seenToons = new Set<string>();
@@ -1413,6 +1407,18 @@ function applyGroupHighlights(
 
     const currentToonyStr = String(toonyCount);
     const currentStinkyStr = String(stinkyCount);
+    let countsDiv = bottomRight.querySelector('.saved-toons-counts') as HTMLElement | null;
+
+    if (toonyCount === 0 && stinkyCount === 0) {
+      if (countsDiv) countsDiv.remove();
+      return;
+    }
+
+    if (!countsDiv) {
+      countsDiv = document.createElement('div');
+      countsDiv.className = 'saved-toons-counts';
+      bottomRight.insertBefore(countsDiv, bottomRight.firstChild);
+    }
 
     if (countsDiv.getAttribute('data-toony') !== currentToonyStr || countsDiv.getAttribute('data-stinky') !== currentStinkyStr) {
       countsDiv.setAttribute('data-toony', currentToonyStr);
@@ -1625,9 +1631,10 @@ export default defineContentScript({
       // Persist all members
       const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
       const memberRecords: GroupMemberRecord[] = group.members
+        .filter((m: any) => m.toon)
         .map((m: any) => ({
           groupId,
-          toonId: String(m.toon.id || generateToonHash(m.name || '', m.photo || '')),
+          toonId: String(m.toon.id || generateToonHash(m.toon.name || '', m.toon.photo || '')),
           joined: m.joined || group.created,
           left: m.left || null,
         }));
@@ -1747,6 +1754,7 @@ export default defineContentScript({
                   const eventName = payload[0];
                   const data = payload[1];
                   if (eventName === 'group_created') {
+                    data.members?.forEach((m: any) => { if (m.toon) applyToonHash(m.toon); });
                     groupsState[data.id] = data;
                     syncToonData(data.members);
                     syncGroupHistory(data);
@@ -1826,6 +1834,30 @@ export default defineContentScript({
         activeGroupSocket.close();
         activeGroupSocket = null;
       }
+    });
+
+    let lastUserActivityAt = Date.now();
+    const markUserActivity = () => {
+      lastUserActivityAt = Date.now();
+    };
+    const userActivityEvents = ['keydown', 'mousedown', 'pointerdown', 'touchstart', 'wheel'] as const;
+    userActivityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, markUserActivity, { passive: true, capture: true });
+    });
+
+    const idleReloadInterval = setInterval(() => {
+      const idleFor = Date.now() - lastUserActivityAt;
+      const hasOpenDialog = !!document.querySelector('.group-details-dialog, .modal.show, .vuedal');
+      if (idleFor >= IDLE_RELOAD_AFTER_MS && document.visibilityState === 'hidden' && !hasOpenDialog) {
+        window.location.reload();
+      }
+    }, 60 * 1000);
+
+    ctx.onInvalidated(() => {
+      userActivityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, markUserActivity, { capture: true });
+      });
+      clearInterval(idleReloadInterval);
     });
 
     const bossValuesExist = () => {

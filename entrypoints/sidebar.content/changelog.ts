@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.14',
+    date: 'July 11, 2026',
+    changes: [
+      'Fix non-synced toons not saving to group history.',
+      'Add auto reload of inactive ToonHQ tabs'
+    ]
+  },
+  {
     version: '1.2.13',
     date: 'July 4, 2026',
     changes: [

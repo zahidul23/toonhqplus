@@ -6,7 +6,11 @@
  * so our content script can link rows to the toon data we fetch via API/WebSockets.
  */
 (function () {
-  if (window.__TOONHQ_PLUS_VUE_LOGGER__) return;
+  if (window.__TOONHQ_PLUS_VUE_LOGGER_DISCONNECT__) {
+    window.__TOONHQ_PLUS_VUE_LOGGER_DISCONNECT__();
+  } else if (window.__TOONHQ_PLUS_VUE_LOGGER__) {
+    return;
+  }
   window.__TOONHQ_PLUS_VUE_LOGGER__ = true;
 
   function generateToonHash(name, photo) {
@@ -53,10 +57,27 @@
     });
   }
 
-  // Watch for DOM changes to catch new dialogs/rows
-  const observer = new MutationObserver(sync);
+  let syncScheduled = false;
+  function scheduleSync() {
+    if (syncScheduled) return;
+    syncScheduled = true;
+    requestAnimationFrame(() => {
+      syncScheduled = false;
+      sync();
+    });
+  }
+
+  // Watch for DOM changes to catch new dialogs/rows. Batch work so frequent
+  // Vue updates do not trigger full-page scans for every individual mutation.
+  const observer = new MutationObserver(scheduleSync);
   observer.observe(document.body, { childList: true, subtree: true });
 
+  window.__TOONHQ_PLUS_VUE_LOGGER_DISCONNECT__ = function () {
+    observer.disconnect();
+    window.__TOONHQ_PLUS_VUE_LOGGER__ = false;
+    delete window.__TOONHQ_PLUS_VUE_LOGGER_DISCONNECT__;
+  };
+
   // Initial run
-  sync();
+  scheduleSync();
 })();
