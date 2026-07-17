@@ -180,6 +180,20 @@ export default defineBackground(() => {
     }, 100);
   }
 
+  async function broadcastToonLaffUpdated(toonId: string, laff: ToonTrackerData['data']['laff']) {
+    const payload = { type: 'TRACKER_TOON_LAFF_UPDATED', toonId, laff };
+
+    try {
+      browser.runtime.sendMessage(payload).catch(() => { });
+      const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
+      tabs.forEach(tab => {
+        if (tab.id) {
+          browser.tabs.sendMessage(tab.id, payload).catch(() => { });
+        }
+      });
+    } catch (e) { }
+  }
+
   async function addNotifications(data: ToonTrackerData, changes: any[]) {
     if (changes.length === 0 || !data.data.toon.id) return;
     const toonId = data.data.toon.id;
@@ -258,6 +272,13 @@ export default defineBackground(() => {
           }
 
           info.data = msgData;
+
+          if (
+            previousData?.data?.laff?.current !== msgData.data.laff.current ||
+            previousData?.data?.laff?.max !== msgData.data.laff.max
+          ) {
+            broadcastToonLaffUpdated(toonId, msgData.data.laff).catch(() => { });
+          }
 
           getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(prev => {
             const list = prev || [];

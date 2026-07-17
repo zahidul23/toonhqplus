@@ -72,6 +72,14 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(diffSeconds / 86400)}d ago`;
 }
 
+function getLaffColorClass(current: number, max: number): string {
+  if (max <= 0) return 'text-white/40';
+  const ratio = current / max;
+  if (ratio < 1 / 3) return 'text-red-400';
+  if (ratio < 2 / 3) return 'text-yellow-400';
+  return 'text-emerald-400';
+}
+
 const RelativeRewardTime = React.memo(({ timestamp }: { timestamp: number }) => {
   const [display, setDisplay] = useState(() => formatRelativeTime(timestamp));
 
@@ -321,8 +329,13 @@ const ToonHeader = React.memo(({
               <h3 className={`${isExpanded ? 'text-xl' : 'text-lg'} font-bold text-white truncate`}>{toonTrackerData ? toonTrackerData.data.toon.name : 'Toon Tracker'}</h3>
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/20 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
             </div>
-            <div className={`text-[9.5px] font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
-              {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
+            <div className={`flex items-center gap-1.5 text-[9.5px] leading-none font-black uppercase tracking-widest truncate ${toonTrackerData && activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'text-emerald-400/80' : 'text-white/40'}`}>
+              <span className="leading-none">
+                {toonTrackerData ? (activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? 'Active' : 'Offline') : 'Select Toon'}
+              </span>
+              {toonTrackerData && (
+                <span className={`leading-none tabular-nums ${activeInstances.some(inst => String(inst.toonId) === String(toonTrackerData.data.toon.id)) ? getLaffColorClass(toonTrackerData.data.laff.current, toonTrackerData.data.laff.max) : 'text-white/40'}`}>({toonTrackerData.data.laff.current}/{toonTrackerData.data.laff.max})</span>
+              )}
             </div>
           </div>
         </div>
@@ -1072,6 +1085,7 @@ const ToonSuitsView = React.memo(({
 
 const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: { savedToons: any[], activeInstances: any[], selectToon: (id: string) => void }) => {
   const [toonsData, setToonsData] = useState<Record<string, { data: ToonTrackerData, history: RewardHistoryEntry[] }>>({});
+  const [liveLaff, setLiveLaff] = useState<Record<string, ToonTrackerData['data']['laff']>>({});
 
   useEffect(() => {
     savedToons.forEach(toon => {
@@ -1083,6 +1097,22 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
     });
   }, [savedToons]);
 
+  useEffect(() => {
+    const handleMessage = (message: any) => {
+      if (message.type !== 'TRACKER_TOON_LAFF_UPDATED' || !message.toonId || !message.laff) return;
+
+      const toonId = String(message.toonId);
+      setLiveLaff(current => {
+        const previous = current[toonId];
+        if (previous?.current === message.laff.current && previous?.max === message.laff.max) return current;
+        return { ...current, [toonId]: message.laff };
+      });
+    };
+
+    browser.runtime.onMessage.addListener(handleMessage);
+    return () => browser.runtime.onMessage.removeListener(handleMessage);
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar px-4 h-full animate-in fade-in slide-in-from-right-4 duration-300">
       {savedToons.length > 0 ? [...savedToons].sort((a, b) => {
@@ -1092,7 +1122,8 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
         const toonRes = toonsData[toon.id];
         const data = toonRes?.data;
         const isActive = activeInstances.some(inst => String(inst.toonId) === String(toon.id));
-        const laff = data?.data?.laff?.current ?? toon.laff;
+        const currentLaff = liveLaff[String(toon.id)]?.current ?? data?.data?.laff?.current ?? toon.laff;
+        const maxLaff = liveLaff[String(toon.id)]?.max ?? data?.data?.laff?.max ?? toon.laff;
 
         const rewards = data?.data?.rewards;
         const stats = {
@@ -1121,7 +1152,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
             <div className="flex flex-col min-w-[300px] max-w-[320px] shrink-0 gap-3">
               <div className="flex items-center gap-2 w-full">
                 <span className={`flex rounded-full shrink-0 ${isActive ? 'w-2.5 h-2.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' : 'w-2 h-2 bg-white/10'}`} title={isActive ? 'Active' : 'Offline'}></span>
-                <span className={`text-[13px] font-bold truncate transition-colors ${isActive ? 'text-emerald-400' : 'text-white/80 group-hover:text-white'}`}>{toon.name} <span className="text-white/40">({laff})</span></span>
+                <span className={`text-[13px] font-bold truncate transition-colors ${isActive ? 'text-emerald-400' : 'text-white/80 group-hover:text-white'}`}>{toon.name} <span className={isActive ? getLaffColorClass(currentLaff, maxLaff) : 'text-white/40'}>({currentLaff}/{maxLaff})</span></span>
               </div>
               <div className="flex items-center gap-3 w-full">
                 <div className={`w-14 h-14 rounded-full border bg-black/20 overflow-hidden shrink-0 flex items-center justify-center transition-colors ${isActive ? 'border-emerald-500/30' : 'border-white/10 group-hover:border-white/30'}`}>

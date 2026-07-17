@@ -623,6 +623,13 @@ async function importAllData(text: string, options: { mode: ImportMode; conflict
   const savedToonRollback = await exportSavedToonData();
   const syncStaged = await stageSyncNotesForImport(snapshot, options, savedToonRollback);
 
+  // Sync Notes defaults to disabled when its setting is absent. Materialize that
+  // effective local value so a merge using Keep Local treats an imported value as
+  // a conflict instead of adding it as a new setting.
+  if (options.mode === 'merge' && options.conflictPolicy === 'keep-local') {
+    await setSyncNotesEnabled(await isSyncNotesEnabled());
+  }
+
   try {
     const extensionResponse = await browser.runtime.sendMessage({
       type: 'IMPORT_EXTENSION_STORAGE',
@@ -742,6 +749,9 @@ const ToonTooltip = memo(({ toon, isFavorited, isBlocked, note }: { toon: ToonDa
               <span className="text-emerald-400 font-black text-sm tabular-nums">({toon.laff})</span>
             )}
           </h4>
+          <span className="text-white/45 text-xs font-medium tabular-nums truncate">
+            ID: {toon.id}
+          </span>
         </div>
       </div>
 

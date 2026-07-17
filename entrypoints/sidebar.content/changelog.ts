@@ -11,7 +11,8 @@ export const changelog: ChangelogEntry[] = [
     changes: [
       'Fix non-synced toons not saving to group history.',
       'Setting to swap sidebar and shticker book positions.',
-      'Add auto reload of inactive ToonHQ tabs'
+      'Add auto reload of inactive ToonHQ tabs',
+      'Add laff update broadcasting and improve toon display in sidebar'
     ]
   },
   {
