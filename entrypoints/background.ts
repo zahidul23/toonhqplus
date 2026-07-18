@@ -46,7 +46,7 @@ export default defineBackground(() => {
   }
 
   async function syncTrackerRuntimeState() {
-    trackerEnabled = await isTrackerEnabled();
+    trackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
     if (trackerEnabled === true) {
       startAutoDiscover();
       startTracking();
@@ -117,7 +117,7 @@ export default defineBackground(() => {
 
   async function initializeBackground() {
     console.log("Inititalizing");
-    trackerEnabled = await isTrackerEnabled();
+    trackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
     if (trackerEnabled === true) {
       console.log("tracker enabled");
       startAutoDiscover();

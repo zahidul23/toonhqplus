@@ -307,6 +307,39 @@ function getBoilerRoundType(roundIndex: number, stars: number): BoilerRoundType 
   }
 }
 
+function getBoilerRoundDamage(
+  round: SelectedGagCell[],
+  roundType: BoilerRoundType,
+  getCellDamage: (cell: SelectedGagCell) => number,
+) {
+  const counts: Record<AllowedGagTrackId, number> = { throw: 0, squirt: 0, sound: 0 };
+  for (const cell of round) {
+    if (cell) counts[cell.trackId]++;
+  }
+
+  let base = 0, firedUpExtra = 0, repeatExtra = 0, total = 0;
+
+  for (const cell of round) {
+    if (!cell) continue;
+    const cellBase = getCellDamage(cell);
+    if (!cellBase) continue;
+
+    const usedMoreThanOnce = counts[cell.trackId] > 1;
+    const isFiredUp = roundType === 'fired_up' || roundType === 'meltdown';
+    const noRepeatMultiplier = isFiredUp ? 1.5 : 1;
+    const totalMultiplier = isFiredUp && usedMoreThanOnce ? 1.7 : isFiredUp ? 1.5 : usedMoreThanOnce ? 1.2 : 1;
+    const noRepeatTotal = Math.round(cellBase * noRepeatMultiplier);
+    const cellTotal = Math.round(cellBase * totalMultiplier);
+
+    base += cellBase;
+    firedUpExtra += Math.max(0, noRepeatTotal - cellBase);
+    repeatExtra += Math.max(0, cellTotal - noRepeatTotal);
+    total += cellTotal;
+  }
+
+  return { base, firedUpExtra, repeatExtra, total };
+}
+
 function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -925,7 +958,10 @@ function RoundRow({
 
   return (
     <div
-      className={`rounded-lg border border-white/10 bg-black/20 ${isActiveRound ? 'ring-2 ring-emerald-500/60' : ''} ${isMeltdown ? 'border-red-500/40 bg-red-900 shadow-[inset_0_0_8px_rgba(239,68,68,0.15)]' : ''}`}
+      className={`rounded-lg border ${isMeltdown
+        ? 'border-red-700/50 bg-[#180609] shadow-[inset_0_0_10px_rgba(127,29,29,0.24)]'
+        : 'border-white/10 bg-black/20'
+        } ${isActiveRound ? 'ring-2 ring-emerald-500/60' : ''}`}
       ref={rowRef}
     >
       <div className="flex items-center gap-2 p-2">
@@ -1043,16 +1079,26 @@ function RoundPhaseGroup({
     );
   }
 
-  // Check if this group is in meltdown (any fired_up round has meltdown type)
-  const isMeltdown = group.firedUp.some((i) => roundStats[i]?.roundType === 'meltdown');
+  const firedUpMeltdownCount = group.firedUp.filter((i) => roundStats[i]?.roundType === 'meltdown').length;
+  const defenseMeltdownCount = group.defense.filter((i) => roundStats[i]?.roundType === 'meltdown').length;
+  const isFiredUpMeltdown = firedUpMeltdownCount > 0;
+  const isDefenseMeltdown = defenseMeltdownCount > 0;
+  const isFiredUpFullyMeltdown = firedUpMeltdownCount === group.firedUp.length;
+  const isDefenseFullyMeltdown = defenseMeltdownCount === group.defense.length;
+  const firedUpLabel = !isFiredUpMeltdown
+    ? 'Fired Up'
+    : isFiredUpFullyMeltdown ? 'Meltdown' : 'Fired Up - Meltdown';
+  const defenseLabel = !isDefenseMeltdown
+    ? 'Defense'
+    : isDefenseFullyMeltdown ? 'Meltdown' : 'Defense - Meltdown';
 
   return (
     <div className="flex gap-1.5">
       <RoundRowsColumn
         rounds={group.firedUp}
-        label={isMeltdown ? 'Meltdown' : 'Fired Up'}
-        labelColor={isMeltdown ? 'text-red-400' : 'text-red-300/80'}
-        borderColor={isMeltdown ? 'border-red-500/40 bg-red-900' : 'border-red-500/20 bg-red-900'}
+        label={firedUpLabel}
+        labelColor={isFiredUpFullyMeltdown ? 'text-red-300' : 'text-red-300/80'}
+        borderColor={isFiredUpFullyMeltdown ? 'border-red-700/60 bg-[#21080c]' : 'border-red-500/20 bg-red-900'}
         grid={grid}
         roundStats={roundStats}
         maxHp={maxHp}
@@ -1065,9 +1111,9 @@ function RoundPhaseGroup({
       />
       <RoundRowsColumn
         rounds={group.defense}
-        label={isMeltdown ? 'Meltdown' : 'Defense'}
-        labelColor={isMeltdown ? 'text-red-400' : 'text-sky-300/80'}
-        borderColor={isMeltdown ? 'border-red-500/40 bg-red-900' : 'border-sky-500/20 bg-sky-900'}
+        label={defenseLabel}
+        labelColor={isDefenseFullyMeltdown ? 'text-red-300' : 'text-sky-300/80'}
+        borderColor={isDefenseFullyMeltdown ? 'border-red-700/60 bg-[#21080c]' : 'border-sky-500/20 bg-sky-900'}
         grid={grid}
         roundStats={roundStats}
         maxHp={maxHp}
@@ -1301,30 +1347,7 @@ function BoilerCalculator() {
         roundType = 'meltdown';
       }
 
-      const counts: Record<AllowedGagTrackId, number> = { throw: 0, squirt: 0, sound: 0 };
-      for (const cell of round) {
-        if (cell) counts[cell.trackId]++;
-      }
-
-      let base = 0, firedUpExtra = 0, repeatExtra = 0, total = 0;
-
-      for (const cell of round) {
-        if (!cell) continue;
-        const cellBase = getCellDamage(cell);
-        if (!cellBase) continue;
-
-        const usedMoreThanOnce = counts[cell.trackId] > 1;
-        const isFiredUp = roundType === 'fired_up' || roundType === 'meltdown';
-        const noRepeatMultiplier = isFiredUp ? 1.5 : 1;
-        const totalMultiplier = isFiredUp && usedMoreThanOnce ? 1.7 : isFiredUp ? 1.5 : usedMoreThanOnce ? 1.2 : 1;
-        const noRepeatTotal = Math.round(cellBase * noRepeatMultiplier);
-        const cellTotal = Math.round(cellBase * totalMultiplier);
-
-        base += cellBase;
-        firedUpExtra += Math.max(0, noRepeatTotal - cellBase);
-        repeatExtra += Math.max(0, cellTotal - noRepeatTotal);
-        total += cellTotal;
-      }
+      const { base, firedUpExtra, repeatExtra, total } = getBoilerRoundDamage(round, roundType, getCellDamage);
 
       rolling += total;
       stats.push({ roundType, base, firedUpExtra, repeatExtra, total, rolling });
@@ -1362,8 +1385,15 @@ function BoilerCalculator() {
       if (nextSlot < BOILER_CALC_GAGS_PER_ROUND) return { round: prev.round, slot: nextSlot };
 
       let nextRound = prev.round + 1;
-      // Skip defense rounds if the current round wasn't a defense/meltdown round (auto-progression logic)
-      if (roundStats[prev.round]?.roundType !== 'defense' && roundStats[prev.round]?.roundType !== 'meltdown') {
+      const currentRoundType = roundStats[prev.round]?.roundType ?? getBoilerRoundType(prev.round, stars);
+      const updatedRound = grid[prev.round].slice();
+      updatedRound[prev.slot] = { trackId, gagIndex, variant };
+      const rollingBeforeRound = prev.round > 0 ? roundStats[prev.round - 1]?.rolling ?? 0 : 0;
+      const updatedRollingDamage = rollingBeforeRound
+        + getBoilerRoundDamage(updatedRound, currentRoundType, getCellDamage).total;
+      const nextRoundIsMeltdown = stars === 4 && maxHp - updatedRollingDamage <= maxHp * 0.45;
+
+      if (currentRoundType !== 'defense' && currentRoundType !== 'meltdown' && !nextRoundIsMeltdown) {
         while (nextRound < grid.length && getBoilerRoundType(nextRound, stars) === 'defense') {
           nextRound++;
         }

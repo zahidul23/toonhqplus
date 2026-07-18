@@ -12,7 +12,9 @@ export const changelog: ChangelogEntry[] = [
       'Fix non-synced toons not saving to group history.',
       'Setting to swap sidebar and shticker book positions.',
       'Add auto reload of inactive ToonHQ tabs',
-      'Add laff update broadcasting and improve toon display in sidebar'
+      'Add laff update broadcasting and improve toon display in sidebar',
+      'Update Boiler Calculator meltdown styling',
+      'Fix Tracker Tab for new installs'
     ]
   },
   {

@@ -131,7 +131,7 @@ function App() {
               Discord: <a href="https://discord.com/users/140381706992484352" target="_blank" rel="noreferrer"><strong>@hoque</strong></a>
             </div>
             <div>
-              Email: <a href="mailto:toonyhoque@gmail.com"><strong>toonyhoque@gmail.com</strong></a>
+              Email: <a href="mailto:feedback@toontown.help"><strong>feedback@toontown.help</strong></a>
             </div>
           </div>
         </div>
