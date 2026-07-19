@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, memo } from 'react';
 import { gags as gagsConfig } from './gags';
 import { CogCalculator } from './CogCalculator';
+import { GagCalculator } from './GagCalculator';
 
 import { AboutTabContent } from './AboutTab';
 import { ToonTrackerTab } from './ToonTrackerTab';
@@ -8,7 +9,7 @@ import { getSetting, getSettings } from './db';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'cog_calc' | 'bosses' | 'about' | 'toon_tracker' | 'reward_details' | 'toons';
+type InfoBookTab = 'facilities' | 'field_office' | 'boiler_calc' | 'cog_calc' | 'gag_calc' | 'bosses' | 'about' | 'toon_tracker' | 'reward_details' | 'toons';
 
 type AllowedGagTrackId = 'throw' | 'squirt' | 'sound';
 type BoilerRoundType = 'neutral' | 'fired_up' | 'defense' | 'meltdown';
@@ -2433,13 +2434,29 @@ function OpenBookButton({ onClick, sidebarOnLeft }: { onClick: () => void; sideb
   );
 }
 
-function BookHeader() {
+function BookHeader({ activeTab }: { activeTab: InfoBookTab }) {
+  const isCalculatorTab = activeTab === 'gag_calc' || activeTab === 'cog_calc' || activeTab === 'boiler_calc';
+
   return (
-    <div className="flex items-center justify-between border-b border-[#0a2e1d]/80 bg-[#10462d] px-4 py-3">
+    <div className="flex items-center gap-4 border-b border-[#0a2e1d]/80 bg-[#10462d] px-4 py-3">
       <div className="flex items-center gap-2 text-white">
         <BookIcon className="text-emerald-300" isOpen={null} />
         <h3 className="text-base font-bold">Shticker Book</h3>
       </div>
+      {isCalculatorTab && (
+        <span className="text-sm font-semibold text-emerald-100 ml-4">
+          Visit{' '}
+          <a
+            href="https://toontown.help"
+            target="_blank"
+            rel="noreferrer"
+            className="text-emerald-200 underline decoration-emerald-300/60 underline-offset-2 transition-colors hover:text-white"
+          >
+            toontown.help
+          </a>{' '}
+          for additional functionality to calculators and more tools!
+        </span>
+      )}
     </div>
   );
 }
@@ -2464,10 +2481,13 @@ function BookSidebar({
   const navButtonClass = (tab: InfoBookTab, extra = '') =>
     `w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer ${extra} ${activeTab === tab ? 'bg-[#145837] text-white shadow-inner' : 'text-green-100/80 hover:bg-black/20 hover:text-white'
     }`;
+  const groupHeaderClass = 'mb-1.5 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300/55';
 
   return (
-    <div className={`w-48 shrink-0 bg-[#0f3f28] p-2 flex flex-col h-full ${sidebarOnLeft ? 'border-l border-[#0a2e1d]/80 order-last' : 'border-r border-[#0a2e1d]/80'}`}>
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+    <div className={`w-48 min-h-0 shrink-0 bg-[#0f3f28] p-2 flex flex-col h-full ${sidebarOnLeft ? 'border-l border-[#0a2e1d]/80 order-last' : 'border-r border-[#0a2e1d]/80'}`}>
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar pr-1" aria-label="Shticker Book tabs">
+        <div className={groupHeaderClass}>Info</div>
+
         <button
           type="button"
           onClick={() => { onTabChange('bosses'); onFacilityChange(null); }}
@@ -2494,7 +2514,6 @@ function BookSidebar({
           })}
         </div>
 
-
         <button
           type="button"
           onClick={() => { onTabChange('facilities'); onFacilityChange(null); }}
@@ -2520,9 +2539,19 @@ function BookSidebar({
         <button
           type="button"
           onClick={() => { onTabChange('field_office'); onFacilityChange(null); }}
-          className={navButtonClass('field_office', 'mb-2')}
+          className={navButtonClass('field_office', 'mb-4')}
         >
           Field Offices
+        </button>
+
+        <div className={groupHeaderClass}>Calculators</div>
+
+        <button
+          type="button"
+          onClick={() => { onTabChange('gag_calc'); onFacilityChange(null); }}
+          className={navButtonClass('gag_calc', 'mb-2')}
+        >
+          Gag Calculator
         </button>
 
         <button
@@ -2530,16 +2559,18 @@ function BookSidebar({
           onClick={() => { onTabChange('cog_calc'); onFacilityChange(null); }}
           className={navButtonClass('cog_calc', 'mb-2')}
         >
-          Cog Calculator
+          Facilities Calculator
         </button>
 
         <button
           type="button"
           onClick={() => { onTabChange('boiler_calc'); onFacilityChange(null); }}
-          className={navButtonClass('boiler_calc', 'mb-2')}
+          className={navButtonClass('boiler_calc', 'mb-4')}
         >
           Boiler Calculator
         </button>
+
+        <div className={groupHeaderClass}>Companion App</div>
 
         <button
           type="button"
@@ -2567,7 +2598,9 @@ function BookSidebar({
             Toons
           </button>
         </div>
-      </div>
+      </nav>
+
+      <div className="h-20 shrink-0" aria-hidden="true" />
 
       {/* <div className="mt-auto pt-2 border-t border-emerald-800/50 pb-20">
         <button
@@ -2617,7 +2650,7 @@ export function ShtickerBook({
       const raw = localStorage.getItem('toonhqplus_shtickerbook_state');
       if (raw) {
         const parsed = JSON.parse(raw);
-        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details', 'toons'];
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'gag_calc', 'bosses', 'about', 'toon_tracker', 'reward_details', 'toons'];
         if (validTabs.includes(parsed.tab)) {
           return parsed.tab as InfoBookTab;
         }
@@ -2671,7 +2704,7 @@ export function ShtickerBook({
     const handleOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.tab) {
-        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'bosses', 'about', 'toon_tracker', 'reward_details', 'toons'];
+        const validTabs = ['facilities', 'field_office', 'boiler_calc', 'cog_calc', 'gag_calc', 'bosses', 'about', 'toon_tracker', 'reward_details', 'toons'];
         if (validTabs.includes(detail.tab)) {
           setActiveTab(detail.tab as InfoBookTab);
           if (detail.tab === 'reward_details' && detail.category) {
@@ -2718,7 +2751,7 @@ export function ShtickerBook({
             className={`info-book-panel absolute bottom-4 overflow-hidden rounded-2xl border border-[#0a2e1d] bg-[#0c3622] shadow-2xl ${sidebarOnLeft ? 'right-4' : 'left-4'} ${isClosing ? 'is-closing' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <BookHeader />
+            <BookHeader activeTab={activeTab} />
 
             <div className="flex h-[calc(95vh-3.5rem)]">
               <BookSidebar
@@ -2738,6 +2771,7 @@ export function ShtickerBook({
                 {activeTab === 'field_office' && <FieldOfficeTabContent />}
                 {activeTab === 'boiler_calc' && <BoilerCalculator />}
                 {activeTab === 'cog_calc' && <CogCalculator />}
+                {activeTab === 'gag_calc' && <GagCalculator />}
                 {activeTab === 'bosses' && (
                   <BossesTabContent activeBoss={activeFacility} setActiveBoss={setActiveFacility} />
                 )}

@@ -54,7 +54,7 @@ const SOS_FRANZ_NECKVEIN = 'https://rendition.toontownrewritten.com/render/740d0
 const SOS_BARNACLE_BESSIE = 'https://rendition.toontownrewritten.com/render/7414050200010c010c01190d000d0d010400000000000000000000000000000000/portrait/128x128.webp';
 
 
-const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; rounds?: number; dmgOthers?: number; dmgExpire?: number; image: string; name: string; isInstaKill?: boolean; isRemote?: boolean; isHeal?: boolean; stars?: number }>> = {
+export const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; rounds?: number; dmgOthers?: number; dmgExpire?: number; image: string; name: string; isInstaKill?: boolean; isRemote?: boolean; isHeal?: boolean; stars?: number }>> = {
   trap: [
     { gagIndex: 3, damage: 60, image: SOS_CLERK_WILL, name: "Clerk Will" },
     { gagIndex: 4, damage: 120, image: SOS_CLERK_PENNY, name: "Clerk Penny" },

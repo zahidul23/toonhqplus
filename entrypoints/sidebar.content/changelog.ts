@@ -6,15 +6,23 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.15',
+    date: 'July 19, 2026',
+    changes: [
+      'Add Gag Calculator to Shticker Book',
+    ]
+  },
+  {
     version: '1.2.14',
-    date: 'July 11, 2026',
+    date: 'July 18, 2026',
     changes: [
       'Fix non-synced toons not saving to group history.',
       'Setting to swap sidebar and shticker book positions.',
       'Add auto reload of inactive ToonHQ tabs',
       'Add laff update broadcasting and improve toon display in sidebar',
       'Update Boiler Calculator meltdown styling',
-      'Fix Tracker Tab for new installs'
+      'Fix Tracker Tab for new installs',
+      'Add the Gag Calculator to the Shticker Book'
     ]
   },
   {
