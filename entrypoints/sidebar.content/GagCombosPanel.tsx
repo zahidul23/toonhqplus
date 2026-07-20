@@ -87,8 +87,8 @@ export function GagCombosPanel() {
 
   return (
     <section className="flex w-full flex-col rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
-      <div className="mb-3 border-b border-white/[0.08] pb-3">
-        <h2 className="text-center text-lg font-black text-white">Common Gag Combos</h2>
+      <div className="mb-2">
+        <h2 className="text-center text-xl font-black text-white">Common Gag Combos</h2>
       </div>
       <div className="grid w-full grid-cols-5 gap-1" aria-label="Select Cog level">
         {Array.from({ length: 20 }, (_, index) => index + 1).map((option) => (
@@ -96,11 +96,10 @@ export function GagCombosPanel() {
             key={option}
             type="button"
             onClick={() => selectLevel(option)}
-            className={`h-7 min-w-0 cursor-pointer rounded-md border text-[10px] font-black transition ${
-              level === option
+            className={`h-7 min-w-0 cursor-pointer rounded-md border text-xs font-black transition ${level === option
                 ? 'border-lime-200 bg-lime-400 text-[#071527]'
                 : 'border-white/10 bg-black/20 text-white/60 hover:border-white/25 hover:bg-white/10 hover:text-white'
-            }`}
+              }`}
             aria-pressed={level === option}
             aria-label={`Level ${option}, ${COG_HEALTH[option]} HP`}
           >
@@ -108,9 +107,29 @@ export function GagCombosPanel() {
           </button>
         ))}
       </div>
-      <p className="mt-2 text-center text-sm font-black text-white/55">
-        Level {level} <span className="text-lime-300">· {COG_HEALTH[level]} HP</span>
-      </p>
+      <div className="mt-2 flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => selectLevel(level - 1)}
+          disabled={level === 1}
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-black/20 text-base font-black text-white/65 transition hover:border-white/25 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-25"
+          aria-label="Previous Cog level"
+        >
+          ←
+        </button>
+        <p className="text-center text-base font-black text-white">
+          Level {level} <span className="text-lime-300">· {COG_HEALTH[level]} HP</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => selectLevel(level + 1)}
+          disabled={level === 20}
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-black/20 text-base font-black text-white/65 transition hover:border-white/25 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-25"
+          aria-label="Next Cog level"
+        >
+          →
+        </button>
+      </div>
       <div className="custom-scrollbar mt-1 flex max-h-[calc(95vh-19rem)] flex-col gap-1.5 overflow-y-auto px-3 py-1">
         {VALIDATED_GAG_COMBOS[level].map((combo, comboIndex) => (
           <ComboRow key={comboIndex} combo={combo} />

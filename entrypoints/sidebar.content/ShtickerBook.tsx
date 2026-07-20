@@ -2454,7 +2454,7 @@ function BookHeader({ activeTab }: { activeTab: InfoBookTab }) {
           >
             toontown.help
           </a>{' '}
-          for additional functionality to calculators and more tools!
+          for additional calculator functionality and more tools!
         </span>
       )}
     </div>

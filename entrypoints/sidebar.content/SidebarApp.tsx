@@ -749,9 +749,6 @@ const ToonTooltip = memo(({ toon, isFavorited, isBlocked, note }: { toon: ToonDa
               <span className="text-emerald-400 font-black text-sm tabular-nums">({toon.laff})</span>
             )}
           </h4>
-          <span className="text-white/45 text-xs font-medium tabular-nums truncate">
-            ID: {toon.id}
-          </span>
         </div>
       </div>
 

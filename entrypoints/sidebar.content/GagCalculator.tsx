@@ -166,15 +166,18 @@ function SosChoice({
   track,
   gagIndex,
   onSelect,
+  disabled = false,
 }: {
   gag: SosGag;
   track: Track;
   gagIndex: number;
   onSelect: (gag: SelectedGag) => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onSelect({
         trackId: track.id,
         gagIndex,
@@ -185,7 +188,7 @@ function SosChoice({
         damage: gag.damage,
         stars: gag.stars,
       })}
-      className="gag-btn-base cursor-pointer hover:brightness-110"
+      className="gag-btn-base cursor-pointer hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
       style={{ backgroundColor: track.color, borderColor: 'transparent' }}
       title={`${gag.name} (${gag.damage} damage)`}
     >
@@ -243,32 +246,32 @@ function CogCarousel({ damage }: { damage: number }) {
           const isFocus = level === focusLevel;
           const distance = Math.abs(level - focusLevel);
           const difference = Math.abs(damage - hp);
+          const cardScale = isFocus ? 1 : distance === 1 ? 0.9 : distance === 2 ? 0.78 : distance === 3 ? 0.66 : 0.56;
           return (
             <div
               key={level}
               ref={isFocus ? focusRef : undefined}
-              className={`relative flex w-32 flex-col items-center rounded-lg border px-1 py-3 text-center transition-all duration-300 ${
-                isFocus
-                  ? defeated
-                    ? 'z-[2] border-red-300/70 bg-red-950/80'
-                    : 'z-[2] border-lime-300/70 bg-green-950/80'
-                  : defeated
-                    ? 'border-red-400/25 bg-red-950/65'
-                    : 'border-green-400/25 bg-green-950/65'
-              }`}
+              className={`relative flex w-36 flex-col items-center rounded-lg border px-1 py-4 text-center transition-all duration-300 ${isFocus
+                ? defeated
+                  ? 'z-[2] border-red-300/70 bg-red-950/80'
+                  : 'z-[2] border-lime-300/70 bg-green-950/80'
+                : defeated
+                  ? 'border-red-400/25 bg-red-950/65'
+                  : 'border-green-400/25 bg-green-950/65'
+                }`}
               style={{
-                transform: `scale(${isFocus ? 1 : distance === 1 ? 0.88 : 0.76})`,
-                opacity: isFocus ? 1 : distance === 1 ? 0.72 : 0.46,
+                transform: `scale(${cardScale})`,
+                opacity: isFocus ? 1 : distance === 1 ? 0.72 : distance === 2 ? 0.52 : distance === 3 ? 0.38 : 0.28,
               }}
             >
               <img
                 src={SKELECOG_IMAGE}
                 alt=""
-                className={`h-20 w-20 object-contain transition-opacity duration-300 ${defeated ? 'opacity-40' : 'opacity-100'}`}
+                className={`h-24 w-24 object-contain transition-opacity duration-300 ${defeated ? 'opacity-40' : 'opacity-100'}`}
               />
-              <div className="text-2xl font-black leading-tight text-white">Level {level}</div>
-              <div className="text-xl font-black tabular-nums text-white">{hp} HP</div>
-              <div className={`text-xs font-black tabular-nums ${defeated ? 'text-lime-300' : 'text-amber-300'}`}>
+              <div className="text-3xl font-black leading-tight text-white">Level {level}</div>
+              <div className="text-2xl font-black tabular-nums text-white">{hp} HP</div>
+              <div className={`text-sm font-black tabular-nums ${defeated ? 'text-red-300' : 'text-amber-300'}`}>
                 {defeated ? `+${difference} extra` : `${difference} needed`}
               </div>
             </div>
@@ -289,7 +292,7 @@ function DamageBreakdown({
   getTrackColor: (trackId: TrackId) => string;
 }) {
   return (
-    <div className="flex w-fit shrink-0 flex-col text-left text-[10px] font-black leading-tight tabular-nums">
+    <div className="flex w-fit shrink-0 flex-col text-left text-xs font-black leading-tight tabular-nums">
       <span className="text-white">Base {damageBreakdown.base}</span>
       <span style={{ color: '#31be35' }}>Knockback {damageBreakdown.knockback}</span>
       {damageBreakdown.bonuses.map((bonus) => (
@@ -331,8 +334,13 @@ export function GagCalculator() {
   );
   const getTrackName = (trackId: TrackId) => tracks.find((track) => track.id === trackId)?.name ?? trackId;
   const getTrackColor = (trackId: TrackId) => tracks.find((track) => track.id === trackId)?.color ?? 'white';
+  const isSosSelected = (trackId: TrackId, gagIndex: number) => selectedGags.some(
+    (entry) => entry?.variant === 'sos' && entry.trackId === trackId && entry.gagIndex === gagIndex,
+  );
 
   const selectGag = (gag: SelectedGag) => {
+    if (gag.variant === 'sos' && isSosSelected(gag.trackId, gag.gagIndex)) return;
+
     setSelectedGags((current) => {
       const next = [...current];
       next[activeSlot] = gag;
@@ -342,19 +350,21 @@ export function GagCalculator() {
   };
 
   return (
-    <div className="mx-auto flex min-h-full w-full items-start justify-center gap-3 py-2">
-      <section className="flex w-[720px] shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
+    <div className=" flex min-h-full w-full items-start justify-start gap-4">
+      <aside className="order-1 w-[360px] shrink-0">
+        <GagCombosPanel />
+      </aside>
+      <section className="order-2 flex w-[720px] shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
         <CogCarousel damage={damageBreakdown.total} />
 
         <div className="custom-scrollbar flex w-fit max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-white/5 bg-black/40 p-2">
           <button
             type="button"
             onClick={() => setPreLured((value) => !value)}
-            className={`flex h-12 w-16 shrink-0 cursor-pointer items-center justify-center rounded-md border transition ${
-              preLured
-                ? 'border-emerald-400 bg-[#166534]'
-                : 'border-gray-500 bg-[#4b5563] grayscale hover:border-emerald-400 hover:grayscale-0'
-            }`}
+            className={`flex h-12 w-16 shrink-0 cursor-pointer items-center justify-center rounded-md border transition ${preLured
+              ? 'border-emerald-400 bg-[#166534]'
+              : 'border-gray-500 bg-[#4b5563] grayscale hover:border-emerald-400 hover:grayscale-0'
+              }`}
             aria-pressed={preLured}
             title={preLured ? 'Cog starts lured — click to disable' : 'Cog starts unlured — click to enable pre-lured'}
             aria-label="Toggle pre-lured Cog"
@@ -375,11 +385,10 @@ export function GagCalculator() {
                         setSelectedGags((current) => current.map((entry, slot) => slot === index ? null : entry));
                       }
                     }}
-                    className={`gag-btn-base shrink-0 cursor-pointer border-transparent ${
-                      activeSlot === index
-                        ? 'ring-2 ring-sky-300/70 shadow-[0_0_12px_rgba(56,189,248,0.16)]'
-                        : gag ? '' : 'bg-black/20'
-                    }`}
+                    className={`gag-btn-base shrink-0 cursor-pointer border-transparent ${activeSlot === index
+                      ? 'ring-2 ring-sky-300/70 shadow-[0_0_12px_rgba(56,189,248,0.16)]'
+                      : gag ? '' : 'bg-black/20'
+                      }`}
                     style={gag ? { backgroundColor: gag.color } : undefined}
                     title={gag ? `Remove ${gag.name}` : `Select slot ${index + 1}`}
                   >
@@ -406,7 +415,7 @@ export function GagCalculator() {
                     </span>
                   )}
                 </div>
-                <span className="h-3 text-[10px] font-black tabular-nums text-white">
+                <span className="h-3 text-xs font-black tabular-nums text-white">
                   {gag?.damage ?? ''}
                 </span>
               </div>
@@ -414,8 +423,8 @@ export function GagCalculator() {
           </div>
 
           <div className="w-20 shrink-0 text-center">
-            <div className="text-2xl font-black tabular-nums text-lime-300">{damageBreakdown.total}</div>
-            <div className="text-[9px] font-black uppercase text-white/35">damage</div>
+            <div className="text-3xl font-black tabular-nums text-lime-300">{damageBreakdown.total}</div>
+            <div className="text-[10px] font-black uppercase text-white/35">damage</div>
           </div>
 
           <DamageBreakdown
@@ -457,6 +466,7 @@ export function GagCalculator() {
                           track={track}
                           gagIndex={gagIndex + 3}
                           onSelect={selectGag}
+                          disabled={isSosSelected(track.id, gagIndex + 3)}
                         />
                       ))}
                     </div>
@@ -468,9 +478,6 @@ export function GagCalculator() {
         </div>
       </section>
 
-      <aside className="w-[360px] shrink-0">
-        <GagCombosPanel />
-      </aside>
     </div>
   );
 }

@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.16',
+    date: 'July 20, 2026',
+    changes: [
+      'Update Gag Calculator UI',
+      'Fix auto refresh of ToonHQ tabs',
+    ]
+  },
+  {
     version: '1.2.15',
     date: 'July 19, 2026',
     changes: [

@@ -1316,6 +1316,25 @@ let notesEnabled = true;
 let highlightGroupsEnabled = true;
 const IDLE_RELOAD_AFTER_MS = 60 * 60 * 1000;
 
+async function toonHQIsReachable(): Promise<boolean> {
+  if (navigator.onLine === false) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch('https://toonhq.org/', {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const DEFAULT_SETTINGS: Record<string, any> = {
   'boss-info-enabled': true,
   'notes-enabled': true,
@@ -1845,11 +1864,20 @@ export default defineContentScript({
       window.addEventListener(eventName, markUserActivity, { passive: true, capture: true });
     });
 
+    let reloadCheckInFlight = false;
     const idleReloadInterval = setInterval(() => {
       const idleFor = Date.now() - lastUserActivityAt;
       const hasOpenDialog = !!document.querySelector('.group-details-dialog, .modal.show, .vuedal');
       if (idleFor >= IDLE_RELOAD_AFTER_MS && document.visibilityState === 'hidden' && !hasOpenDialog) {
-        window.location.reload();
+        if (reloadCheckInFlight) return;
+        reloadCheckInFlight = true;
+        toonHQIsReachable()
+          .then((reachable) => {
+            if (reachable) window.location.reload();
+          })
+          .finally(() => {
+            reloadCheckInFlight = false;
+          });
       }
     }, 60 * 1000);
 
