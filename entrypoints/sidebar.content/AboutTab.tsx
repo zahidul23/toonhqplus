@@ -76,7 +76,7 @@ export function AboutTabContent() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-white/40 font-bold w-16">Email:</span>
-                      <a href="mailto:feedback@toontown.help" className="text-blue-400 hover:text-blue-300 font-bold transition-colors">feedback@toontown.help</a>
+                      <a href="mailto:toonyhoque@gmail.com" className="text-blue-400 hover:text-blue-300 font-bold transition-colors">toonyhoque@gmail.com</a>
                     </div>
                   </div>
                 </div>
