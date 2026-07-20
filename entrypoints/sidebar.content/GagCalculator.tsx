@@ -107,11 +107,13 @@ function GagChoice({
   track,
   gagIndex,
   onSelect,
+  tooltipBelow = false,
 }: {
   gag: Track['gags'][number];
   track: Track;
   gagIndex: number;
   onSelect: (gag: SelectedGag) => void;
+  tooltipBelow?: boolean;
 }) {
   const select = (variant: Variant) => {
     onSelect({
@@ -127,36 +129,47 @@ function GagChoice({
 
   return (
     <div className="group/gag relative">
-      <button
-        type="button"
-        onClick={() => select('base')}
-        className="gag-btn-base gag-btn-active"
-        style={{ backgroundColor: track.color, borderColor: 'transparent' }}
-        title={`${gag.name} (${gag.base} damage)`}
-      >
-        <img
-          src={gagImage(gag.image)}
-          alt={gag.name}
-          className="object-contain drop-shadow-md transition-transform group-hover/gag:scale-105"
-          draggable="false"
-        />
-      </button>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          select('organic');
-        }}
-        className="absolute -right-2 -top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center opacity-0 grayscale transition-all hover:scale-125 hover:grayscale-0 group-hover/gag:opacity-100 focus:opacity-100 focus:grayscale-0"
-        title={`Organic ${gag.name} (${gag.organic ?? gag.base} damage)`}
-        aria-label={`Select organic ${gag.name}`}
-      >
-        <img
-          src={gagImage('ttr/organic.webp')}
-          alt=""
-          className="h-full w-full object-contain drop-shadow-[0_1px_2px_#000]"
-        />
-      </button>
+      <div className="group/main-gag relative">
+        <button
+          type="button"
+          onClick={() => select('base')}
+          className="gag-btn-base gag-btn-active"
+          style={{ backgroundColor: track.color, borderColor: 'transparent' }}
+          aria-label={`${gag.name} (${gag.base} damage)`}
+        >
+          <img
+            src={gagImage(gag.image)}
+            alt={gag.name}
+            className="object-contain drop-shadow-md transition-transform group-hover/gag:scale-105"
+            draggable="false"
+          />
+        </button>
+        <div className={`pointer-events-none absolute left-1/2 z-30 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-2 py-1.5 text-center shadow-xl group-hover/main-gag:block ${tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
+          <div className="text-[10px] font-black leading-tight text-white">{gag.name}</div>
+          <div className="mt-0.5 text-[9px] font-bold text-lime-300">{gag.base} damage</div>
+        </div>
+      </div>
+      <div className="group/organic absolute -right-2 -top-2 z-10 h-6 w-6">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            select('organic');
+          }}
+          className="flex h-6 w-6 cursor-pointer items-center justify-center opacity-0 grayscale transition-all hover:scale-125 hover:grayscale-0 group-hover/gag:opacity-100 group-hover/organic:opacity-100 focus:opacity-100 focus:grayscale-0"
+          aria-label={`Select organic ${gag.name}`}
+        >
+          <img
+            src={gagImage('ttr/organic.webp')}
+            alt=""
+            className="h-full w-full object-contain drop-shadow-[0_1px_2px_#000]"
+          />
+        </button>
+        <div className={`pointer-events-none absolute left-1/2 z-30 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-2 py-1.5 text-center shadow-xl group-hover/organic:block ${tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
+          <div className="text-[10px] font-black leading-tight text-white">Organic {gag.name}</div>
+          <div className="mt-0.5 text-[9px] font-bold text-lime-300">{gag.organic ?? gag.base} damage</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -167,36 +180,44 @@ function SosChoice({
   gagIndex,
   onSelect,
   disabled = false,
+  tooltipBelow = false,
 }: {
   gag: SosGag;
   track: Track;
   gagIndex: number;
   onSelect: (gag: SelectedGag) => void;
   disabled?: boolean;
+  tooltipBelow?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onSelect({
-        trackId: track.id,
-        gagIndex,
-        variant: 'sos',
-        name: gag.name,
-        image: gag.image,
-        color: track.color,
-        damage: gag.damage,
-        stars: gag.stars,
-      })}
-      className="gag-btn-base cursor-pointer hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
-      style={{ backgroundColor: track.color, borderColor: 'transparent' }}
-      title={`${gag.name} (${gag.damage} damage)`}
-    >
-      <img src={gag.image} alt={gag.name} className="object-contain drop-shadow-md" />
-      <span className="absolute inset-x-0 -top-1 text-center text-[7px] tracking-[-1px] text-yellow-300 drop-shadow-[0_1px_1px_#000]">
-        {'★'.repeat(gag.stars)}
-      </span>
-    </button>
+    <div className="group/main-gag relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onSelect({
+          trackId: track.id,
+          gagIndex,
+          variant: 'sos',
+          name: gag.name,
+          image: gag.image,
+          color: track.color,
+          damage: gag.damage,
+          stars: gag.stars,
+        })}
+        className="gag-btn-base cursor-pointer hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
+        style={{ backgroundColor: track.color, borderColor: 'transparent' }}
+        aria-label={`${gag.name} (${gag.damage} damage)`}
+      >
+        <img src={gag.image} alt={gag.name} className="object-contain drop-shadow-md" />
+        <span className="absolute inset-x-0 -top-1 text-center text-[7px] tracking-[-1px] text-yellow-300 drop-shadow-[0_1px_1px_#000]">
+          {'★'.repeat(gag.stars)}
+        </span>
+      </button>
+      <div className={`pointer-events-none absolute left-1/2 z-30 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-2 py-1.5 text-center shadow-xl group-hover/main-gag:block ${tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
+        <div className="text-[10px] font-black leading-tight text-white">{gag.name}</div>
+        <div className="mt-0.5 text-[9px] font-bold text-lime-300">{gag.damage} damage</div>
+      </div>
+    </div>
   );
 }
 
@@ -351,10 +372,10 @@ export function GagCalculator() {
 
   return (
     <div className=" flex min-h-full w-full items-start justify-start gap-4">
-      <aside className="order-1 w-[360px] shrink-0">
+      <aside className="order-1 min-w-[380px] w-[380px] shrink-0">
         <GagCombosPanel />
       </aside>
-      <section className="order-2 flex w-[720px] shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
+      <section className="order-2 flex flex-1 w-[720px] shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
         <CogCarousel damage={damageBreakdown.total} />
 
         <div className="custom-scrollbar flex w-fit max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-white/5 bg-black/40 p-2">
@@ -455,7 +476,7 @@ export function GagCalculator() {
               <div key={track.id} className="flex items-center border-b border-white/[0.07] py-1 last:border-b-0">
                 <div className="flex gap-0.5">
                   {track.gags.map((gag, gagIndex) => (
-                    <GagChoice key={gag.name} gag={gag} track={track} gagIndex={gagIndex} onSelect={selectGag} />
+                    <GagChoice key={gag.name} gag={gag} track={track} gagIndex={gagIndex} onSelect={selectGag} tooltipBelow={track.id === TRACK_IDS[0]} />
                   ))}
                   {getSosGags(track.id).length > 0 && (
                     <div className="ml-1 flex gap-0.5 border-l border-white/15 pl-1">
@@ -467,6 +488,7 @@ export function GagCalculator() {
                           gagIndex={gagIndex + 3}
                           onSelect={selectGag}
                           disabled={isSosSelected(track.id, gagIndex + 3)}
+                          tooltipBelow={track.id === TRACK_IDS[0]}
                         />
                       ))}
                     </div>

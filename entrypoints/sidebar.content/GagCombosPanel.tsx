@@ -15,9 +15,9 @@ function gagImage(path: string) {
   return `${GAG_ASSET_ROOT}${path}`;
 }
 
-function ComboRow({ combo }: { combo: GagCombo }) {
+function ComboRow({ combo, tooltipBelow = false }: { combo: GagCombo; tooltipBelow?: boolean }) {
   return (
-    <div className="relative flex min-w-0 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-black/20 p-1.5">
+    <div className="relative flex min-w-0 items-center gap-1 rounded-lg border border-white/[0.08] bg-black/20 p-1">
       {combo.lured && (
         <img
           src={gagImage('ttr/1_bill.png')}
@@ -33,23 +33,24 @@ function ComboRow({ combo }: { combo: GagCombo }) {
           return (
             <div
               key={`${gag.trackId}-${gag.gagIndex}-${Number(gag.organic)}-${index}`}
-              className="group/combo-gag relative flex h-9 min-w-0 items-center justify-center overflow-visible rounded-md border border-black/20 px-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
-              style={{ backgroundColor: track.color }}
+              className="gag-btn-base group/combo-gag min-w-0 overflow-visible shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
+              style={{ backgroundColor: track.color, borderColor: 'transparent', width: '100%' }}
             >
               <img
                 src={gagImage(data.image)}
                 alt={data.name}
-                className="h-8 w-10 object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]"
+                className="object-contain drop-shadow-md"
                 loading="lazy"
               />
               {gag.organic && (
                 <img
                   src={gagImage('ttr/organic.webp')}
                   alt="Organic"
-                  className="absolute -right-1 -top-1 h-4 w-4 object-contain drop-shadow-[0_1px_1px_#000]"
+                  className="pointer-events-none absolute -right-2 -top-2 z-10 h-6 w-6 object-contain drop-shadow-[0_1px_1px_#000]"
+                  style={{ height: '1.5rem', width: '1.5rem' }}
                 />
               )}
-              <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-2 py-1.5 text-center shadow-xl group-hover/combo-gag:block">
+              <div className={`pointer-events-none absolute left-1/2 z-30 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-2 py-1.5 text-center shadow-xl group-hover/combo-gag:block ${tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
                 <div className="text-[10px] font-black leading-tight text-white">
                   {gag.organic ? 'Organic ' : ''}{data.name}
                 </div>
@@ -61,11 +62,11 @@ function ComboRow({ combo }: { combo: GagCombo }) {
           );
         })}
         {Array.from({ length: 4 - combo.gags.length }, (_, index) => (
-          <div key={`empty-${index}`} className="h-9 min-w-0" aria-hidden="true" />
+          <div key={`empty-${index}`} className="h-12 min-w-0" aria-hidden="true" />
         ))}
       </div>
       <div
-        className="w-8 shrink-0 text-right text-[10px] font-black tabular-nums text-white"
+        className="w-12 shrink-0 px-2 text-right text-[10px] font-black tabular-nums text-white"
         title={`${combo.damage} total damage`}
       >
         {combo.damage}
@@ -86,7 +87,7 @@ export function GagCombosPanel() {
   };
 
   return (
-    <section className="flex w-full flex-col rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
+    <section className="flex min-w-[380px] w-full flex-col rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
       <div className="mb-2">
         <h2 className="text-center text-xl font-black text-white">Common Gag Combos</h2>
       </div>
@@ -132,7 +133,7 @@ export function GagCombosPanel() {
       </div>
       <div className="custom-scrollbar mt-1 flex max-h-[calc(95vh-19rem)] flex-col gap-1.5 overflow-y-auto px-3 py-1">
         {VALIDATED_GAG_COMBOS[level].map((combo, comboIndex) => (
-          <ComboRow key={comboIndex} combo={combo} />
+          <ComboRow key={comboIndex} combo={combo} tooltipBelow={comboIndex === 0} />
         ))}
       </div>
     </section>
