@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.17',
+    date: 'July 26, 2026',
+    changes: [
+      'Fix damage calculations for bonuses in cogs, facilities and boilers.'
+    ]
+  },
+  {
     version: '1.2.16',
     date: 'July 20, 2026',
     changes: [

@@ -8,6 +8,10 @@ const COG_HEALTH: Record<number, number> = {
   11: 156, 12: 196, 13: 224, 14: 254, 15: 286, 16: 320, 17: 356, 18: 394, 19: 434, 20: 476
 };
 
+// Keep these as canonical decimal values. Constructing 0.6 as 0.2 * 3
+// produces 0.6000000000000001 in JavaScript and changes Math.ceil outcomes.
+const DEFENSE_DOWN_MULTIPLIERS = [0, 0.2, 0.4, 0.6];
+
 import { browser } from 'wxt/browser';
 
 function getExtensionImageUrl(path: string): string {
@@ -33,7 +37,7 @@ const COG_CHOICES = [
   { id: 'mint_bullion', label: 'Bullion Auditor', hp: 1150, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
   { id: 'office_junior', label: 'Junior Clerk', hp: 1100, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
   { id: 'office_senior', label: 'Senior Clerk', hp: 1500, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
-  { id: 'golf_fairway', label: 'Fairway President', hp: 1200, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
+  { id: 'golf_fairway', label: 'Fairway President', hp: 1300, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
   { id: 'golf_fringe', label: 'Fringe President', hp: 1750, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
 ];
 
@@ -769,6 +773,7 @@ export function CogCalculator() {
 
         const hitCounts = Array(currentCogCount).fill(0);
         const trackBaseDamages = Array(currentCogCount).fill(0);
+        const defenseDownMultipliers = Array(currentCogCount).fill(0);
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
@@ -777,10 +782,6 @@ export function CogCalculator() {
           targets.forEach(t => {
             if (t < 0 || t >= currentCogCount) return;
             hitCounts[t]++;
-            const isPinkSlip = gag.trackId === 'special' && gag.gagIndex === 0;
-            if (!['trap', 'lure', 'special'].includes(gag.trackId) && !isPinkSlip) {
-              trackBaseDamages[t] += baseDmg;
-            }
           });
         });
 
@@ -792,6 +793,7 @@ export function CogCalculator() {
         gagsInTrack.forEach(gag => {
           if (!gag) return;
           let baseDmg = getGagDamage(gag);
+          const isPinkSlip = gag.trackId === 'special' && gag.gagIndex === 0;
           const sosData = gag.variant === 'sos' ? (SOS_GAGS[gag.trackId] || []).find(s => s.gagIndex === gag.gagIndex) : null;
           const isInstaKill = sosData?.isInstaKill;
           const isRemote = sosData?.isRemote;
@@ -835,9 +837,13 @@ export function CogCalculator() {
               defenseDownStacks = 3;
             }
 
-            // Apply Multipliers (Defense Down) to the gag damage
+            // Positive Defense Down is an orange-damage multiplier: it does not
+            // change the base gag damage or the same-gag bonus.
             if (defenseDownStacks > 0 && !['trap', 'lure'].includes(trackId)) {
-              currentDmg = Math.floor(currentDmg * (1 + 0.20 * defenseDownStacks));
+              defenseDownMultipliers[cogIdx] = DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2);
+            }
+            if (isBullionVulnerable && !['trap', 'lure'].includes(trackId)) {
+              defenseDownMultipliers[cogIdx] += 0.5;
             }
 
             const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
@@ -845,8 +851,9 @@ export function CogCalculator() {
               currentDmg = Math.floor(currentDmg * 0.75);
             }
 
-            if (isBullionVulnerable && !['trap', 'lure'].includes(trackId)) {
-              currentDmg = Math.floor(currentDmg * 1.5);
+            // Negative facility modifiers apply before knockback and same-gag bonus.
+            if (!['trap', 'lure', 'special'].includes(trackId) && !isPinkSlip) {
+              trackBaseDamages[cogIdx] += currentDmg;
             }
 
             if (isImmune && !['trap', 'lure'].includes(trackId)) {
@@ -873,11 +880,15 @@ export function CogCalculator() {
             } else if (trackId === 'lure') {
               if (trappedAtStartOfPhase[cogIdx]) {
                 let trapDmg = trapDamageOnCog[cogIdx];
+                let trapOrangeMultiplier = 0;
                 if (defenseDownStacks > 0) {
-                  trapDmg = Math.floor(trapDmg * (1 + 0.20 * defenseDownStacks));
+                  trapOrangeMultiplier += DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2);
                 }
                 if (isBullionVulnerable) {
-                  trapDmg = Math.floor(trapDmg * 1.5);
+                  trapOrangeMultiplier += 0.5;
+                }
+                if (trapOrangeMultiplier > 0) {
+                  trapDmg += Math.ceil(trapDmg * trapOrangeMultiplier);
                 }
                 phaseDamage[cogIdx] += trapDmg;
                 trackDamages['trap'] = (trackDamages['trap'] || 0) + trapDmg;
@@ -906,10 +917,6 @@ export function CogCalculator() {
               cog.isLured = false;
               cog.lureDuration = 0;
             } else if (trackId === 'throw' || trackId === 'squirt') {
-              if (luredAtStartOfPhase[cogIdx]) {
-                // Lure bonus (knockback) is 50% of the BASE damage, rounded UP
-                currentDmg += Math.ceil(baseDmg * 0.5);
-              }
               phaseDamage[cogIdx] += currentDmg;
               trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               cog.isLured = false;
@@ -923,6 +930,23 @@ export function CogCalculator() {
           });
         });
 
+        // Positive Defense Down is added to orange damage. For Throw/Squirt on a
+        // lured cog, it combines with the 50% knockback multiplier.
+        if (!['trap', 'lure'].includes(trackId)) {
+          trackBaseDamages.forEach((totalBase, idx) => {
+            if (totalBase <= 0) return;
+            if (trackId === 'drop' && luredAtStartOfPhase[idx]) return;
+
+            const knockbackMultiplier =
+              (trackId === 'throw' || trackId === 'squirt') && luredAtStartOfPhase[idx] ? 0.5 : 0;
+            const orangeBonus = Math.ceil(totalBase * (defenseDownMultipliers[idx] + knockbackMultiplier));
+            if (orangeBonus > 0) {
+              phaseDamage[idx] += orangeBonus;
+              trackDamages[trackId] = (trackDamages[trackId] || 0) + orangeBonus;
+            }
+          });
+        }
+
         // Apply Combo Bonuses separately based on intervals of 5
         if (!['trap', 'lure'].includes(trackId)) {
           trackBaseDamages.forEach((totalBase, idx) => {
@@ -930,31 +954,10 @@ export function CogCalculator() {
               // If drop hits a lured cog, it does 0 damage including bonus
               if (trackId === 'drop' && luredAtStartOfPhase[idx]) return;
 
-              const roundedSum = Math.ceil(totalBase / 5) * 5;
-              const baseBonus = Math.floor(roundedSum * 0.2); // 20% of rounded base
+              const baseBonus = Math.ceil(totalBase * 0.2);
 
-              const cog = currentCogs[idx];
-              const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
-              let defenseDownStacks = 0;
-              if (isPresident && deadCogsCountAtStart > 0) defenseDownStacks = deadCogsCountAtStart;
-              else if (cog.isDefenseDown) defenseDownStacks = 3;
-
-              let finalBonus = baseBonus;
-              if (defenseDownStacks > 0) {
-                finalBonus = Math.floor(finalBonus * (1 + 0.20 * defenseDownStacks));
-              }
-
-              const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
-              if (hasForeman && !isForeman) {
-                finalBonus = Math.floor(finalBonus * 0.75);
-              }
-
-              if (isBullionVulnerable) {
-                finalBonus = Math.floor(finalBonus * 1.5);
-              }
-
-              phaseDamage[idx] += finalBonus;
-              trackDamages[trackId] = (trackDamages[trackId] || 0) + finalBonus;
+              phaseDamage[idx] += baseBonus;
+              trackDamages[trackId] = (trackDamages[trackId] || 0) + baseBonus;
             }
           });
         }

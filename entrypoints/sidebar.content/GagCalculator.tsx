@@ -58,7 +58,7 @@ function getSosGags(trackId: TrackId): SosGag[] {
 }
 
 function comboBonus(damage: number, count: number) {
-  return count >= 2 ? Math.floor(Math.ceil(damage / 5) * 5 * 0.2) : 0;
+  return count >= 2 ? Math.ceil(damage * 0.2) : 0;
 }
 
 function calculateDamage(gags: Array<SelectedGag | null>, preLured: boolean) {
@@ -85,9 +85,7 @@ function calculateDamage(gags: Array<SelectedGag | null>, preLured: boolean) {
       if (bonus) bonuses.push({ trackId, amount: bonus });
       lured = false;
     } else if (trackId === 'throw' || trackId === 'squirt') {
-      const trackKnockback = lured
-        ? trackGags.reduce((sum, gag) => sum + Math.ceil(gag.damage * 0.5), 0)
-        : 0;
+      const trackKnockback = lured ? Math.ceil(baseDamage * 0.5) : 0;
       base += baseDamage;
       knockback += trackKnockback;
       if (bonus) bonuses.push({ trackId, amount: bonus });
@@ -338,6 +336,7 @@ export function GagCalculator() {
     }
   });
   const [activeSlot, setActiveSlot] = useState(0);
+  const [clearOnNextSelection, setClearOnNextSelection] = useState(() => selectedGags.every(Boolean));
   const [preLured, setPreLured] = useState(false);
   const hasSelectedGags = selectedGags.some(Boolean);
 
@@ -360,14 +359,23 @@ export function GagCalculator() {
   );
 
   const selectGag = (gag: SelectedGag) => {
-    if (gag.variant === 'sos' && isSosSelected(gag.trackId, gag.gagIndex)) return;
+    if (!clearOnNextSelection && gag.variant === 'sos' && isSosSelected(gag.trackId, gag.gagIndex)) return;
 
     setSelectedGags((current) => {
+      if (clearOnNextSelection) return [gag, null, null, null];
       const next = [...current];
       next[activeSlot] = gag;
       return next;
     });
-    setActiveSlot((current) => Math.min(3, current + 1));
+    if (clearOnNextSelection) {
+      setClearOnNextSelection(false);
+      setActiveSlot(1);
+    } else if (activeSlot === 3) {
+      setClearOnNextSelection(true);
+      setActiveSlot(0);
+    } else {
+      setActiveSlot((current) => current + 1);
+    }
   };
 
   return (
@@ -401,6 +409,7 @@ export function GagCalculator() {
                   <button
                     type="button"
                     onClick={() => {
+                      setClearOnNextSelection(false);
                       setActiveSlot(index);
                       if (gag) {
                         setSelectedGags((current) => current.map((entry, slot) => slot === index ? null : entry));
@@ -458,6 +467,7 @@ export function GagCalculator() {
             type="button"
             onClick={() => {
               setSelectedGags([null, null, null, null]);
+              setClearOnNextSelection(false);
               setActiveSlot(0);
             }}
             className="trash-button relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center"

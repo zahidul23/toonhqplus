@@ -267,7 +267,7 @@ const FACILITIES_INFO: FacilityInfo[] = [
     cardBg: '#4a3728',
     cardBorder: '#8c5d3d',
     subtypes: [
-      { name: 'The First Fairway', minReward: 882, maxReward: 975, bossHealth: 1200, shortName: 'Fairway' },
+      { name: 'The First Fairway', minReward: 882, maxReward: 975, bossHealth: 1300, shortName: 'Fairway' },
       { name: 'The Final Fringe', minReward: 2097, maxReward: 2305, bossHealth: 1750, shortName: 'Fringe' },
     ],
   },
@@ -314,28 +314,30 @@ function getBoilerRoundDamage(
   getCellDamage: (cell: SelectedGagCell) => number,
 ) {
   const counts: Record<AllowedGagTrackId, number> = { throw: 0, squirt: 0, sound: 0 };
-  for (const cell of round) {
-    if (cell) counts[cell.trackId]++;
-  }
-
-  let base = 0, firedUpExtra = 0, repeatExtra = 0, total = 0;
+  const trackBaseDamages: Record<AllowedGagTrackId, number> = { throw: 0, squirt: 0, sound: 0 };
 
   for (const cell of round) {
     if (!cell) continue;
     const cellBase = getCellDamage(cell);
     if (!cellBase) continue;
+    counts[cell.trackId]++;
+    trackBaseDamages[cell.trackId] += cellBase;
+  }
 
-    const usedMoreThanOnce = counts[cell.trackId] > 1;
-    const isFiredUp = roundType === 'fired_up' || roundType === 'meltdown';
-    const noRepeatMultiplier = isFiredUp ? 1.5 : 1;
-    const totalMultiplier = isFiredUp && usedMoreThanOnce ? 1.7 : isFiredUp ? 1.5 : usedMoreThanOnce ? 1.2 : 1;
-    const noRepeatTotal = Math.round(cellBase * noRepeatMultiplier);
-    const cellTotal = Math.round(cellBase * totalMultiplier);
+  let base = 0, firedUpExtra = 0, repeatExtra = 0, total = 0;
+  const isFiredUp = roundType === 'fired_up' || roundType === 'meltdown';
 
-    base += cellBase;
-    firedUpExtra += Math.max(0, noRepeatTotal - cellBase);
-    repeatExtra += Math.max(0, cellTotal - noRepeatTotal);
-    total += cellTotal;
+  for (const trackId of allowedGagTrackIds) {
+    const trackBase = trackBaseDamages[trackId];
+    if (!trackBase) continue;
+
+    const trackFiredUpExtra = isFiredUp ? Math.ceil(trackBase * 0.5) : 0;
+    const trackRepeatExtra = counts[trackId] > 1 ? Math.ceil(trackBase * 0.2) : 0;
+
+    base += trackBase;
+    firedUpExtra += trackFiredUpExtra;
+    repeatExtra += trackRepeatExtra;
+    total += trackBase + trackFiredUpExtra + trackRepeatExtra;
   }
 
   return { base, firedUpExtra, repeatExtra, total };

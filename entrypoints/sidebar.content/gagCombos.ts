@@ -223,14 +223,12 @@ export function calculateGagComboDamage(gags: ComboGag[], luredPreset = false) {
     }
 
     const baseDamage = trackGags.reduce((sum, gag) => sum + getComboGagDamage(gag), 0);
-    const comboBonus = trackGags.length >= 2 ? Math.floor(Math.ceil(baseDamage / 5) * 5 * 0.2) : 0;
+    const comboBonus = trackGags.length >= 2 ? Math.ceil(baseDamage * 0.2) : 0;
     if (trackId === 'sound') {
       totalDamage += baseDamage + comboBonus;
       lured = false;
     } else if (trackId === 'throw' || trackId === 'squirt') {
-      const lureBonus = lured
-        ? trackGags.reduce((sum, gag) => sum + Math.ceil(getComboGagDamage(gag) * 0.5), 0)
-        : 0;
+      const lureBonus = lured ? Math.ceil(baseDamage * 0.5) : 0;
       totalDamage += baseDamage + lureBonus + comboBonus;
       lured = false;
     } else if (trackId === 'drop' && !lured) {
