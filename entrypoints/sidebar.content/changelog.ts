@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.18',
+    date: 'July 28, 2026',
+    changes: [
+      'Fix background task refresh logic to allow more reliable auto updates.',
+    ]
+  },
+  {
     version: '1.2.17',
     date: 'July 26, 2026',
     changes: [

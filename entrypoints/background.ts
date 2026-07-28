@@ -25,15 +25,9 @@ export default defineBackground(() => {
   let trackerEnabled: boolean | undefined = undefined;
   let trackingTimeout: ReturnType<typeof setTimeout> | null = null;
   let autoDiscoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let trackerRecycleTimeout: ReturnType<typeof setTimeout> | null = null;
-  let trackerResumeTimeout: ReturnType<typeof setTimeout> | null = null;
   const KEEP_ALIVE_ALARM = 'toontracker-keepalive';
   const TRACKING_POLL_MS = 5000;
   const AUTO_DISCOVER_MS = 60000;
-  const TRACKER_RECYCLE_MS = 60 * 60 * 1000;
-  const TRACKER_RECYCLE_IDLE_MS = 10 * 60 * 1000;
-  const TRACKER_RECYCLE_PAUSE_MS = 2000;
-  let lastGameMessageAt = 0;
 
   async function exportExtensionStorage(includeFullToonCache: boolean): Promise<ExtensionStorageSnapshot> {
     return {
@@ -61,7 +55,6 @@ export default defineBackground(() => {
     } else {
       stopAutoDiscover();
       stopTracking();
-      clearTrackerRecycleTimers();
       disconnectAll();
     }
     broadcastStatus();
@@ -251,7 +244,6 @@ export default defineBackground(() => {
     };
 
     conn.onmessage = (event) => {
-      lastGameMessageAt = Date.now();
       const info = connections.get(port);
       if (!info) return;
 
@@ -365,7 +357,6 @@ export default defineBackground(() => {
     scheduleTrackingPoll();
 
     browser.alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: 1 });
-    scheduleTrackerRecycle();
   }
 
   function startAutoDiscover() {
@@ -395,43 +386,6 @@ export default defineBackground(() => {
       trackingTimeout = null;
     }
     browser.alarms.clear(KEEP_ALIVE_ALARM).catch(() => { });
-  }
-
-  function scheduleTrackerRecycle() {
-    if (trackerEnabled !== true) return;
-    if (trackerRecycleTimeout) clearTimeout(trackerRecycleTimeout);
-    trackerRecycleTimeout = setTimeout(() => {
-      trackerRecycleTimeout = null;
-      recycleTrackerRuntime();
-    }, TRACKER_RECYCLE_MS);
-  }
-
-  function clearTrackerRecycleTimers() {
-    if (trackerRecycleTimeout) clearTimeout(trackerRecycleTimeout);
-    if (trackerResumeTimeout) clearTimeout(trackerResumeTimeout);
-    trackerRecycleTimeout = null;
-    trackerResumeTimeout = null;
-  }
-
-  function recycleTrackerRuntime() {
-    if (trackerEnabled !== true) return;
-    const idleForMs = Date.now() - lastGameMessageAt;
-    if (lastGameMessageAt > 0 && idleForMs < TRACKER_RECYCLE_IDLE_MS) {
-      if (DEBUG) console.log("[ToonTracker BG] Skipping tracker recycle; game client was recently active.");
-      scheduleTrackerRecycle();
-      return;
-    }
-    console.log("[ToonTracker BG] Recycling tracker runtime to allow extension updates...");
-    stopAutoDiscover();
-    stopTracking();
-    disconnectAll();
-    trackerResumeTimeout = setTimeout(() => {
-      trackerResumeTimeout = null;
-      if (trackerEnabled !== true) return;
-      startAutoDiscover();
-      startTracking();
-      broadcastStatus();
-    }, TRACKER_RECYCLE_PAUSE_MS);
   }
 
   function disconnectAll() {
@@ -482,7 +436,6 @@ export default defineBackground(() => {
       } else if (trackerEnabled === false) {
         stopAutoDiscover();
         stopTracking();
-        clearTrackerRecycleTimers();
         disconnectAll();
       }
       broadcastStatus();
@@ -593,6 +546,13 @@ export default defineBackground(() => {
 
   browser.runtime.onStartup.addListener(() => {
     initializeBackground().catch(console.error);
+  });
+
+  // A downloaded update cannot activate while this worker is kept alive by
+  // tracker WebSockets. Reload immediately so users do not need to restart
+  // their browser; the updated worker will restore the tracker from storage.
+  browser.runtime.onUpdateAvailable.addListener(() => {
+    browser.runtime.reload();
   });
 
   browser.runtime.onInstalled.addListener((details) => {
