@@ -7,9 +7,11 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.2.18',
-    date: 'July 28, 2026',
+    date: 'Aug 3, 2026',
     changes: [
       'Fix background task refresh logic to allow more reliable auto updates.',
+      'Fix Mint defense down calculation logic',
+      'Expand truncated toon notes on hover'
     ]
   },
   {
