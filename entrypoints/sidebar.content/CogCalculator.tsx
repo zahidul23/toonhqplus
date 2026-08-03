@@ -31,15 +31,30 @@ const COG_CHOICES = [
     type: 'normal' as const,
     img: 'https://toonhq.org/static/assets/cogs/skelecog.png'
   })),
-  { id: 'factory_scrap', label: 'Scrap Foreman', hp: 250, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
-  { id: 'factory_steel', label: 'Steel Foreman', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
-  { id: 'mint_coin', label: 'Coin Auditor', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
-  { id: 'mint_bullion', label: 'Bullion Auditor', hp: 1150, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
-  { id: 'office_junior', label: 'Junior Clerk', hp: 1100, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
-  { id: 'office_senior', label: 'Senior Clerk', hp: 1500, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
-  { id: 'golf_fairway', label: 'Fairway President', hp: 1300, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
-  { id: 'golf_fringe', label: 'Fringe President', hp: 1750, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
+  { id: 'factory_scrap', label: 'Scrap Factory Foreman', hp: 250, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
+  { id: 'factory_steel', label: 'Steel Factory Foreman', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/foreman.webp') },
+  { id: 'mint_coin', label: 'Coin Mint Auditor', hp: 750, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
+  { id: 'mint_bullion', label: 'Bullion Mint Auditor', hp: 1150, type: 'boss' as const, img: getExtensionImageUrl('images/auditor.webp') },
+  { id: 'office_junior', label: 'Junior Office Clerk', hp: 1100, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
+  { id: 'office_senior', label: 'Senior Office Clerk', hp: 1500, type: 'boss' as const, img: getExtensionImageUrl('images/clerk.webp') },
+  { id: 'golf_fairway', label: 'First Fairway President', hp: 1300, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
+  { id: 'golf_fringe', label: 'Final Fringe President', hp: 1750, type: 'boss' as const, img: getExtensionImageUrl('images/president.webp') },
 ];
+
+const SKELECOG_IMAGES = {
+  sellbot: getExtensionImageUrl('images/Skelecog-sellbot-mrhollywood.webp'),
+  cashbot: getExtensionImageUrl('images/Skelecog-cashbot-robberbaron.webp'),
+  lawbot: getExtensionImageUrl('images/Skelecog-lawbot-bigwig.webp'),
+  bossbot: getExtensionImageUrl('images/Skelecog-bossbot-thebigcheese.webp'),
+} as const;
+
+function getSkelecogImage(preset?: string | null) {
+  if (!preset) return SKELECOG_IMAGES.sellbot;
+  if (/mint/i.test(preset)) return SKELECOG_IMAGES.cashbot;
+  if (/office/i.test(preset)) return SKELECOG_IMAGES.lawbot;
+  if (/fairway|fringe|golf/i.test(preset)) return SKELECOG_IMAGES.bossbot;
+  return SKELECOG_IMAGES.sellbot;
+}
 
 const SOS_MOE = 'https://rendition.toontownrewritten.com/render/7401000001000000008b010e000e0e010400000000000000000000000000000000/portrait/128x128.webp';
 const SOS_SID = 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp';
@@ -217,7 +232,7 @@ const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage
   );
 });
 
-const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthColor, activePopup, setActivePopup, onSelectGag, currentRoundGags }: any) => {
+const TargetPopup = ({ trackId, gagIndex, variant, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, onSelectGag, currentRoundGags }: any) => {
   const isOpen = activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant && !activePopup?.subType;
   const popupRef = useRef<HTMLDivElement>(null);
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ left: '50%', transform: 'translateX(-50%)', visibility: 'hidden' });
@@ -265,7 +280,8 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
           const innerHp = Math.min(maxHp, remainingTotal);
           const pInner = (innerHp / maxHp) * 100;
           const pOuter = (outerHp / maxHp) * 100;
-          const labelStr = choice?.type === 'boss' ? choice.label.split(' ')[1] : `Level ${cog.id}`;
+          const labelStr = choice?.type === 'boss' ? choice.label.split(' ').slice(-1)[0] : `Level ${cog.id}`;
+          const cogImage = choice?.type === 'normal' ? getSkelecogImage(activePreset) : choice?.img;
           const gagData = (SOS_GAGS[trackId] || []).find(s => s.gagIndex === gagIndex) || gagsConfig.find(t => t.id === trackId)?.gags[gagIndex];
 
           const isPinkSlip = trackId === 'special' && gagIndex === 0;
@@ -297,7 +313,7 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, cogDamages, getHealthCo
               onClick={(e) => { e.stopPropagation(); onSelectGag(trackId, gagIndex, variant, cogIdx); setActivePopup(null); }}
               className={`group/target relative flex flex-col items-center justify-between p-2 w-20 h-24 rounded-xl border border-white/10 transition-all overflow-hidden ${isDisabled ? 'opacity-20 cursor-not-allowed grayscale bg-black/80' : 'bg-black/40 hover:bg-emerald-500/20 hover:border-emerald-500 cursor-pointer'}`}
             >
-              {choice?.img && <img src={choice.img as string} alt={labelStr} className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover/target:opacity-60 group-hover/target:scale-110 transition-all duration-500" style={spawnedSupportStyle} />}
+              {cogImage && <img src={cogImage as string} alt={labelStr} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover/target:opacity-80 group-hover/target:scale-110 transition-all duration-500" style={spawnedSupportStyle} />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
               <div className="relative z-10 flex flex-col items-center">
                 <span className="text-[11px] font-black text-white/90 truncate max-w-full drop-shadow-md">{labelStr}</span>
@@ -360,7 +376,7 @@ const RemoteStarsPopup = ({ gagIndex, activePopup, setActivePopup }: any) => {
   );
 };
 
-function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
+function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
   const isBase = mode === 'base';
   const items = isBase ? track.gags : (SOS_GAGS[track.id] || []).filter((s: any) => [3, 4, 5].includes(s.gagIndex));
 
@@ -424,8 +440,8 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColo
             onClick={(e: any) => handleGagClick(e, itemIdx, variant)}
             onOrganicClick={isBase ? ((e: any) => handleGagClick(e, itemIdx, 'organic')) : undefined}
             hasOrganic={isBase}
-            targetPopup={<TargetPopup trackId={track.id} gagIndex={itemIdx} variant={variant} cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
-            organicTargetPopup={isBase ? <TargetPopup trackId={track.id} gagIndex={itemIdx} variant="organic" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} /> : undefined}
+            targetPopup={<TargetPopup trackId={track.id} gagIndex={itemIdx} variant={variant} cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
+            organicTargetPopup={isBase ? <TargetPopup trackId={track.id} gagIndex={itemIdx} variant="organic" cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} /> : undefined}
           />
         );
       })}
@@ -433,7 +449,7 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, cogDamages, getHealthColo
   );
 }
 
-function SpecialGagColumn({ mode, onSelectGag, cogs, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
+function SpecialGagColumn({ mode, onSelectGag, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
   const isPinkSlip = mode === 'slips';
   const specialGags = SOS_GAGS.special;
 
@@ -459,7 +475,7 @@ function SpecialGagColumn({ mode, onSelectGag, cogs, cogDamages, getHealthColor,
             color="#8b5cf6"
             title="Pink Slip"
             onClick={(e: any) => handleGagClick(e, 0)}
-            targetPopup={<TargetPopup trackId="special" gagIndex={0} variant="sos" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
+            targetPopup={<TargetPopup trackId="special" gagIndex={0} variant="sos" cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
           />
         </div>
       ) : (
@@ -475,7 +491,7 @@ function SpecialGagColumn({ mode, onSelectGag, cogs, cogDamages, getHealthColor,
                 onClick={(e: any) => handleGagClick(e, idx)}
                 targetPopup={
                   activePopup?.trackId === 'special' && [idx, idx + 1, idx + 2].includes(activePopup.gagIndex) && activePopup.subType !== 'stars'
-                    ? <TargetPopup trackId="special" gagIndex={activePopup.gagIndex} variant="sos" cogs={cogs} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />
+                    ? <TargetPopup trackId="special" gagIndex={activePopup.gagIndex} variant="sos" cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />
                     : <RemoteStarsPopup gagIndex={idx} activePopup={activePopup} setActivePopup={setActivePopup} />
                 }
               />
@@ -494,8 +510,8 @@ const FACILITY_PRESETS = [
   { name: "Bullion Mint", bossId: 'mint_bullion', cogs: [{ id: 'mint_bullion', isV2: false }, { id: '12', isV2: false }, { id: '12', isV2: false }, { id: '11', isV2: false }] },
   { name: "Junior Office", bossId: 'office_junior', cogs: [{ id: '11', isV2: false }, { id: 'office_junior', isV2: false }, { id: '11', isV2: false }] },
   { name: "Senior Office", bossId: 'office_senior', cogs: [{ id: '13', isV2: false }, { id: 'office_senior', isV2: false }, { id: '13', isV2: false }] },
-  { name: "Fairway Course", bossId: 'golf_fairway', cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: false }, { id: '10', isV2: false }] },
-  { name: "Fringe Course", bossId: 'golf_fringe', cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: false }, { id: '12', isV2: false }] },
+  { name: "First Fairway", bossId: 'golf_fairway', cogs: [{ id: '11', isV2: false }, { id: 'golf_fairway', isV2: false }, { id: '11', isV2: false }, { id: '10', isV2: false }] },
+  { name: "Final Fringe", bossId: 'golf_fringe', cogs: [{ id: '13', isV2: false }, { id: 'golf_fringe', isV2: false }, { id: '13', isV2: false }, { id: '12', isV2: false }] },
 ];
 
 const DEFAULT_COGS: Cog[] = [
@@ -1319,6 +1335,7 @@ export function CogCalculator() {
           <div className="grid grid-cols-4 gap-2">
             {displayCogs.map((cog, idx) => {
               const choice = COG_CHOICES.find(c => c.id === cog.id);
+              const cogImage = choice?.type === 'normal' ? getSkelecogImage(activePreset) : choice?.img;
               const maxHp = cog.simMaxHp ?? getCogMaxHp(cog, displayCogs);
               const dmg = activeStats.cogDamages[idx] || 0;
               const totalMax = maxHp * (cog.isV2 ? 2 : 1);
@@ -1347,16 +1364,17 @@ export function CogCalculator() {
                         if (choice.type === 'normal') {
                           return (
                             <div className="flex flex-col items-center justify-center h-full w-full relative">
-                              <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60" style={spawnedSupportStyle} />
+                              <img src={cogImage as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-100" style={spawnedSupportStyle} />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
-                              <div className="relative flex flex-col items-center justify-center pointer-events-none">
+                              <div className="relative flex h-full w-full flex-col items-center justify-center pointer-events-none">
                                 {cog.isV2 && (
                                   <div className="absolute top-0 right-0 bg-fuchsia-600/90 text-[8px] font-black px-1.5 py-0.5 rounded-bl shadow text-white tracking-widest uppercase">
                                     v2.0
                                   </div>
                                 )}
-                                <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Level</span>
-                                <span className="text-4xl font-black text-white">{choice.id}</span>
+                              </div>
+                              <div className="absolute bottom-0 inset-x-0 pointer-events-none">
+                                <span className="block bg-black/70 px-2 py-1.5 text-center text-base font-black text-white leading-tight">Level {choice.id}</span>
                               </div>
                             </div>
                           );
@@ -1365,8 +1383,8 @@ export function CogCalculator() {
                           <>
                             <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" style={spawnedSupportStyle} />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
-                            <div className="absolute bottom-1.5 inset-x-0 pointer-events-none">
-                              <span className="block text-center text-[10px] font-bold text-white leading-tight px-1">{choice.label}</span>
+                            <div className="absolute bottom-0 inset-x-0 pointer-events-none">
+                              <span className="block bg-black/70 px-2 py-1.5 text-center text-sm font-black text-white leading-tight">{choice.label}</span>
                             </div>
                           </>
                         );
@@ -1592,25 +1610,25 @@ export function CogCalculator() {
               {/* Column 1: Gags */}
               <div className="flex flex-col gap-2">
                 {gagTracks.map(track => (
-                  <GagTrackRow key={track.id} track={track} mode="base" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                  <GagTrackRow key={track.id} track={track} mode="base" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
 
               {/* Column 2: SOS */}
               <div className="flex flex-col gap-2">
                 {gagTracks.map(track => (
-                  <GagTrackRow key={track.id} track={track} mode="sos" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                  <GagTrackRow key={track.id} track={track} mode="sos" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
 
               {/* Column 3: Remotes */}
               <div className="flex flex-col gap-2">
-                <SpecialGagColumn mode="remotes" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                <SpecialGagColumn mode="remotes" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
               </div>
 
               {/* Column 4: Pink Slips */}
               <div className="flex flex-col gap-2">
-                <SpecialGagColumn mode="slips" onSelectGag={handleSelectGag} cogs={selectionCogs} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                <SpecialGagColumn mode="slips" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
               </div>
             </div>
           </div>
