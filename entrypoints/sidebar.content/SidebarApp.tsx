@@ -2768,7 +2768,7 @@ export function SidebarApp() {
 
             {(dialog.type === 'add' || dialog.type === 'move') && (
               <div className="mb-5">
-                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-green-300 opacity-80">
+                <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider opacity-80 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'text-red-300' : 'text-green-300'}`}>
                   Private Note
                 </label>
                 <textarea

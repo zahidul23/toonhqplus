@@ -347,7 +347,17 @@ function injectHighlightStyles() {
       left: 0;
       margin-top: 8px;
       white-space: nowrap;
+      max-width: 34em;
+      overflow: hidden;
+      text-overflow: ellipsis;
       z-index: 100;
+    }
+    .note-bubble:hover {
+      width: max-content;
+      max-width: 34em;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
     }
     .note-bubble::before {
       content: '';
@@ -431,7 +441,17 @@ function injectHighlightStyles() {
       left: 0;
       margin-top: 13px;
       white-space: nowrap;
+      max-width: 34em;
+      overflow: hidden;
+      text-overflow: ellipsis;
       z-index: 100;
+    }
+    .note-bubble:hover {
+      width: max-content;
+      max-width: 34em;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
     }
     .note-bubble::before {
       content: '';
@@ -736,11 +756,7 @@ async function applyRowHighlights(savedToonLists?: SavedToonLists) {
       // Add Note Bubble
       if (notesEnabled && (resolvedId != null || index === 0)) {
         const noteText = resolvedId ? allNotes[resolvedId] : '';
-        let displayNote = noteText || '';
-
-        if (displayNote.length > 75) {
-          displayNote = displayNote.substring(0, 75) + '...';
-        }
+        const displayNote = noteText || '';
 
         const btnContainer = row.querySelector('.toonhq-plus-buttons') as HTMLElement;
         const favClass = row.classList.contains(ROW_CLASS_FAVORITE) ? ROW_CLASS_FAVORITE : '';
@@ -755,8 +771,8 @@ async function applyRowHighlights(savedToonLists?: SavedToonLists) {
               bubble.className = 'note-bubble';
               btnContainer.appendChild(bubble);
             }
-            if (bubble.innerHTML !== displayNote) {
-              bubble.innerHTML = displayNote;
+            if (bubble.textContent !== noteText) {
+              bubble.textContent = noteText;
             }
 
             const [upBtn, downBtn] = Array.from(btnContainer.querySelectorAll('button')) as HTMLButtonElement[];

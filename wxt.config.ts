@@ -4,8 +4,8 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'ToonHQ+ (Unofficial)',
-    description: 'ToonHQ+ (ToonHQ Plus) is an unofficial fan-made browser extension that enhances the ToonHQ experience.',
+    name: 'ToonHQ+',
+    description: 'ToonHQ+ (ToonHQ Plus) is an unofficial independently created browser extension that enhances the ToonHQ experience.',
     version: '1.2.18',
     permissions: ['storage', 'alarms'],
     host_permissions: ['*://*.toonhq.org/*', '*://toonhq.org/*'],

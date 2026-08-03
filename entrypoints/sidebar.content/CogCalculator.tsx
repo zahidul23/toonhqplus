@@ -759,11 +759,21 @@ export function CogCalculator() {
       const officeClerkSupportsAtRoundStart = officeClerkIdxAtRoundStart !== -1 ? countAliveOfficeSupports(officeClerkIdxAtRoundStart) : 0;
 
       const hasForeman = currentCogs.some(c => c.id === 'factory_scrap' || c.id === 'factory_steel');
-      const hasBullionAuditor = currentCogs.some(c => c.id === 'mint_bullion');
+      // Bullion's Defense Down only exists while the Bullion Auditor is alive.
+      // The Auditor can be defeated during the previous round, so check its
+      // simulation state rather than only checking whether it remains in the
+      // lineup array.
+      const hasBullionAuditor = currentCogs.some((c, i) => c.id === 'mint_bullion' && cogStates[i].layer > 0);
       const deadNonAuditorsAtStart = currentCogs.filter((c, i) => c.id !== 'mint_bullion' && cogStates[i].layer === 0).length;
       const isBullionVulnerable = hasBullionAuditor && (deadNonAuditorsAtStart % 2 !== 0);
 
       const deadCogsCountAtStart = cogStates.filter(s => s.layer === 0).length;
+
+      const getDefenseDownStacks = (cog: Cog) => {
+        const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
+        if (isPresident && deadCogsCountAtStart > 0) return deadCogsCountAtStart;
+        return cog.isDefenseDown ? 3 : 0;
+      };
 
       const trackOrder = ['special', 'trap', 'lure', 'sound', 'throw', 'squirt', 'drop'];
 
@@ -773,7 +783,15 @@ export function CogCalculator() {
 
         const hitCounts = Array(currentCogCount).fill(0);
         const trackBaseDamages = Array(currentCogCount).fill(0);
-        const defenseDownMultipliers = Array(currentCogCount).fill(0);
+        const defenseDownMultipliers = currentCogs.map((cog) => {
+          if (['trap', 'lure'].includes(trackId)) return 0;
+
+          const defenseDownStacks = getDefenseDownStacks(cog);
+          const statusMultiplier = defenseDownStacks > 0
+            ? DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2)
+            : 0;
+          return statusMultiplier + (isBullionVulnerable ? 0.5 : 0);
+        });
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
@@ -803,6 +821,7 @@ export function CogCalculator() {
             if (cogIdx < 0 || cogIdx >= currentCogCount) return;
             const cog = currentCogs[cogIdx];
             let currentDmg = baseDmg;
+            const defenseDownStacks = getDefenseDownStacks(cog);
 
             const choice = COG_CHOICES.find(c => c.id === cog.id);
             const hasMintSup = currentCogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
@@ -827,23 +846,6 @@ export function CogCalculator() {
             if (isInstaKill && !isTenured && !isImmune) {
               instaKillThisPhase[cogIdx] = true;
               return;
-            }
-
-            const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
-            let defenseDownStacks = 0;
-            if (isPresident && deadCogsCountAtStart > 0) {
-              defenseDownStacks = deadCogsCountAtStart;
-            } else if (cog.isDefenseDown) {
-              defenseDownStacks = 3;
-            }
-
-            // Positive Defense Down is an orange-damage multiplier: it does not
-            // change the base gag damage or the same-gag bonus.
-            if (defenseDownStacks > 0 && !['trap', 'lure'].includes(trackId)) {
-              defenseDownMultipliers[cogIdx] = DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2);
-            }
-            if (isBullionVulnerable && !['trap', 'lure'].includes(trackId)) {
-              defenseDownMultipliers[cogIdx] += 0.5;
             }
 
             const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
@@ -1256,29 +1258,31 @@ export function CogCalculator() {
       <div className="flex flex-col gap-3 min-w-0 relative overflow-visible">
         {/* Cogs Panel */}
         <div className="bg-black/40 rounded-xl p-4 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <h4 className="text-base font-bold text-white">Cogs After Round {activeRound + 1}</h4>
-            <div className="relative">
+            <div className="relative justify-self-center">
               <button
                 onClick={(e) => { e.stopPropagation(); setPresetMenuOpen(!presetMenuOpen); setActiveCogSlot(null); }}
-                className="flex items-center justify-between gap-2 bg-black/40 border border-white/10 rounded-lg p-2 text-white font-bold text-sm cursor-pointer hover:bg-black/60 hover:border-emerald-500/50 transition-colors w-[160px]"
+                className="flex max-w-[380px] cursor-pointer items-center justify-center gap-2.5 text-xl font-black text-white/85 transition-colors hover:text-white"
               >
-                <span className="truncate">{activePreset || "Facility Presets"}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 flex-shrink-0"><path d="m6 9 6 6 6-6" /></svg>
+                <span className="truncate">{activePreset || "No Facility Selected"}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 flex-shrink-0"><path d="m6 9 6 6 6-6" /></svg>
               </button>
               {presetMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 p-3 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-[320px] flex flex-col gap-3">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCogs(DEFAULT_COGS.map(c => ({ ...c })));
-                      setActivePreset(null);
-                      setPresetMenuOpen(false);
-                    }}
-                    className={`text-center px-3 py-2 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors cursor-pointer border border-white/5 ${activePreset === null ? 'bg-black/40 text-white' : ''}`}
-                  >
-                    Clear Preset
-                  </button>
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 p-3 bg-[#0c3622] rounded-xl border border-white/10 shadow-2xl z-[60] w-[320px] flex flex-col gap-3">
+                  {activePreset && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCogs(DEFAULT_COGS.map(c => ({ ...c })));
+                        setActivePreset(null);
+                        setPresetMenuOpen(false);
+                      }}
+                      className="text-center px-3 py-2 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors cursor-pointer border border-white/5"
+                    >
+                      Clear Facility Selection
+                    </button>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     {FACILITY_PRESETS.map((preset, i) => {
                       const boss = COG_CHOICES.find(c => c.id === preset.bossId);
@@ -1309,6 +1313,7 @@ export function CogCalculator() {
                 </div>
               )}
             </div>
+            <div aria-hidden="true" />
           </div>
 
           <div className="grid grid-cols-4 gap-2">
