@@ -20,8 +20,14 @@ type PendingRequest = {
   timeout: ReturnType<typeof setTimeout>;
 };
 
+type BoardingCreatedListener = (status: Exclude<BoardingGroupStatus, null>) => void;
+
 let groupsSocketSid: string | null = null;
+let desiredSubscriptionToonId: number | null = null;
+let activeSubscription: { sid: string; toonId: number } | null = null;
+let subscriptionSync = Promise.resolve();
 const socketReadyWaiters = new Set<(sid: string) => void>();
+const boardingCreatedListeners = new Set<BoardingCreatedListener>();
 let nextNonce = 1;
 const pendingRequests = new Map<number, PendingRequest>();
 const inFlightByToon = new Map<number, Promise<BoardingGroupStatus>>();
@@ -37,11 +43,77 @@ function getCsrfToken(): string {
 }
 
 export function setBoardingGroupsSocketSid(sid: string | null): void {
+  if (groupsSocketSid !== sid) {
+    activeSubscription = null;
+  }
   groupsSocketSid = sid;
   if (sid) {
     for (const resolve of socketReadyWaiters) resolve(sid);
     socketReadyWaiters.clear();
+    queueBoardingCreationSubscriptionSync();
   }
+}
+
+async function postBoardingSubscription(toonId: number, sid: string, request: 'subscribe' | 'unsubscribe'): Promise<void> {
+  const csrfToken = getCsrfToken();
+  if (!csrfToken) throw new Error('Could not read ToonHQ\'s CSRF token.');
+
+  const response = await fetch('/api/groups/boarding_request/', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      'X-CSRFToken': csrfToken,
+    },
+    body: JSON.stringify({ toon: toonId, sid, request, nonce: 0 }),
+  });
+  if (!response.ok) throw new Error(`ToonHQ returned ${response.status} while trying to ${request}.`);
+}
+
+async function syncBoardingCreationSubscription(): Promise<void> {
+  const sid = groupsSocketSid;
+  if (!sid) return;
+  const previous = activeSubscription;
+
+  try {
+    if (previous?.sid === sid && previous.toonId !== desiredSubscriptionToonId) {
+      await postBoardingSubscription(previous.toonId, sid, 'unsubscribe');
+      activeSubscription = null;
+    }
+    if (groupsSocketSid !== sid) return;
+    const desiredToonId = desiredSubscriptionToonId;
+    if (desiredToonId != null && (activeSubscription?.sid !== sid || activeSubscription.toonId !== desiredToonId)) {
+      await postBoardingSubscription(desiredToonId, sid, 'subscribe');
+      if (groupsSocketSid !== sid) return;
+      activeSubscription = { sid, toonId: desiredToonId };
+      console.log(`[ToonHQ+] Subscribed to boarding creation for Toon ${desiredToonId}.`);
+    }
+  } catch (error) {
+    console.warn('[ToonHQ+] Could not update the boarding creation subscription:', error);
+  }
+}
+
+function queueBoardingCreationSubscriptionSync(): void {
+  subscriptionSync = subscriptionSync.then(syncBoardingCreationSubscription, syncBoardingCreationSubscription);
+}
+
+export function setBoardingCreationSubscription(toonId: number | null): void {
+  if (desiredSubscriptionToonId === toonId) return;
+  desiredSubscriptionToonId = toonId;
+  queueBoardingCreationSubscriptionSync();
+}
+
+export function onBoardingCreated(listener: BoardingCreatedListener): () => void {
+  boardingCreatedListeners.add(listener);
+  return () => boardingCreatedListeners.delete(listener);
+}
+
+export function handleBoardingCreated(status: Exclude<BoardingGroupStatus, null>): void {
+  console.log('[ToonHQ+] boarding_created:', status);
+  if (desiredSubscriptionToonId == null || activeSubscription?.toonId !== desiredSubscriptionToonId) return;
+  recentStatusByToon.set(desiredSubscriptionToonId, status);
+  recentFailureByToon.delete(desiredSubscriptionToonId);
+  for (const listener of boardingCreatedListeners) listener(status);
 }
 
 function waitForGroupsSocketSid(): Promise<string> {

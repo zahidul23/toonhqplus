@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { BoardingGroupStatus, getBoardingGroupStatus } from './boardingStatus';
+import { BoardingGroupStatus, getBoardingGroupStatus, onBoardingCreated, setBoardingCreationSubscription } from './boardingStatus';
 import { getToonSuitLevel } from './toonUtils';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
@@ -188,7 +188,7 @@ export function QuickTeleport() {
   useEffect(() => {
     loadTtrToons()
       .then(setToons)
-      .catch(error => setStatus(`Could not load your toons: ${error.message}`));
+      .catch(error => setStatus(`Could not load your toons: ${error.message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : error.message}`));
   }, []);
 
   useEffect(() => {
@@ -205,9 +205,12 @@ export function QuickTeleport() {
 
   useEffect(() => {
     if (!toonId) {
+      setBoardingCreationSubscription(null);
       setBoardingStatus(undefined);
       return;
     }
+
+    setBoardingCreationSubscription(Number(toonId));
 
     let cancelled = false;
     setCheckingStatus(true);
@@ -220,6 +223,8 @@ export function QuickTeleport() {
         setStatus(describeBoardingStatus(result, districts, coreData.locations));
       })
       .catch(error => {
+        let message = error instanceof Error ? error.message : String(error);
+        message = message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : message;
         if (!cancelled) setStatus(`Could not check Toon status: ${error.message}`);
       })
       .finally(() => {
@@ -228,6 +233,12 @@ export function QuickTeleport() {
 
     return () => { cancelled = true; };
   }, [toonId, districts, coreData.locations]);
+
+  useEffect(() => onBoardingCreated(result => {
+    setBoardingStatus(result);
+    if (result.district != null) setDistrictId(String(result.district));
+    setStatus(describeBoardingStatus(result, districts, coreData.locations));
+  }), [districts, coreData.locations]);
 
   const selectedToon = toons.find(toon => String(toon.id) === toonId);
   const selectedDestination = DESTINATIONS[destinationIndex];

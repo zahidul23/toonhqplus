@@ -2,7 +2,7 @@ import ReactDOM from 'react-dom/client';
 import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
-import { handleBoardingResponse, rejectPendingBoardingRequests, setBoardingGroupsSocketSid } from './boardingStatus';
+import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingRequests, setBoardingGroupsSocketSid } from './boardingStatus';
 import './style.css';
 import {
   openDB,
@@ -1722,6 +1722,32 @@ export default defineContentScript({
     let activeGroupSocket: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     let socketRestartTimeout: ReturnType<typeof setTimeout> | null = null;
+    let nextSocketAckId = 0;
+
+    const emitSocketEventWithAck = (ws: WebSocket, eventName: string, ...args: unknown[]) => {
+      const ackId = nextSocketAckId++;
+      ws.send(`42${ackId}${JSON.stringify([eventName, ...args])}`);
+      return ackId;
+    };
+
+    const authenticateSocket = async (ws: WebSocket) => {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1];
+      if (!csrfToken) return;
+      try {
+        const response = await fetch('/api/accounts/socket_auth/', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'X-CSRFToken': decodeURIComponent(csrfToken) },
+        });
+        if (!response.ok) throw new Error(`ToonHQ returned ${response.status}.`);
+        const token = await response.json();
+        if (activeGroupSocket === ws && ws.readyState === WebSocket.OPEN) {
+          emitSocketEventWithAck(ws, 'auth', token);
+        }
+      } catch (error) {
+        console.warn('[ToonHQ+] Could not authenticate the groups socket:', error);
+      }
+    };
 
     const scheduleSocketRestart = () => {
       if (groupTrackerDisposed) return;
@@ -1760,12 +1786,7 @@ export default defineContentScript({
           return;
         }
 
-        console.log('[ToonHQ+] Direct WebSocket connection opened, sending initialization sequence...');
-        // 4 = Engine.io message, 0 = connect
-        ws.send('40');
-
-        // 4 = Engine.io message, 2 = event, 0 = namespace/ID
-        ws.send('420["track","groups",1]');
+        console.log('[ToonHQ+] Direct WebSocket connection opened.');
       });
 
       ws.addEventListener('message', (event) => {
@@ -1775,6 +1796,12 @@ export default defineContentScript({
           // Handle Socket.io Ping (2)
           if (str === '2') {
             ws.send('3'); // send Pong
+            return;
+          }
+
+          // Wait for the Engine.IO open packet before opening the Socket.IO namespace.
+          if (str.startsWith('0')) {
+            ws.send('40');
             return;
           }
 
@@ -1790,11 +1817,15 @@ export default defineContentScript({
                 if (prefix === '40' && payload && !Array.isArray(payload) && typeof payload.sid === 'string') {
                   setBoardingGroupsSocketSid(payload.sid);
                   console.log('[ToonHQ+] Groups Socket.IO session ready.');
+                  emitSocketEventWithAck(ws, 'track', 'groups', 1);
+                  void authenticateSocket(ws);
                 } else if (Array.isArray(payload) && typeof payload[0] === 'string') {
                   const eventName = payload[0];
                   const data = payload[1];
                   if (eventName === 'boarding_response') {
                     handleBoardingResponse(data);
+                  } else if (eventName === 'boarding_created') {
+                    handleBoardingCreated(data);
                   } else if (eventName === 'group_created') {
                     data.members?.forEach((m: any) => { if (m.toon) applyToonHash(m.toon); });
                     groupsState[data.id] = data;
