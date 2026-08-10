@@ -25,8 +25,11 @@ const socketReadyWaiters = new Set<(sid: string) => void>();
 let nextNonce = 1;
 const pendingRequests = new Map<number, PendingRequest>();
 const inFlightByToon = new Map<number, Promise<BoardingGroupStatus>>();
-const recentStatusByToon = new Map<number, { result: BoardingGroupStatus; expiresAt: number }>();
-const BOARDING_STATUS_CACHE_MS = 30_000;
+// Automatic checks are reused for the page session. Callers with an explicit
+// user action can force a refresh, which avoids rechecking every tab remount.
+const recentStatusByToon = new Map<number, BoardingGroupStatus>();
+const recentFailureByToon = new Map<number, { error: Error; expiresAt: number }>();
+const BOARDING_FAILURE_COOLDOWN_MS = 30_000;
 
 function getCsrfToken(): string {
   const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
@@ -125,18 +128,30 @@ async function requestBoardingGroupStatus(toonId: number): Promise<BoardingGroup
 }
 
 export function getBoardingGroupStatus(toonId: number, forceRefresh = false): Promise<BoardingGroupStatus> {
-  if (forceRefresh) recentStatusByToon.delete(toonId);
+  if (forceRefresh) {
+    recentStatusByToon.delete(toonId);
+    recentFailureByToon.delete(toonId);
+  }
   const cached = recentStatusByToon.get(toonId);
-  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.result);
-  if (cached) recentStatusByToon.delete(toonId);
+  if (cached !== undefined || recentStatusByToon.has(toonId)) return Promise.resolve(cached ?? null);
+
+  const recentFailure = recentFailureByToon.get(toonId);
+  if (recentFailure?.expiresAt && recentFailure.expiresAt > Date.now()) return Promise.reject(recentFailure.error);
+  if (recentFailure) recentFailureByToon.delete(toonId);
 
   const existing = inFlightByToon.get(toonId);
   if (existing) return existing;
 
   const request = requestBoardingGroupStatus(toonId)
     .then(result => {
-      recentStatusByToon.set(toonId, { result, expiresAt: Date.now() + BOARDING_STATUS_CACHE_MS });
+      recentFailureByToon.delete(toonId);
+      recentStatusByToon.set(toonId, result);
       return result;
+    })
+    .catch(error => {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      recentFailureByToon.set(toonId, { error: normalizedError, expiresAt: Date.now() + BOARDING_FAILURE_COOLDOWN_MS });
+      throw normalizedError;
     })
     .finally(() => {
       if (inFlightByToon.get(toonId) === request) inFlightByToon.delete(toonId);

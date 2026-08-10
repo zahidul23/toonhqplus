@@ -13,6 +13,7 @@ import {
   putToon,
   putToons,
   putGroup,
+  deleteGroup,
   putGroupMember,
   putGroupMembers,
   markMemberLeft,
@@ -1800,7 +1801,14 @@ export default defineContentScript({
                     syncToonData(data.members);
                     syncGroupHistory(data);
                   } else if (eventName === 'group_disbanded') {
-                    const gid = data.id;
+                    const gid = Number(data.id);
+                    const disbandedGroup = groupsState[gid];
+                    const activeMemberCount = Array.isArray(disbandedGroup?.members)
+                      ? disbandedGroup.members.filter((member: any) => !member.left).length
+                      : (groupMemberIds[gid]?.size ?? 0);
+                    if (activeMemberCount <= 2) {
+                      deleteGroup(gid).catch(error => console.error('[ToonHQ+] Failed to remove short-lived group from history:', error));
+                    }
                     if (groupMemberIds[gid]) {
                       for (const mid of groupMemberIds[gid]) delete memberIdToToonId[mid];
                       delete groupMemberIds[gid];
