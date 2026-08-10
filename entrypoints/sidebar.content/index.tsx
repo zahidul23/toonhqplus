@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client';
 import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
+import { handleBoardingResponse, rejectPendingBoardingRequests, setBoardingGroupsSocketSid } from './boardingStatus';
 import './style.css';
 import {
   openDB,
@@ -1785,10 +1786,15 @@ export default defineContentScript({
             if (payloadString) {
               try {
                 const payload = JSON.parse(payloadString);
-                if (Array.isArray(payload) && typeof payload[0] === 'string') {
+                if (prefix === '40' && payload && !Array.isArray(payload) && typeof payload.sid === 'string') {
+                  setBoardingGroupsSocketSid(payload.sid);
+                  console.log('[ToonHQ+] Groups Socket.IO session ready.');
+                } else if (Array.isArray(payload) && typeof payload[0] === 'string') {
                   const eventName = payload[0];
                   const data = payload[1];
-                  if (eventName === 'group_created') {
+                  if (eventName === 'boarding_response') {
+                    handleBoardingResponse(data);
+                  } else if (eventName === 'group_created') {
                     data.members?.forEach((m: any) => { if (m.toon) applyToonHash(m.toon); });
                     groupsState[data.id] = data;
                     syncToonData(data.members);
@@ -1836,6 +1842,7 @@ export default defineContentScript({
 
       ws.addEventListener('close', () => {
         if (activeGroupSocket === ws) activeGroupSocket = null;
+        rejectPendingBoardingRequests();
         if (groupTrackerDisposed) return;
         if (!isReconnecting) {
           console.log(plannedSocketRestart

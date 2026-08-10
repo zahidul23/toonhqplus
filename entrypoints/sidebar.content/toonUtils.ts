@@ -101,6 +101,34 @@ export const getCogValueFromName = (name: string) => {
   return level;
 };
 
+/** Decode ToonHQ's four-character TTR disguise value and return its suit level. */
+export function getToonSuitLevel(suitCode: unknown): number {
+  if (suitCode == null || suitCode === '') return 0;
+
+  if (typeof suitCode === 'object') {
+    const suit = suitCode as Record<string, unknown>;
+    if (suit.version === 2 || suit.prestiged === true || suit.prestige === true) return 50;
+    const objectLevel = Number(suit.level);
+    return Number.isFinite(objectLevel) ? objectLevel : 0;
+  }
+
+  const raw = String(suitCode).trim();
+  if (/2\.0|prestig/i.test(raw)) return 50;
+
+  // ToonHQ encodes disguise data as: cog-rank hex, version digit, level hex.
+  const encoded = raw.padStart(4, '0');
+  if (encoded.length >= 4 && /^[0-9a-f]+$/i.test(encoded)) {
+    if (encoded[1] === '2') return 50;
+    const cogIndex = parseInt(encoded[0], 16) - 1;
+    if (cogIndex < 0) return 0;
+    const decodedLevel = parseInt(encoded.slice(2), 16);
+    return Number.isFinite(decodedLevel) ? decodedLevel : 0;
+  }
+
+  const directLevel = Number(raw);
+  return Number.isFinite(directLevel) ? directLevel : 0;
+}
+
 export function bankersRound(num: number): number {
   const half = Math.floor(num) + 0.5;
   if (Math.abs(num - half) < 0.000001) {

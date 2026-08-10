@@ -4,6 +4,7 @@ import { getGroupDisplayName, getGroupSimpleName } from './toonUtils';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
 import { ShtickerBook } from './ShtickerBook.tsx';
+import { QuickTeleport } from './QuickTeleport';
 import {
   closeDB,
   getAllFromList,
@@ -2112,7 +2113,7 @@ export function SidebarApp() {
                   setSetting('active-tab', 'history').catch(console.error);
                 }}
               >
-                History
+                Groups
               </button>
               <button
                 className={`flex-1 py-2 text-sm font-semibold transition-colors cursor-pointer ${activeTab === 'toons' ? 'bg-[#10462d] text-white shadow-inner' : 'text-green-200 hover:bg-green-800/30'}`}
@@ -2361,6 +2362,10 @@ export function SidebarApp() {
 
               {activeTab === 'history' && (
                 <section className="flex-1 flex flex-col min-h-0">
+                  <div className="mb-2 ml-2 shrink-0 flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-green-50">Quick Teleport</h3>
+                  </div>
+                  <QuickTeleport />
                   {selectedHistoryGroup === null ? (
                     <div className="flex-1 flex flex-col min-h-0">
                       <div className="mb-2 ml-2 shrink-0 flex items-center justify-between">
