@@ -3,6 +3,7 @@ import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
 import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingRequests, setBoardingGroupsSocketSid } from './boardingStatus';
+import { getToonHqOwnedToons, isToonHqAuthenticated, takeEmbeddedSocketAuthToken } from './toonHqPageState';
 import './style.css';
 import {
   openDB,
@@ -1535,12 +1536,17 @@ export default defineContentScript({
       applyNavbarCustomization(currentSettings['navbar-config']);
     }
 
-    // 1) Fetch owned toons first
-    // Load active toons from /api/toons/ (toons belonging to the current user)
-    try {
-      const toonsResp = await fetch('https://toonhq.org/api/toons/');
-      const toonsData = await toonsResp.json();
-      if (Array.isArray(toonsData)) {
+    // 1) Load owned toons from ToonHQ's authenticated page bootstrap. Only use
+    // the API as a logged-in fallback when the server did not embed the list.
+    if (isToonHqAuthenticated()) {
+      try {
+        let toonsData = getToonHqOwnedToons();
+        if (!Array.isArray(toonsData)) {
+          const toonsResp = await fetch('https://toonhq.org/api/toons/', { credentials: 'include' });
+          if (!toonsResp.ok) throw new Error(`ToonHQ returned ${toonsResp.status}.`);
+          toonsData = await toonsResp.json();
+        }
+        if (Array.isArray(toonsData)) {
         const newToons: ToonRecord[] = toonsData.map((toon: any) => {
           const id = String(toon.id);
           const normalized = { ...toon, id };
@@ -1575,9 +1581,10 @@ export default defineContentScript({
         console.log('[ToonHQ+] Initial active toons loaded:', newToons.length, 'toons.');
         await putToons(newToons);
         await setSetting('active-toon-ids', newToons.map(t => t.id));
+        }
+      } catch (e) {
+        console.error('[ToonHQ+] Failed to load active toons', e);
       }
-    } catch (e) {
-      console.error('[ToonHQ+] Failed to fetch active toons', e);
     }
 
 
@@ -1723,6 +1730,9 @@ export default defineContentScript({
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     let socketRestartTimeout: ReturnType<typeof setTimeout> | null = null;
     let nextSocketAckId = 0;
+    let pendingSocketAuthToken = takeEmbeddedSocketAuthToken();
+    let socketNamespaceReady = false;
+    let lastKnownAuthentication = isToonHqAuthenticated();
 
     const emitSocketEventWithAck = (ws: WebSocket, eventName: string, ...args: unknown[]) => {
       const ackId = nextSocketAckId++;
@@ -1731,16 +1741,21 @@ export default defineContentScript({
     };
 
     const authenticateSocket = async (ws: WebSocket) => {
+      if (!isToonHqAuthenticated()) return;
       const csrfToken = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1];
-      if (!csrfToken) return;
       try {
-        const response = await fetch('/api/accounts/socket_auth/', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'X-CSRFToken': decodeURIComponent(csrfToken) },
-        });
-        if (!response.ok) throw new Error(`ToonHQ returned ${response.status}.`);
-        const token = await response.json();
+        let token = pendingSocketAuthToken;
+        pendingSocketAuthToken = null;
+        if (!token) {
+          if (!csrfToken) return;
+          const response = await fetch('/api/accounts/socket_auth/', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'X-CSRFToken': decodeURIComponent(csrfToken) },
+          });
+          if (!response.ok) throw new Error(`ToonHQ returned ${response.status}.`);
+          token = await response.json();
+        }
         if (activeGroupSocket === ws && ws.readyState === WebSocket.OPEN) {
           emitSocketEventWithAck(ws, 'auth', token);
         }
@@ -1815,6 +1830,7 @@ export default defineContentScript({
               try {
                 const payload = JSON.parse(payloadString);
                 if (prefix === '40' && payload && !Array.isArray(payload) && typeof payload.sid === 'string') {
+                  socketNamespaceReady = true;
                   setBoardingGroupsSocketSid(payload.sid);
                   console.log('[ToonHQ+] Groups Socket.IO session ready.');
                   emitSocketEventWithAck(ws, 'track', 'groups', 1);
@@ -1881,6 +1897,7 @@ export default defineContentScript({
 
       ws.addEventListener('close', () => {
         if (activeGroupSocket === ws) activeGroupSocket = null;
+        socketNamespaceReady = false;
         rejectPendingBoardingRequests();
         if (groupTrackerDisposed) return;
         if (!isReconnecting) {
@@ -1905,8 +1922,21 @@ export default defineContentScript({
 
     connectWebSocket();
 
+    // ToonHQ login/logout happens inside the SPA without necessarily reloading
+    // the page, so mirror its account watcher for the extension-owned socket.
+    const authenticationInterval = window.setInterval(() => {
+      const authenticated = isToonHqAuthenticated();
+      if (authenticated === lastKnownAuthentication) return;
+      lastKnownAuthentication = authenticated;
+      const ws = activeGroupSocket;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !socketNamespaceReady) return;
+      if (authenticated) void authenticateSocket(ws);
+      else ws.send(`42${JSON.stringify(['clear_auth'])}`);
+    }, 750);
+
     ctx.onInvalidated(() => {
       groupTrackerDisposed = true;
+      window.clearInterval(authenticationInterval);
       if (cleanupTimeout) clearTimeout(cleanupTimeout);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (socketRestartTimeout) clearTimeout(socketRestartTimeout);

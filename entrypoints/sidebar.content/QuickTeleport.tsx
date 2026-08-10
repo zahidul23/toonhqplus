@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { BoardingGroupStatus, getBoardingGroupStatus, onBoardingCreated, setBoardingCreationSubscription } from './boardingStatus';
 import { getToonSuitLevel } from './toonUtils';
+import { getToonHqOwnedToons, isToonHqAuthenticated } from './toonHqPageState';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
@@ -41,7 +42,7 @@ const DESTINATIONS: Destination[] = [
   { label: 'First Fairway', description: 'Bossbot HQ facility', type: 8, location: 4, options: { '10': 27 }, maxPlayers: 4, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
 ];
 
-const TEST_DISTRICTS = new Set(['bounce grove', 'crunchville', 'nutty river', 'patter plains', 'whamfield']);
+const TEST_DISTRICTS = new Set(['bounce grove', 'crunchville', 'kaboomberg', 'nutty river', 'patter plains', 'whamfield']);
 
 const DESTINATION_ROWS = [
   { label: 'Sellbot', indices: [0, 4, 8], image: getExtensionImageUrl('images/suits/Sellbot.png'), color: '#9a21c7' },
@@ -57,9 +58,32 @@ const TOONS_CACHE_MS = 60_000;
 const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
 
+function HoverTooltip({ id, children, placement = 'center' }: { id: string; children: React.ReactNode; placement?: 'left' | 'center' | 'right' }) {
+  const positionClass = placement === 'left'
+    ? 'left-0'
+    : placement === 'right'
+      ? 'right-0'
+      : 'left-1/2 -translate-x-1/2';
+  return (
+    <div id={id} role="tooltip" className={`pointer-events-none invisible absolute bottom-full z-[90] mb-2 w-max max-w-[min(12rem,calc(100vw-1rem))] rounded-lg border border-rose-200/20 bg-[#3a2028] px-2.5 py-2 text-center text-[10px] font-medium leading-relaxed text-rose-50 opacity-0 shadow-2xl transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${positionClass}`}>
+      {children}
+    </div>
+  );
+}
+
 async function loadTtrToons(): Promise<Toon[]> {
   if (cachedToons && Date.now() - cachedToonsAt < TOONS_CACHE_MS) return cachedToons;
   if (toonsRequest) return toonsRequest;
+
+  if (!isToonHqAuthenticated()) throw new Error('You are not logged in to ToonHQ.');
+
+  const availableToons = getToonHqOwnedToons();
+  if (availableToons) {
+    cachedToons = availableToons.filter((toon): toon is Toon => !!toon && typeof toon === 'object')
+      .filter(toon => toon.game == null || toon.game === 1);
+    cachedToonsAt = Date.now();
+    return cachedToons;
+  }
 
   toonsRequest = fetch('/api/toons/', { credentials: 'include' })
     .then(async response => {
@@ -113,6 +137,7 @@ async function readError(response: Response): Promise<string> {
 }
 
 function getToonHqActiveToonId(): string | null {
+  if (!isToonHqAuthenticated()) return null;
   try {
     const persistedState = localStorage.getItem('vuex');
     if (!persistedState) return null;
@@ -159,7 +184,8 @@ export function QuickTeleport() {
   useEffect(() => {
     if (!districtMenuOpen) return;
     const closeMenu = (event: MouseEvent) => {
-      if (!districtMenuRef.current?.contains(event.target as Node)) setDistrictMenuOpen(false);
+      const menu = districtMenuRef.current;
+      if (menu && !event.composedPath().includes(menu)) setDistrictMenuOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setDistrictMenuOpen(false);
@@ -186,16 +212,24 @@ export function QuickTeleport() {
   }, [refreshCooldown > 0]);
 
   useEffect(() => {
-    loadTtrToons()
-      .then(setToons)
-      .catch(error => setStatus(`Could not load your toons: ${error.message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : error.message}`));
+    const refreshToons = () => {
+      if (!isToonHqAuthenticated()) return;
+      loadTtrToons()
+        .then(result => {
+          setToons(result);
+          setStatus(current => current.startsWith('Could not load your toons:') ? '' : current);
+        })
+        .catch(error => setStatus(`Could not load your toons: ${error.message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : error.message}`));
+    };
+    refreshToons();
+    const interval = window.setInterval(refreshToons, 750);
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
     const syncToonHqActiveToon = () => {
       const id = getToonHqActiveToonId();
-      if (!id) return;
-      setToonId(current => current === id ? current : id);
+      setToonId(current => current === (id || '') ? current : (id || ''));
     };
 
     syncToonHqActiveToon();
@@ -245,9 +279,34 @@ export function QuickTeleport() {
   const selectedSuitRowIndex = Math.max(0, DESTINATION_ROWS.findIndex(row => row.indices.includes(destinationIndex)));
   const selectedSuitRow = DESTINATION_ROWS[selectedSuitRowIndex];
   const selectedSuitLevel = getToonSuitLevel(selectedToon?.[selectedDestination.suitKey]);
-  const selectedDestinationEligible = selectedSuitLevel >= 12;
+  const selectedDestinationEligible = selectedSuitLevel >= 13;
+  const selectedDepartment = selectedDestination.suitKey[0].toUpperCase() + selectedDestination.suitKey.slice(1);
+  const disguiseRequirement = `Requires a Level 13 ${selectedDepartment} disguise. Current level: ${selectedSuitLevel}.`;
   const selectedDistrict = districts.find(district => String(district.id) === districtId);
   const hasActiveBoardingGroup = !!boardingStatus?.type;
+  const teleportDisabledReason = busy
+    ? 'Teleport is in progress.'
+    : checkingStatus
+      ? 'Checking your Toon’s status. Please wait.'
+      : !toonId
+        ? 'Select an active Toon to use Quick Teleport.'
+        : !districtId || districts.length === 0
+          ? 'Select a destination district.'
+          : hasActiveBoardingGroup
+            ? 'Your Toon is already in a boarding group.'
+            : !selectedDestinationEligible
+              ? disguiseRequirement
+              : undefined;
+  const refreshDisabled = !toonId || busy || checkingStatus || refreshCooldown > 0;
+  const refreshTooltip = refreshCooldown > 0
+    ? `You can refresh again in ${refreshCooldown} second${refreshCooldown === 1 ? '' : 's'}.`
+    : checkingStatus
+      ? 'Your Toon’s status is already being checked.'
+      : busy
+        ? 'Wait for the teleport to finish.'
+        : !toonId
+          ? 'Select an active Toon first.'
+          : 'Refresh your Toon’s current location.';
 
   const refreshLocation = async () => {
     if (!toonId || busy || checkingStatus || refreshCooldown > 0) return;
@@ -270,9 +329,9 @@ export function QuickTeleport() {
     if (!toonId || !districtId || busy) return;
     const destination = DESTINATIONS[destinationIndex];
     const suitLevel = getToonSuitLevel(selectedToon?.[destination.suitKey]);
-    if (suitLevel < 12) {
+    if (suitLevel < 13) {
       const department = destination.suitKey[0].toUpperCase() + destination.suitKey.slice(1);
-      setStatus(`${selectedToon?.name || 'This Toon'} needs a level 12 ${department} disguise for ${destination.label}.`);
+      setStatus(`${selectedToon?.name || 'This Toon'} needs a level 13 ${department} disguise for ${destination.label}.`);
       return;
     }
     const csrfToken = getCsrfToken();
@@ -350,10 +409,10 @@ export function QuickTeleport() {
           <span className="relative h-4 w-7 rounded-full bg-white/15 transition-colors peer-checked:bg-emerald-500/70 peer-disabled:cursor-not-allowed peer-disabled:opacity-40 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-3" />
         </label>
         {infoTooltipOpen && (
-          <div id="quick-teleport-tooltip" role="tooltip" className="pointer-events-none absolute left-0 right-0 top-full z-[80] mt-1.5 rounded-lg border border-white/10 bg-[#152c22] p-2.5 text-[10px] font-normal leading-relaxed text-green-50 shadow-2xl">
+          <div id="quick-teleport-tooltip" role="tooltip" className="pointer-events-none absolute left-0 right-0 top-full z-[80] mt-1.5 rounded-lg border border-rose-200/20 bg-[#3a2028] p-2.5 text-[11px] font-normal leading-relaxed text-rose-50 shadow-2xl">
             <p>Quick Teleport uses ToonHQ group creation to teleport you into the selected boss or facility lobby.</p>
             <p className="mt-1.5">When Auto-delist is enabled, the ToonHQ listing is immediately removed after the teleport request.</p>
-            <p className="mt-1.5">Use it to reach a lobby quickly, then invite friends to a private group without leaving the listing up on ToonHQ.</p>
+            <p className="mt-1.5">Use it to reach a lobby quickly, then invite friends to the in-game group without keeping the listing up on ToonHQ.</p>
           </div>
         )}
       </div>
@@ -400,69 +459,82 @@ export function QuickTeleport() {
       <div className="flex items-center justify-evenly gap-3 px-3 py-0.5">
         {DESTINATION_ROWS.map((row, rowIndex) => {
           const suitLevel = getToonSuitLevel(selectedToon?.[DESTINATIONS[row.indices[0]].suitKey]);
-          const isEligible = suitLevel >= 12;
+          const isEligible = suitLevel >= 13;
           const isSelected = selectedSuitRowIndex === rowIndex;
+          const rowTooltipId = `quick-teleport-${row.label.toLowerCase()}-requirement`;
           return (
-            <button
-              key={row.label}
-              type="button"
-              disabled={!isEligible || busy || checkingStatus || hasActiveBoardingGroup}
-              onClick={() => setDestinationIndex(row.indices[0])}
-              title={isEligible ? row.label : `${row.label} disguise level 12 required (current: ${suitLevel})`}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy && !checkingStatus && !hasActiveBoardingGroup ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
-              style={{
-                boxShadow: isSelected ? '0 0 0 3px rgba(255, 213, 57, 0.2), 0 3px 9px rgba(0, 0, 0, 0.25)' : 'none',
-              }}
-            >
-              <img src={row.image} alt={row.label} className="h-7 w-7 object-contain drop-shadow-md" />
-            </button>
+            <div key={row.label} className="group relative" tabIndex={!isEligible ? 0 : -1}>
+              <button
+                type="button"
+                disabled={!isEligible || busy || checkingStatus || hasActiveBoardingGroup}
+                aria-describedby={!isEligible ? rowTooltipId : undefined}
+                onClick={() => setDestinationIndex(row.indices[0])}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy && !checkingStatus && !hasActiveBoardingGroup ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
+                style={{
+                  boxShadow: isSelected ? '0 0 0 3px rgba(255, 213, 57, 0.2), 0 3px 9px rgba(0, 0, 0, 0.25)' : 'none',
+                }}
+              >
+                <img src={row.image} alt={row.label} className="h-7 w-7 object-contain drop-shadow-md" />
+              </button>
+              {!isEligible && <HoverTooltip id={rowTooltipId} placement={rowIndex === 0 ? 'left' : rowIndex === DESTINATION_ROWS.length - 1 ? 'right' : 'center'}>Requires a Level 13 {row.label} disguise. Current level: {suitLevel}.</HoverTooltip>}
+            </div>
           );
         })}
       </div>
 
       <div className="grid grid-cols-3 gap-1.5">
-        {selectedSuitRow.indices.map(index => {
+        {selectedSuitRow.indices.map((index, columnIndex) => {
           const destination = DESTINATIONS[index];
           const isSelected = destinationIndex === index;
+          const tooltipId = `quick-teleport-destination-${index}-requirement`;
           return (
-            <button
-              key={destination.label}
-              type="button"
-              aria-pressed={isSelected}
-              disabled={busy || checkingStatus || hasActiveBoardingGroup}
-              onClick={() => setDestinationIndex(index)}
-              className={`flex min-h-14 items-center justify-center overflow-hidden rounded-lg px-2 py-1 text-center text-sm font-black leading-tight text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer enabled:hover:brightness-110 ${isSelected ? 'border-[3px] border-[#ffd539] scale-[1.03] brightness-110' : 'border-0 opacity-80'}`}
-              style={{
-                backgroundColor: destination.cardBg,
-                boxShadow: isSelected
-                  ? '0 0 0 2px rgba(255, 213, 57, 0.28), 0 0 12px rgba(255, 213, 57, 0.45)'
-                  : 'none',
-              }}
-            >
-              {destination.label}
-            </button>
+            <div key={destination.label} className="group relative flex" tabIndex={!selectedDestinationEligible ? 0 : -1}>
+              <button
+                type="button"
+                aria-pressed={isSelected}
+                aria-describedby={!selectedDestinationEligible ? tooltipId : undefined}
+                disabled={!selectedDestinationEligible || busy || checkingStatus || hasActiveBoardingGroup}
+                onClick={() => setDestinationIndex(index)}
+                className={`flex min-h-14 w-full items-center justify-center overflow-hidden rounded-lg px-2 py-1 text-center text-sm font-black leading-tight text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer enabled:hover:brightness-110 ${isSelected ? 'border-[3px] border-[#ffd539] scale-[1.03] brightness-110' : 'border-0 opacity-80'}`}
+                style={{
+                  backgroundColor: destination.cardBg,
+                  boxShadow: isSelected
+                    ? '0 0 0 2px rgba(255, 213, 57, 0.28), 0 0 12px rgba(255, 213, 57, 0.45)'
+                    : 'none',
+                }}
+              >
+                {destination.label}
+              </button>
+              {!selectedDestinationEligible && <HoverTooltip id={tooltipId} placement={columnIndex === 0 ? 'left' : columnIndex === selectedSuitRow.indices.length - 1 ? 'right' : 'center'}>{disguiseRequirement}</HoverTooltip>}
+            </div>
           );
         })}
       </div>
 
-      <button type="button" disabled={busy || checkingStatus || !toonId || !districtId || districts.length === 0 || hasActiveBoardingGroup || !selectedDestinationEligible} onClick={teleport} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-        {checkingStatus ? 'Checking...' : busy ? 'Teleporting...' : `Teleport to ${selectedDestination.label}`}
-      </button>
+      <div className="group relative w-full" tabIndex={teleportDisabledReason ? 0 : -1}>
+        <button type="button" aria-describedby={teleportDisabledReason ? 'quick-teleport-disabled-reason' : undefined} disabled={!!teleportDisabledReason} onClick={teleport} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
+          {checkingStatus ? 'Checking...' : busy ? 'Teleporting...' : `Teleport to ${selectedDestination.label}`}
+        </button>
+        {teleportDisabledReason && <HoverTooltip id="quick-teleport-disabled-reason">{teleportDisabledReason}</HoverTooltip>}
+      </div>
 
       {status && (
         <div className="flex items-end gap-2 px-1">
           <p role="status" className="min-w-0 flex-1 whitespace-pre-line text-[10px] leading-snug text-green-100/75">{status}</p>
-          <button
-            type="button"
-            onClick={refreshLocation}
-            disabled={!toonId || busy || checkingStatus || refreshCooldown > 0}
-            title={refreshCooldown > 0 ? `Location can be refreshed again in ${refreshCooldown} seconds` : 'Refresh Toon location'}
-            aria-label={refreshCooldown > 0 ? `Refresh location, available in ${refreshCooldown} seconds` : 'Refresh location'}
-            className="flex shrink-0 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[9px] font-bold text-green-100/80 transition-colors enabled:cursor-pointer enabled:hover:bg-white/10 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={checkingStatus ? 'animate-spin' : ''}><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
-            {checkingStatus ? 'Checking' : refreshCooldown > 0 ? `${refreshCooldown}s` : 'Refresh'}
-          </button>
+          <div className="group relative shrink-0" tabIndex={refreshDisabled ? 0 : -1}>
+            <button
+              type="button"
+              onClick={refreshLocation}
+              disabled={refreshDisabled}
+              aria-describedby="quick-teleport-refresh-tooltip"
+              aria-label={refreshCooldown > 0 ? `Refresh location, available in ${refreshCooldown} seconds` : 'Refresh location'}
+              className="flex items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[9px] font-bold text-green-100/80 transition-colors enabled:cursor-pointer enabled:hover:bg-white/10 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={checkingStatus ? 'animate-spin' : ''}><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+              {checkingStatus ? 'Checking' : refreshCooldown > 0 ? `${refreshCooldown}s` : 'Refresh'}
+            </button>
+            <HoverTooltip id="quick-teleport-refresh-tooltip" placement="right">{refreshTooltip}</HoverTooltip>
+          </div>
         </div>
       )}
       </div>

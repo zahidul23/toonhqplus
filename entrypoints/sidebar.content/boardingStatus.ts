@@ -1,3 +1,5 @@
+import { isToonHqAuthenticated } from './toonHqPageState';
+
 export type BoardingGroupStatus = null | {
   district?: number;
   location?: number;
@@ -55,6 +57,7 @@ export function setBoardingGroupsSocketSid(sid: string | null): void {
 }
 
 async function postBoardingSubscription(toonId: number, sid: string, request: 'subscribe' | 'unsubscribe'): Promise<void> {
+  if (!isToonHqAuthenticated()) return;
   const csrfToken = getCsrfToken();
   if (!csrfToken) throw new Error('Could not read ToonHQ\'s CSRF token.');
 
@@ -98,6 +101,7 @@ function queueBoardingCreationSubscriptionSync(): void {
 }
 
 export function setBoardingCreationSubscription(toonId: number | null): void {
+  if (toonId != null && !isToonHqAuthenticated()) toonId = null;
   if (desiredSubscriptionToonId === toonId) return;
   desiredSubscriptionToonId = toonId;
   queueBoardingCreationSubscriptionSync();
@@ -156,6 +160,7 @@ export function handleBoardingResponse(response: BoardingResponse): boolean {
 }
 
 async function requestBoardingGroupStatus(toonId: number): Promise<BoardingGroupStatus> {
+  if (!isToonHqAuthenticated()) throw new Error('You are not logged in to ToonHQ.');
   const socketSid = await waitForGroupsSocketSid();
 
   const csrfToken = getCsrfToken();
