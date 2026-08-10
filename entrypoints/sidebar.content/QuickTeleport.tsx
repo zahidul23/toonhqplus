@@ -284,12 +284,15 @@ export function QuickTeleport() {
   const disguiseRequirement = `Requires a Level 13 ${selectedDepartment} disguise. Current level: ${selectedSuitLevel}.`;
   const selectedDistrict = districts.find(district => String(district.id) === districtId);
   const hasActiveBoardingGroup = !!boardingStatus?.type;
+  const toonIsOffline = boardingStatus === null;
   const teleportDisabledReason = busy
     ? 'Teleport is in progress.'
     : checkingStatus
       ? 'Checking your Toon’s status. Please wait.'
       : !toonId
         ? 'Select an active Toon to use Quick Teleport.'
+        : toonIsOffline
+          ? 'Your active Toon appears to be offline.'
         : !districtId || districts.length === 0
           ? 'Select a destination district.'
           : hasActiveBoardingGroup
@@ -326,7 +329,7 @@ export function QuickTeleport() {
   };
 
   const teleport = async () => {
-    if (!toonId || !districtId || busy) return;
+    if (!toonId || !districtId || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup) return;
     const destination = DESTINATIONS[destinationIndex];
     const suitLevel = getToonSuitLevel(selectedToon?.[destination.suitKey]);
     if (suitLevel < 13) {
@@ -424,7 +427,7 @@ export function QuickTeleport() {
           aria-labelledby="teleport-district-label teleport-district-value"
           aria-haspopup="listbox"
           aria-expanded={districtMenuOpen}
-          disabled={busy || checkingStatus || hasActiveBoardingGroup}
+          disabled={busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
           onClick={() => setDistrictMenuOpen(open => !open)}
           className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/20 px-2.5 py-2 text-left text-xs font-bold text-white transition-colors enabled:hover:bg-black/30 focus:border-emerald-500/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -433,7 +436,7 @@ export function QuickTeleport() {
           </span>
           <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-white/40 transition-transform ${districtMenuOpen ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
         </button>
-        {districtMenuOpen && (
+        {districtMenuOpen && !toonIsOffline && (
           <div role="listbox" aria-labelledby="teleport-district-label" className="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-[#152c22] p-1 shadow-2xl custom-scrollbar">
             {districts.map(district => {
               const value = String(district.id);
@@ -466,10 +469,10 @@ export function QuickTeleport() {
             <div key={row.label} className="group relative" tabIndex={!isEligible ? 0 : -1}>
               <button
                 type="button"
-                disabled={!isEligible || busy || checkingStatus || hasActiveBoardingGroup}
+                disabled={!isEligible || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
                 aria-describedby={!isEligible ? rowTooltipId : undefined}
                 onClick={() => setDestinationIndex(row.indices[0])}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy && !checkingStatus && !hasActiveBoardingGroup ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy && !checkingStatus && !toonIsOffline && !hasActiveBoardingGroup ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
                 style={{
                   boxShadow: isSelected ? '0 0 0 3px rgba(255, 213, 57, 0.2), 0 3px 9px rgba(0, 0, 0, 0.25)' : 'none',
                 }}
@@ -493,7 +496,7 @@ export function QuickTeleport() {
                 type="button"
                 aria-pressed={isSelected}
                 aria-describedby={!selectedDestinationEligible ? tooltipId : undefined}
-                disabled={!selectedDestinationEligible || busy || checkingStatus || hasActiveBoardingGroup}
+                disabled={!selectedDestinationEligible || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
                 onClick={() => setDestinationIndex(index)}
                 className={`flex min-h-14 w-full items-center justify-center overflow-hidden rounded-lg px-2 py-1 text-center text-sm font-black leading-tight text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer enabled:hover:brightness-110 ${isSelected ? 'border-[3px] border-[#ffd539] scale-[1.03] brightness-110' : 'border-0 opacity-80'}`}
                 style={{
@@ -519,7 +522,7 @@ export function QuickTeleport() {
       </div>
 
       {status && (
-        <div className="flex items-end gap-2 px-1">
+        <div className="flex items-center gap-2 px-1">
           <p role="status" className="min-w-0 flex-1 whitespace-pre-line text-[10px] leading-snug text-green-100/75">{status}</p>
           <div className="group relative shrink-0" tabIndex={refreshDisabled ? 0 : -1}>
             <button
