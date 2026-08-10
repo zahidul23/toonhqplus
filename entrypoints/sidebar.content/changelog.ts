@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.19',
+    date: 'Aug 10, 2026',
+    changes: [
+      'Add Quick Teleport feature to Groups Tab in Sidebar',
+    ]
+  },
+  {
     version: '1.2.18',
     date: 'Aug 3, 2026',
     changes: [
