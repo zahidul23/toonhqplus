@@ -89,7 +89,6 @@ async function syncBoardingCreationSubscription(): Promise<void> {
       await postBoardingSubscription(desiredToonId, sid, 'subscribe');
       if (groupsSocketSid !== sid) return;
       activeSubscription = { sid, toonId: desiredToonId };
-      console.log(`[ToonHQ+] Subscribed to boarding creation for Toon ${desiredToonId}.`);
     }
   } catch (error) {
     console.warn('[ToonHQ+] Could not update the boarding creation subscription:', error);
@@ -113,7 +112,6 @@ export function onBoardingCreated(listener: BoardingCreatedListener): () => void
 }
 
 export function handleBoardingCreated(status: Exclude<BoardingGroupStatus, null>): void {
-  console.log('[ToonHQ+] boarding_created:', status);
   if (desiredSubscriptionToonId == null || activeSubscription?.toonId !== desiredSubscriptionToonId) return;
   recentStatusByToon.set(desiredSubscriptionToonId, status);
   recentFailureByToon.delete(desiredSubscriptionToonId);
@@ -147,7 +145,6 @@ export function rejectPendingBoardingRequests(message = 'The ToonHQ groups conne
 }
 
 export function handleBoardingResponse(response: BoardingResponse): boolean {
-  console.log('[ToonHQ+] boarding_response:', response);
   const nonce = Number(response?.nonce);
   const pending = pendingRequests.get(nonce);
   if (!pending) return false;

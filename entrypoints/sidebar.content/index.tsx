@@ -1578,7 +1578,6 @@ export default defineContentScript({
             lastSeen: new Date().toISOString(),
           } as ToonRecord;
         });
-        console.log('[ToonHQ+] Initial active toons loaded:', newToons.length, 'toons.');
         await putToons(newToons);
         await setSetting('active-toon-ids', newToons.map(t => t.id));
         }
@@ -1646,7 +1645,6 @@ export default defineContentScript({
     };
 
     const cleanupToonCacheTask = async () => {
-      console.log('[ToonHQ+] Running toon cache cleanup...');
       try {
         await cleanupToonCache();
       } catch (e) {
@@ -1702,7 +1700,6 @@ export default defineContentScript({
           syncToonData(group.members);
           syncGroupHistory(group);
         });
-        console.log('[ToonHQ+] Initial groups state loaded:', Object.keys(groupsState).length, 'groups.');
       }
     } catch (e) {
       console.error('[ToonHQ+] Failed to fetch initial groups list', e);
@@ -1787,11 +1784,11 @@ export default defineContentScript({
       ws.addEventListener('open', () => {
         if (isReconnecting) {
           if (plannedSocketRestart) {
-            console.log('[ToonHQ+] Group tracker socket restarted.');
+            console.info('[ToonHQ+] Group tracker socket restarted.');
             plannedSocketRestart = false;
             isReconnecting = false;
           } else {
-            console.log('[ToonHQ+] Reconnected! Reloading page...');
+            console.info('[ToonHQ+] Reconnected! Reloading page...');
             window.location.reload();
             return;
           }
@@ -1801,7 +1798,7 @@ export default defineContentScript({
           return;
         }
 
-        console.log('[ToonHQ+] Direct WebSocket connection opened.');
+        console.info('[ToonHQ+] Direct WebSocket connection opened.');
       });
 
       ws.addEventListener('message', (event) => {
@@ -1832,7 +1829,7 @@ export default defineContentScript({
                 if (prefix === '40' && payload && !Array.isArray(payload) && typeof payload.sid === 'string') {
                   socketNamespaceReady = true;
                   setBoardingGroupsSocketSid(payload.sid);
-                  console.log('[ToonHQ+] Groups Socket.IO session ready.');
+                  console.info('[ToonHQ+] Groups Socket.IO session ready.');
                   emitSocketEventWithAck(ws, 'track', 'groups', 1);
                   void authenticateSocket(ws);
                 } else if (Array.isArray(payload) && typeof payload[0] === 'string') {
@@ -1884,11 +1881,9 @@ export default defineContentScript({
                       syncGroupHistory(groupsState[data.group]);
                     }
                   }
-                } else {
-                  console.log(`[ToonHQ+] Socket Message (${prefix}):`, payload);
                 }
               } catch (e) {
-                console.log(`[ToonHQ+] Socket Msg (Raw ${prefix}):`, payloadString);
+                // Ignore malformed or unsupported socket messages.
               }
             }
           }
@@ -1901,7 +1896,7 @@ export default defineContentScript({
         rejectPendingBoardingRequests();
         if (groupTrackerDisposed) return;
         if (!isReconnecting) {
-          console.log(plannedSocketRestart
+          console.info(plannedSocketRestart
             ? '[ToonHQ+] Restarting group tracker socket...'
             : '[ToonHQ+] WebSocket closed. Attempting to reconnect...');
           isReconnecting = true;
@@ -1914,7 +1909,7 @@ export default defineContentScript({
       });
 
       ws.addEventListener('error', () => {
-        console.log('[ToonHQ+] WebSocket error.');
+        console.warn('[ToonHQ+] WebSocket error.');
       });
 
       scheduleSocketRestart();

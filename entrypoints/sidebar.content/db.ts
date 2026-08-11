@@ -766,7 +766,7 @@ export async function cleanupHistory(limit: number = 20, maxMembers: number = 20
   }
 
   await promisifyTx(t);
-  console.log(`[ToonHQ+] Cleaned up ${deleteGroupIds.length} groups from history.`);
+  console.info(`[ToonHQ+] Cleaned up ${deleteGroupIds.length} groups from history.`);
   notifyChanged('groups');
 }
 
@@ -889,7 +889,7 @@ export async function cleanupToonCache(): Promise<void> {
 
   await promisifyTx(t);
   if (hashToReal.size > 0 || deletedCount > 0) {
-    console.log(`[ToonHQ+] Cleaned up ${deletedCount} old toons; de-duplicated ${hashToReal.size} toons.`);
+    console.info(`[ToonHQ+] Cleaned up ${deletedCount} old toons; de-duplicated ${hashToReal.size} toons.`);
     notifyChanged('toons');
     if (hashToReal.size > 0) {
       notifyChanged('toony_toons');
@@ -1004,7 +1004,7 @@ export async function migrateFromLocalStorage(): Promise<void> {
     }
 
     await setSetting('migrated-v1', true);
-    console.log('[ToonHQ+] Migration from local storage complete.');
+    console.info('[ToonHQ+] Migration from local storage complete.');
   } catch (e) {
     console.error('[ToonHQ+] Migration from local storage failed:', e);
   }

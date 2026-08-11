@@ -14,7 +14,6 @@ import {
 } from './lib/storageTransfer';
 
 export default defineBackground(() => {
-  const DEBUG = false; // Set to true to enable verbose interval logging
   const connections = new Map<string, { ws: WebSocket; data: ToonTrackerData | null; authorized: boolean }>();
   let primaryPort: string | null = null;
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
@@ -109,10 +108,8 @@ export default defineBackground(() => {
   }
 
   async function initializeBackground() {
-    console.log("Inititalizing");
     trackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
     if (trackerEnabled === true) {
-      console.log("tracker enabled");
       startAutoDiscover();
       startTracking();
       // On boot attempt initial sync
@@ -201,7 +198,7 @@ export default defineBackground(() => {
       ...(change.metadata ? { metadata: change.metadata } : {}),
     }));
 
-    console.log(`[ToonTracker BG] Detected ${newEntries.length} new rewards for ${data.data.toon.name}`);
+    console.info(`[ToonTracker BG] Detected ${newEntries.length} new rewards for ${data.data.toon.name}`);
     const updated = pruneRewardHistory([...newEntries, ...history]);
     await setSetting(historyKey, updated);
 
@@ -327,8 +324,7 @@ export default defineBackground(() => {
   async function startTracking() {
     if (trackerEnabled !== true) return;
     if (trackingTimeout) return;
-    console.log("[ToonTracker BG] Starting active tracking...");
-
+    console.info("[ToonTracker BG] Starting active tracking...");
     TRACKED_PORTS.forEach(port => {
       try { connectToPort(port); } catch (e) { }
     });
@@ -342,7 +338,6 @@ export default defineBackground(() => {
     };
 
     const pollTrackedPorts = () => {
-      if (DEBUG) console.log("[ToonTracker BG] Sending all request...");
       if (trackerEnabled !== true) return;
       TRACKED_PORTS.forEach(port => {
         const info = connections.get(port);
@@ -381,7 +376,7 @@ export default defineBackground(() => {
 
   function stopTracking() {
     if (trackingTimeout) {
-      console.log("[ToonTracker BG] No active clients, stopping tracker...");
+      console.info("[ToonTracker BG] No active clients, stopping tracker...");
       clearTimeout(trackingTimeout);
       trackingTimeout = null;
     }
@@ -536,7 +531,6 @@ export default defineBackground(() => {
 
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === KEEP_ALIVE_ALARM) {
-      if (DEBUG) console.log("[ToonTracker BG] Keep alive ping: " + new Date().toLocaleTimeString());
       // Re-initialize if the SW was killed and restarted mid-session
       if (trackerEnabled === undefined) {
         initializeBackground().catch(console.error);
@@ -555,8 +549,7 @@ export default defineBackground(() => {
     browser.runtime.reload();
   });
 
-  browser.runtime.onInstalled.addListener((details) => {
-    console.log(details);
+  browser.runtime.onInstalled.addListener(() => {
     initializeBackground().catch(console.error);
   });
 

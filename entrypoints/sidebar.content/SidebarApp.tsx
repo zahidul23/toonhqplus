@@ -2045,7 +2045,7 @@ export function SidebarApp() {
 
         const err = browser.runtime.lastError;
         if (err?.message?.includes('Extension context invalidated')) {
-          console.log('[ToonTracker UI] Extension updated or invalidated. Stopping tracker.');
+          console.info('[ToonTracker UI] Extension updated or invalidated. Stopping tracker.');
           return; // Stop trying to reconnect, the user needs to refresh the page
         }
 
