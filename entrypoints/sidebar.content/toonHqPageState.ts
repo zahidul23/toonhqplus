@@ -62,6 +62,28 @@ export function getToonHqOwnedToons(): unknown[] | null {
   return null;
 }
 
+export function getToonHqActiveToonId(): string | null {
+  const currentToon = getPersistedAccountsState()?.currentToon;
+  return currentToon == null ? null : String(currentToon);
+}
+
+export function getToonHqActiveTtrToonId(): number | null {
+  const activeToonId = getToonHqActiveToonId();
+  if (!activeToonId) return null;
+
+  const activeToon = getToonHqOwnedToons()?.find((toon) => {
+    if (!toon || typeof toon !== 'object') return false;
+    return String((toon as Record<string, unknown>).id) === activeToonId;
+  });
+  if (!activeToon || typeof activeToon !== 'object') return null;
+
+  const toon = activeToon as Record<string, unknown>;
+  const numericToonId = Number(activeToonId);
+  return toon.external === true && Number(toon.game) === 1 && Number.isFinite(numericToonId)
+    ? numericToonId
+    : null;
+}
+
 export function takeEmbeddedSocketAuthToken(): string | null {
   const state = getToonHqPageState();
   const token = state?.socket_auth;

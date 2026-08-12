@@ -2,8 +2,8 @@ import ReactDOM from 'react-dom/client';
 import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
-import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingRequests, setBoardingGroupsSocketSid } from './boardingStatus';
-import { getToonHqOwnedToons, isToonHqAuthenticated, takeEmbeddedSocketAuthToken } from './toonHqPageState';
+import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingRequests, setBoardingCreationSubscription, setBoardingGroupsSocketSid } from './boardingStatus';
+import { getToonHqActiveTtrToonId, getToonHqOwnedToons, isToonHqAuthenticated, takeEmbeddedSocketAuthToken } from './toonHqPageState';
 import './style.css';
 import {
   openDB,
@@ -1730,6 +1730,8 @@ export default defineContentScript({
     let pendingSocketAuthToken = takeEmbeddedSocketAuthToken();
     let socketNamespaceReady = false;
     let lastKnownAuthentication = isToonHqAuthenticated();
+    let lastKnownBoardingSubscriptionToonId = getToonHqActiveTtrToonId();
+    setBoardingCreationSubscription(lastKnownBoardingSubscriptionToonId);
 
     const emitSocketEventWithAck = (ws: WebSocket, eventName: string, ...args: unknown[]) => {
       const ackId = nextSocketAckId++;
@@ -1920,6 +1922,12 @@ export default defineContentScript({
     // ToonHQ login/logout happens inside the SPA without necessarily reloading
     // the page, so mirror its account watcher for the extension-owned socket.
     const authenticationInterval = window.setInterval(() => {
+      const boardingSubscriptionToonId = getToonHqActiveTtrToonId();
+      if (boardingSubscriptionToonId !== lastKnownBoardingSubscriptionToonId) {
+        lastKnownBoardingSubscriptionToonId = boardingSubscriptionToonId;
+        setBoardingCreationSubscription(boardingSubscriptionToonId);
+      }
+
       const authenticated = isToonHqAuthenticated();
       if (authenticated === lastKnownAuthentication) return;
       lastKnownAuthentication = authenticated;

@@ -79,12 +79,12 @@ async function syncBoardingCreationSubscription(): Promise<void> {
   const previous = activeSubscription;
 
   try {
-    if (previous?.sid === sid && previous.toonId !== desiredSubscriptionToonId) {
+    const desiredToonId = desiredSubscriptionToonId;
+    if (desiredToonId == null && previous?.sid === sid) {
       await postBoardingSubscription(previous.toonId, sid, 'unsubscribe');
       activeSubscription = null;
     }
     if (groupsSocketSid !== sid) return;
-    const desiredToonId = desiredSubscriptionToonId;
     if (desiredToonId != null && (activeSubscription?.sid !== sid || activeSubscription.toonId !== desiredToonId)) {
       await postBoardingSubscription(desiredToonId, sid, 'subscribe');
       if (groupsSocketSid !== sid) return;
@@ -116,6 +116,10 @@ export function handleBoardingCreated(status: Exclude<BoardingGroupStatus, null>
   recentStatusByToon.set(desiredSubscriptionToonId, status);
   recentFailureByToon.delete(desiredSubscriptionToonId);
   for (const listener of boardingCreatedListeners) listener(status);
+}
+
+export function getCachedBoardingGroupStatus(toonId: number): BoardingGroupStatus | undefined {
+  return recentStatusByToon.get(toonId);
 }
 
 function waitForGroupsSocketSid(): Promise<string> {

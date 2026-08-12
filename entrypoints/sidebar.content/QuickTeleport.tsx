@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { BoardingGroupStatus, getBoardingGroupStatus, onBoardingCreated, setBoardingCreationSubscription } from './boardingStatus';
+import { BoardingGroupStatus, getBoardingGroupStatus, getCachedBoardingGroupStatus, onBoardingCreated } from './boardingStatus';
+import { getSettings, setSetting } from './db';
 import { getToonSuitLevel } from './toonUtils';
-import { getToonHqOwnedToons, isToonHqAuthenticated } from './toonHqPageState';
+import { getToonHqActiveToonId, getToonHqOwnedToons, isToonHqAuthenticated } from './toonHqPageState';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
@@ -21,6 +22,10 @@ type Destination = {
   suitKey: SuitKey;
 };
 
+function getDestinationFullName(destination: Destination): string {
+  return destination.maxPlayers === 4 ? destination.description : destination.label;
+}
+
 function getExtensionImageUrl(path: string): string {
   return browser.runtime.getURL(path.replace(/^\/+/, '') as any);
 }
@@ -31,15 +36,15 @@ const DESTINATIONS: Destination[] = [
   { label: 'CJ', description: 'Lawbot HQ boss lobby', type: 7, location: 12, options: {}, maxPlayers: 8, cardBg: '#2956a5', cardBorder: '#6ba6ff', suitKey: 'lawbot' },
   { label: 'CEO', description: 'Bossbot HQ boss lobby', type: 9, location: 4, options: {}, maxPlayers: 8, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
 
-  { label: 'Steel Factory', description: 'Sellbot HQ facility', type: 2, location: 23, options: { '3': 11, '4': 13 }, maxPlayers: 4, cardBg: '#7b00ae', cardBorder: '#b54de4', suitKey: 'sellbot' },
-  { label: 'Bullion Mint', description: 'Cashbot HQ facility', type: 4, location: 5, options: { '7': 20 }, maxPlayers: 4, cardBg: '#147529', cardBorder: '#35c75a', suitKey: 'cashbot' },
-  { label: 'Senior Wing', description: 'Lawbot HQ facility', type: 6, location: 12, options: { '9': 26 }, maxPlayers: 4, cardBg: '#2956a5', cardBorder: '#6ba6ff', suitKey: 'lawbot' },
-  { label: 'Final Fringe', description: 'Bossbot HQ facility', type: 8, location: 4, options: { '10': 29 }, maxPlayers: 4, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
+  { label: 'Steel', description: 'Steel Factory', type: 2, location: 23, options: { '3': 11, '4': 13 }, maxPlayers: 4, cardBg: '#7b00ae', cardBorder: '#b54de4', suitKey: 'sellbot' },
+  { label: 'Bullion', description: 'Bullion Mint', type: 4, location: 5, options: { '7': 20 }, maxPlayers: 4, cardBg: '#147529', cardBorder: '#35c75a', suitKey: 'cashbot' },
+  { label: 'Senior', description: 'Senior Wing', type: 6, location: 12, options: { '9': 26 }, maxPlayers: 4, cardBg: '#2956a5', cardBorder: '#6ba6ff', suitKey: 'lawbot' },
+  { label: 'Fringe', description: 'Final Fringe', type: 8, location: 4, options: { '10': 29 }, maxPlayers: 4, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
 
-  { label: 'Scrap Factory', description: 'Sellbot HQ facility', type: 2, location: 23, options: { '3': 10, '4': 12 }, maxPlayers: 4, cardBg: '#7b00ae', cardBorder: '#b54de4', suitKey: 'sellbot' },
-  { label: 'Coin Mint', description: 'Cashbot HQ facility', type: 4, location: 5, options: { '7': 18 }, maxPlayers: 4, cardBg: '#147529', cardBorder: '#35c75a', suitKey: 'cashbot' },
-  { label: 'Junior Wing', description: 'Lawbot HQ facility', type: 6, location: 12, options: { '9': 23 }, maxPlayers: 4, cardBg: '#2956a5', cardBorder: '#6ba6ff', suitKey: 'lawbot' },
-  { label: 'First Fairway', description: 'Bossbot HQ facility', type: 8, location: 4, options: { '10': 27 }, maxPlayers: 4, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
+  { label: 'Scrap', description: 'Scrap Factory', type: 2, location: 23, options: { '3': 10, '4': 12 }, maxPlayers: 4, cardBg: '#7b00ae', cardBorder: '#b54de4', suitKey: 'sellbot' },
+  { label: 'Coin', description: 'Coin Mint', type: 4, location: 5, options: { '7': 18 }, maxPlayers: 4, cardBg: '#147529', cardBorder: '#35c75a', suitKey: 'cashbot' },
+  { label: 'Junior', description: 'Junior Wing', type: 6, location: 12, options: { '9': 23 }, maxPlayers: 4, cardBg: '#2956a5', cardBorder: '#6ba6ff', suitKey: 'lawbot' },
+  { label: 'Fairway', description: 'First Fairway', type: 8, location: 4, options: { '10': 27 }, maxPlayers: 4, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
 ];
 
 const TEST_DISTRICTS = new Set(['bounce grove', 'crunchville', 'kaboomberg', 'nutty river', 'patter plains', 'whamfield']);
@@ -56,7 +61,41 @@ let cachedToonsAt = 0;
 let toonsRequest: Promise<Toon[]> | null = null;
 const TOONS_CACHE_MS = 60_000;
 const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
+const AUTO_BOARDING_CHECK_COOLDOWN_MS = 60_000;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
+const AUTO_DELIST_SETTING = 'quick-teleport-auto-delist';
+const DESTINATION_SETTING = 'quick-teleport-destination';
+const LAST_AUTO_BOARDING_CHECK_KEY = 'toonhqplus-quick-teleport-last-auto-boarding-check';
+const MANUAL_REFRESH_STATUS = 'Use Refresh to check this Toon\'s current location and boarding-group status.';
+
+type PersistedAutoBoardingCheck = {
+  checkedAt: number;
+  result?: BoardingGroupStatus;
+};
+
+function getPersistedAutoBoardingCheck(toonId: string): PersistedAutoBoardingCheck | null {
+  try {
+    const rawValue = localStorage.getItem(`${LAST_AUTO_BOARDING_CHECK_KEY}:${toonId}`);
+    if (!rawValue) return null;
+    const value = JSON.parse(rawValue);
+    // Backward compatibility for timestamp-only entries.
+    if (typeof value === 'number' && Number.isFinite(value)) return { checkedAt: value };
+    if (!value || typeof value !== 'object' || !Number.isFinite(value.checkedAt)) return null;
+    const persisted: PersistedAutoBoardingCheck = { checkedAt: value.checkedAt };
+    if (Object.prototype.hasOwnProperty.call(value, 'result') && (value.result === null || typeof value.result === 'object')) {
+      persisted.result = value.result as BoardingGroupStatus;
+    }
+    return persisted;
+  } catch {
+    return null;
+  }
+}
+
+function setPersistedAutoBoardingCheck(toonId: string, value: PersistedAutoBoardingCheck): void {
+  try {
+    localStorage.setItem(`${LAST_AUTO_BOARDING_CHECK_KEY}:${toonId}`, JSON.stringify(value));
+  } catch { }
+}
 
 function HoverTooltip({ id, children, placement = 'center' }: { id: string; children: React.ReactNode; placement?: 'left' | 'center' | 'right' }) {
   const positionClass = placement === 'left'
@@ -136,18 +175,6 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
-function getToonHqActiveToonId(): string | null {
-  if (!isToonHqAuthenticated()) return null;
-  try {
-    const persistedState = localStorage.getItem('vuex');
-    if (!persistedState) return null;
-    const currentToon = JSON.parse(persistedState)?.accounts?.currentToon;
-    return currentToon == null ? null : String(currentToon);
-  } catch {
-    return null;
-  }
-}
-
 function formatLocationName(name: string): string {
   return name.replace(/\s+Playground$/i, '');
 }
@@ -174,12 +201,51 @@ export function QuickTeleport() {
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
   const [autoDelist, setAutoDelist] = useState(true);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [infoTooltipOpen, setInfoTooltipOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const coreData = useMemo(getTtrCoreData, []);
   const districts = coreData.districts;
   const districtMenuRef = useRef<HTMLDivElement>(null);
   const selectedDistrictOptionRef = useRef<HTMLButtonElement>(null);
+  const quickTeleportActiveRef = useRef(false);
+
+  useEffect(() => {
+    quickTeleportActiveRef.current = preferencesLoaded;
+    return () => {
+      quickTeleportActiveRef.current = false;
+    };
+  }, [preferencesLoaded]);
+
+  const selectDestination = (index: number) => {
+    const destination = DESTINATIONS[index];
+    if (!destination) return;
+    setDestinationIndex(index);
+    setSetting(DESTINATION_SETTING, destination.label).catch(error => console.error('Could not save the Quick Teleport destination.', error));
+  };
+
+  const updateAutoDelist = (value: boolean) => {
+    setAutoDelist(value);
+    setSetting(AUTO_DELIST_SETTING, value).catch(error => console.error('Could not save the Quick Teleport auto-delist preference.', error));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    getSettings([AUTO_DELIST_SETTING, DESTINATION_SETTING])
+      .then(values => {
+        if (cancelled) return;
+        if (typeof values[AUTO_DELIST_SETTING] === 'boolean') setAutoDelist(values[AUTO_DELIST_SETTING]);
+        if (typeof values[DESTINATION_SETTING] === 'string') {
+          const savedDestinationIndex = DESTINATIONS.findIndex(destination => destination.label === values[DESTINATION_SETTING]);
+          if (savedDestinationIndex >= 0) setDestinationIndex(savedDestinationIndex);
+        }
+      })
+      .catch(error => console.error('Could not load the Quick Teleport preferences.', error))
+      .finally(() => {
+        if (!cancelled) setPreferencesLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!districtMenuOpen) return;
@@ -217,7 +283,9 @@ export function QuickTeleport() {
       loadTtrToons()
         .then(result => {
           setToons(result);
-          setStatus(current => current.startsWith('Could not load your toons:') ? '' : current);
+          setStatus(current => current.startsWith('Could not load your toons:')
+            ? (getToonHqActiveToonId() ? MANUAL_REFRESH_STATUS : '')
+            : current);
         })
         .catch(error => setStatus(`Could not load your toons: ${error.message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : error.message}`));
     };
@@ -238,41 +306,80 @@ export function QuickTeleport() {
   }, []);
 
   useEffect(() => {
-    if (!toonId) {
-      setBoardingCreationSubscription(null);
+    if (!preferencesLoaded || !toonId) {
       setBoardingStatus(undefined);
+      setCheckingStatus(false);
+      setStatus('');
       return;
     }
 
-    setBoardingCreationSubscription(Number(toonId));
+    const cachedBoardingStatus = getCachedBoardingGroupStatus(Number(toonId));
+    const persistedCheck = getPersistedAutoBoardingCheck(toonId);
+    const hasPersistedResult = !!persistedCheck
+      && Date.now() - persistedCheck.checkedAt < AUTO_BOARDING_CHECK_COOLDOWN_MS
+      && Object.prototype.hasOwnProperty.call(persistedCheck, 'result');
+    const restoredBoardingStatus = cachedBoardingStatus !== undefined
+      ? cachedBoardingStatus
+      : hasPersistedResult
+        ? persistedCheck!.result
+        : undefined;
+    if (restoredBoardingStatus !== undefined || hasPersistedResult) {
+      setBoardingStatus(restoredBoardingStatus ?? null);
+      if (restoredBoardingStatus?.district != null) setDistrictId(String(restoredBoardingStatus.district));
+      setStatus(describeBoardingStatus(restoredBoardingStatus ?? null, districts, coreData.locations));
+      return;
+    }
 
+    setBoardingStatus(undefined);
+    setCheckingStatus(false);
+    setStatus(MANUAL_REFRESH_STATUS);
+  }, [preferencesLoaded, toonId, districts, coreData.locations]);
+
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+    return onBoardingCreated(result => {
+      if (!quickTeleportActiveRef.current) return;
+      setBoardingStatus(result);
+      if (result.district != null) setDistrictId(String(result.district));
+      setStatus(describeBoardingStatus(result, districts, coreData.locations));
+    });
+  }, [preferencesLoaded, districts, coreData.locations]);
+
+  useEffect(() => {
+    if (!preferencesLoaded || !toonId) return;
+    const now = Date.now();
+    const persistedCheck = getPersistedAutoBoardingCheck(toonId);
+    if (now - (persistedCheck?.checkedAt ?? 0) < AUTO_BOARDING_CHECK_COOLDOWN_MS) return;
+
+    // Persist before starting the request so remounts, reloads, and failures
+    // cannot generate a burst of automatic checks.
+    setPersistedAutoBoardingCheck(toonId, {
+      checkedAt: now,
+      ...(persistedCheck && Object.prototype.hasOwnProperty.call(persistedCheck, 'result')
+        ? { result: persistedCheck.result }
+        : {}),
+    });
     let cancelled = false;
     setCheckingStatus(true);
-    setBoardingStatus(undefined);
-    getBoardingGroupStatus(Number(toonId))
+    setStatus('Checking your Toon\'s current location...');
+    getBoardingGroupStatus(Number(toonId), true)
       .then(result => {
-        if (cancelled) return;
+        setPersistedAutoBoardingCheck(toonId, { checkedAt: now, result });
+        if (cancelled || !quickTeleportActiveRef.current) return;
         setBoardingStatus(result);
         if (result?.district != null) setDistrictId(String(result.district));
         setStatus(describeBoardingStatus(result, districts, coreData.locations));
       })
       .catch(error => {
-        let message = error instanceof Error ? error.message : String(error);
-        message = message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : message;
-        if (!cancelled) setStatus(`Could not check Toon status: ${error.message}`);
+        if (cancelled || !quickTeleportActiveRef.current) return;
+        setStatus(`Could not check Toon status: ${error instanceof Error ? error.message : String(error)}`);
       })
       .finally(() => {
-        if (!cancelled) setCheckingStatus(false);
+        if (!cancelled && quickTeleportActiveRef.current) setCheckingStatus(false);
       });
 
     return () => { cancelled = true; };
-  }, [toonId, districts, coreData.locations]);
-
-  useEffect(() => onBoardingCreated(result => {
-    setBoardingStatus(result);
-    if (result.district != null) setDistrictId(String(result.district));
-    setStatus(describeBoardingStatus(result, districts, coreData.locations));
-  }), [districts, coreData.locations]);
+  }, [preferencesLoaded, toonId, districts, coreData.locations]);
 
   const selectedToon = toons.find(toon => String(toon.id) === toonId);
   const selectedDestination = DESTINATIONS[destinationIndex];
@@ -331,10 +438,11 @@ export function QuickTeleport() {
   const teleport = async () => {
     if (!toonId || !districtId || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup) return;
     const destination = DESTINATIONS[destinationIndex];
+    const destinationFullName = getDestinationFullName(destination);
     const suitLevel = getToonSuitLevel(selectedToon?.[destination.suitKey]);
     if (suitLevel < 13) {
       const department = destination.suitKey[0].toUpperCase() + destination.suitKey.slice(1);
-      setStatus(`${selectedToon?.name || 'This Toon'} needs a level 13 ${department} disguise for ${destination.label}.`);
+      setStatus(`${selectedToon?.name || 'This Toon'} needs a level 13 ${department} disguise for ${destinationFullName}.`);
       return;
     }
     const csrfToken = getCsrfToken();
@@ -344,7 +452,7 @@ export function QuickTeleport() {
     }
 
     setBusy(true);
-    setStatus(`Creating a temporary group for ${destination.label}...`);
+    setStatus(`Creating a temporary group for ${destinationFullName}...`);
     try {
       const createResponse = await fetch('/api/groups/create/', {
         method: 'POST',
@@ -379,13 +487,15 @@ export function QuickTeleport() {
 
       setStatus('Teleport requested. Checking the in-game boarding group in 10 seconds...');
       await new Promise(resolve => window.setTimeout(resolve, TELEPORT_VERIFICATION_DELAY_MS));
+      if (!quickTeleportActiveRef.current) return;
 
       setStatus('Verifying the in-game boarding group...');
       const verifiedStatus = await getBoardingGroupStatus(Number(toonId), true);
+      if (!quickTeleportActiveRef.current) return;
       if (!verifiedStatus?.type) throw new Error('Something went wrong. We were not able to create a boarding group.');
 
       setBoardingStatus(verifiedStatus);
-      setStatus(`Teleport requested to ${destination.label}.\nThe in-game boarding group is active${autoDelist ? ' and the ToonHQ listing was removed' : ''}.`);
+      setStatus(`Teleport requested to ${destinationFullName}.\nThe in-game boarding group is active${autoDelist ? ' and the ToonHQ listing was removed' : ''}.`);
     } catch (error) {
       setStatus(error instanceof Error && error.message.startsWith('Teleport was requested, but')
         ? error.message
@@ -395,11 +505,13 @@ export function QuickTeleport() {
     }
   };
 
+  if (!preferencesLoaded) return null;
+
   return (
     <>
       <div className="relative mb-2 ml-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-sm font-medium text-green-50">Quick Teleport</h3>
+          <h3 className="text-sm font-medium text-green-50">{autoDelist ? 'Quick Teleport' : 'Quick Create'}</h3>
           <div className="flex items-center">
             <button type="button" aria-label="About Quick Teleport" aria-describedby="quick-teleport-tooltip" onMouseEnter={() => setInfoTooltipOpen(true)} onMouseLeave={() => setInfoTooltipOpen(false)} onFocus={() => setInfoTooltipOpen(true)} onBlur={() => setInfoTooltipOpen(false)} className="flex h-4 w-4 cursor-help items-center justify-center rounded-full text-green-100/55 transition-colors hover:text-green-100 focus:text-green-100 focus:outline-none">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
@@ -408,14 +520,14 @@ export function QuickTeleport() {
         </div>
         <label className="flex cursor-pointer items-center gap-1.5 text-[9px] font-bold text-green-100/70">
           <span>Auto-delist</span>
-          <input type="checkbox" checked={autoDelist} disabled={busy} onChange={event => setAutoDelist(event.target.checked)} className="peer sr-only" />
+          <input type="checkbox" checked={autoDelist} disabled={busy} onChange={event => updateAutoDelist(event.target.checked)} className="peer sr-only" />
           <span className="relative h-4 w-7 rounded-full bg-white/15 transition-colors peer-checked:bg-emerald-500/70 peer-disabled:cursor-not-allowed peer-disabled:opacity-40 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-3" />
         </label>
         {infoTooltipOpen && (
           <div id="quick-teleport-tooltip" role="tooltip" className="pointer-events-none absolute left-0 right-0 top-full z-[80] mt-1.5 rounded-lg border border-rose-200/20 bg-[#3a2028] p-2.5 text-[11px] font-normal leading-relaxed text-rose-50 shadow-2xl">
-            <p>Quick Teleport uses ToonHQ group creation to teleport you into the selected boss or facility lobby.</p>
-            <p className="mt-1.5">When Auto-delist is enabled, the ToonHQ listing is immediately removed after the teleport request.</p>
-            <p className="mt-1.5">Use it to reach a lobby quickly, then invite friends to the in-game group without keeping the listing up on ToonHQ.</p>
+            <p>Quick Teleport creates a ToonHQ group to teleport you into the selected boss or facility lobby.</p>
+            <p className="mt-1.5">With Auto-delist enabled, the listing is removed immediately after the teleport request. The in-game group remains for you to invite your friends.</p>
+            <p className="mt-1.5">With Auto-delist disabled, Quick Create simply serves as a shortcut for creating and listing a group.</p>
           </div>
         )}
       </div>
@@ -429,7 +541,7 @@ export function QuickTeleport() {
           aria-expanded={districtMenuOpen}
           disabled={busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
           onClick={() => setDistrictMenuOpen(open => !open)}
-          className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/20 px-2.5 py-2 text-left text-xs font-bold text-white transition-colors enabled:hover:bg-black/30 focus:border-emerald-500/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/20 px-2.5 py-2 text-left text-xs font-bold text-white transition-colors enabled:cursor-pointer enabled:hover:bg-black/30 focus:border-emerald-500/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           <span id="teleport-district-value" className={selectedDistrict ? '' : 'text-white/45'}>
             {selectedDistrict ? `${selectedDistrict.name}${selectedDistrict.speedchat_only ? ' (SpeedChat)' : ''}` : 'Select a district'}
@@ -471,7 +583,7 @@ export function QuickTeleport() {
                 type="button"
                 disabled={!isEligible || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
                 aria-describedby={!isEligible ? rowTooltipId : undefined}
-                onClick={() => setDestinationIndex(row.indices[0])}
+                onClick={() => selectDestination(row.indices[0])}
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy && !checkingStatus && !toonIsOffline && !hasActiveBoardingGroup ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
                 style={{
                   boxShadow: isSelected ? '0 0 0 3px rgba(255, 213, 57, 0.2), 0 3px 9px rgba(0, 0, 0, 0.25)' : 'none',
@@ -497,8 +609,9 @@ export function QuickTeleport() {
                 aria-pressed={isSelected}
                 aria-describedby={!selectedDestinationEligible ? tooltipId : undefined}
                 disabled={!selectedDestinationEligible || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
-                onClick={() => setDestinationIndex(index)}
-                className={`flex min-h-14 w-full items-center justify-center overflow-hidden rounded-lg px-2 py-1 text-center text-sm font-black leading-tight text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer enabled:hover:brightness-110 ${isSelected ? 'border-[3px] border-[#ffd539] scale-[1.03] brightness-110' : 'border-0 opacity-80'}`}
+                onClick={() => selectDestination(index)}
+                title={destination.description}
+                className={`flex min-h-9 w-full items-center justify-center overflow-hidden rounded-lg px-2 py-1 text-center text-xs font-black leading-tight text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer enabled:hover:brightness-110 ${isSelected ? 'border-[3px] border-[#ffd539] scale-[1.03] brightness-110' : 'border-0 opacity-80'}`}
                 style={{
                   backgroundColor: destination.cardBg,
                   boxShadow: isSelected
@@ -516,7 +629,7 @@ export function QuickTeleport() {
 
       <div className="group relative w-full" tabIndex={teleportDisabledReason ? 0 : -1}>
         <button type="button" aria-describedby={teleportDisabledReason ? 'quick-teleport-disabled-reason' : undefined} disabled={!!teleportDisabledReason} onClick={teleport} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-          {checkingStatus ? 'Checking...' : busy ? 'Teleporting...' : `Teleport to ${selectedDestination.label}`}
+          {checkingStatus ? 'Checking...' : busy ? (autoDelist ? 'Teleporting...' : 'Creating...') : autoDelist ? `Teleport to ${selectedDestination.label}` : `Create ${selectedDestination.label} Group`}
         </button>
         {teleportDisabledReason && <HoverTooltip id="quick-teleport-disabled-reason">{teleportDisabledReason}</HoverTooltip>}
       </div>
@@ -531,10 +644,9 @@ export function QuickTeleport() {
               disabled={refreshDisabled}
               aria-describedby="quick-teleport-refresh-tooltip"
               aria-label={refreshCooldown > 0 ? `Refresh location, available in ${refreshCooldown} seconds` : 'Refresh location'}
-              className="flex items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[9px] font-bold text-green-100/80 transition-colors enabled:cursor-pointer enabled:hover:bg-white/10 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/20 text-green-100/80 transition-colors enabled:cursor-pointer enabled:hover:bg-white/10 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={checkingStatus ? 'animate-spin' : ''}><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
-              {checkingStatus ? 'Checking' : refreshCooldown > 0 ? `${refreshCooldown}s` : 'Refresh'}
             </button>
             <HoverTooltip id="quick-teleport-refresh-tooltip" placement="right">{refreshTooltip}</HoverTooltip>
           </div>

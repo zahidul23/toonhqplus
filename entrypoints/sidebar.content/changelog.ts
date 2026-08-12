@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.20',
+    date: 'Aug 12, 2026',
+    changes: [
+      'Remember Quick Teleport destination and auto-delist preferences',
+      'Add Quick Create mode when auto-delist is disabled',
+      'Improve Toon location and boarding-group status checks'
+    ]
+  },
+  {
     version: '1.2.19',
     date: 'Aug 10, 2026',
     changes: [
