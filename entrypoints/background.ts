@@ -1,7 +1,9 @@
 import { closeDB, getSetting, setSetting } from './sidebar.content/db';
 import { checkRewards, getRewardHistoryKey, pruneRewardHistory, isDeepEqual } from './sidebar.content/trackerUtils';
 import type { ToonTrackerData } from './sidebar.content/tracker';
-import type { RewardHistoryEntry } from './sidebar.content/trackerUtils';
+import type { RewardChange, RewardHistoryEntry } from './sidebar.content/trackerUtils';
+import { createRewardNotificationIcon } from './lib/rewardNotificationIcon';
+import { formatSosReward } from './sidebar.content/sosData';
 import {
   analyzeExtensionStorageMerge,
   mergeIndexedDatabases,
@@ -21,6 +23,14 @@ export default defineBackground(() => {
   const connectingPorts = new Set<string>();
   const intentionalDisconnectSockets = new WeakSet<WebSocket>();
   const TRACKER_ENABLED_KEY = 'tracker-enabled';
+  const REWARD_NOTIFICATIONS_ENABLED_KEY = 'reward-notifications-enabled';
+  const REWARD_NOTIFICATION_MERGE_MS = 5 * 1000;
+  const recentRewardNotifications = new Map<string, {
+    toonIds: Set<string>;
+    expiresAt: number;
+  }>();
+  let rewardNotificationSequence = 0;
+  let rewardNotificationQueue: Promise<void> = Promise.resolve();
   let trackerEnabled: boolean | undefined = undefined;
   let trackingTimeout: ReturnType<typeof setTimeout> | null = null;
   let autoDiscoverTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -184,7 +194,107 @@ export default defineBackground(() => {
     } catch (e) { }
   }
 
-  async function addNotifications(data: ToonTrackerData, changes: any[]) {
+  async function sendRewardNotifications(data: ToonTrackerData, changes: RewardChange[]) {
+    const notificationSettings = await browser.storage.local.get(REWARD_NOTIFICATIONS_ENABLED_KEY);
+    if (notificationSettings[REWARD_NOTIFICATIONS_ENABLED_KEY] !== true) return;
+    if (!await browser.permissions.contains({ permissions: ['notifications'] })) return;
+
+    const presentation: Record<string, { label: string }> = {
+      sos: { label: 'SOS Card' },
+      unites: { label: 'Unite' },
+      summons: { label: 'Cog Summons' },
+      pinkslips: { label: 'Pink Slips' },
+      remotes: { label: 'Remote' },
+    };
+
+    const remoteChanges = changes.filter(change => change.type === 'remotes');
+    const individualChanges = changes.filter(change => change.type !== 'remotes');
+
+    const notifications = (await Promise.all(individualChanges.map(async change => {
+      const style = presentation[change.type];
+      if (!style) return null;
+      const detail = change.type === 'sos'
+        ? formatSosReward(change.subtype)
+        : change.type === 'summons' && change.metadata?.summonType
+          ? `${change.subtype} — ${change.metadata.summonType}`
+          : change.subtype;
+
+      return {
+        signature: JSON.stringify([change.type, change.subtype, change.count, change.metadata || null]),
+        options: {
+          type: 'basic',
+          iconUrl: await createRewardNotificationIcon(change),
+          title: `+${change.count} ${style.label}`,
+          message: detail,
+          contextMessage: data.data.toon.name,
+        },
+      } as const;
+    }))).filter((notification): notification is NonNullable<typeof notification> => notification !== null);
+
+    if (remoteChanges.length > 0) {
+      const total = remoteChanges.reduce((sum, change) => sum + change.count, 0);
+      const hasHealingRemote = remoteChanges.some(change => /heal/i.test(change.subtype));
+      const hasDamageRemote = remoteChanges.some(change => !/heal/i.test(change.subtype));
+      const details = remoteChanges.map(change => {
+        const level = change.metadata?.remoteLevel ? `${change.metadata.remoteLevel}-star ` : '';
+        return `${change.count}× ${level}${change.subtype}`;
+      });
+      notifications.push({
+        signature: JSON.stringify(remoteChanges.map(change => [
+          change.type,
+          change.subtype,
+          change.count,
+          change.metadata || null,
+        ])),
+        options: {
+          type: 'basic',
+          iconUrl: hasHealingRemote && hasDamageRemote
+            ? browser.runtime.getURL('images/remotes-combined.png' as any)
+            : await createRewardNotificationIcon(remoteChanges[0]),
+          title: `+${total} ${total === 1 ? 'Remote' : 'Remotes'}`,
+          message: details.join('\n'),
+          contextMessage: data.data.toon.name,
+        },
+      });
+    }
+
+    const toonId = data.data.toon.id;
+    if (!toonId) return;
+
+    // Serialize creates and updates so simultaneous tracker messages cannot both
+    // create a notification before either one registers the recent match.
+    const operation = async () => {
+      for (const notification of notifications) {
+        const now = Date.now();
+        for (const [signature, recent] of recentRewardNotifications) {
+          if (recent.expiresAt <= now) recentRewardNotifications.delete(signature);
+        }
+
+        const recent = recentRewardNotifications.get(notification.signature);
+        if (recent && !recent.toonIds.has(toonId)) {
+          // Leave the first notification untouched. Updating it immediately when
+          // another toon reports the same reward can prevent the original toast
+          // and sound from being presented by the operating system.
+          recent.toonIds.add(toonId);
+          recent.expiresAt = now + REWARD_NOTIFICATION_MERGE_MS;
+          continue;
+        }
+
+        const id = `toonhqplus-reward-${now}-${rewardNotificationSequence++}`;
+        await browser.notifications.create(id, notification.options);
+        recentRewardNotifications.set(notification.signature, {
+          toonIds: new Set([toonId]),
+          expiresAt: now + REWARD_NOTIFICATION_MERGE_MS,
+        });
+      }
+    };
+
+    const queued = rewardNotificationQueue.then(operation, operation);
+    rewardNotificationQueue = queued.then(() => undefined, () => undefined);
+    await queued;
+  }
+
+  async function addNotifications(data: ToonTrackerData, changes: RewardChange[]) {
     if (changes.length === 0 || !data.data.toon.id) return;
     const toonId = data.data.toon.id;
     const historyKey = getRewardHistoryKey(toonId);
@@ -201,6 +311,7 @@ export default defineBackground(() => {
     console.info(`[ToonTracker BG] Detected ${newEntries.length} new rewards for ${data.data.toon.name}`);
     const updated = pruneRewardHistory([...newEntries, ...history]);
     await setSetting(historyKey, updated);
+    await sendRewardNotifications(data, changes);
 
     if (primaryPort && connections.get(primaryPort)?.data?.data.toon.id === toonId) {
       broadcastStatus();
@@ -437,6 +548,26 @@ export default defineBackground(() => {
       sendResponse({ received: true });
     } else if (message.type === 'GET_TRACKER_PREF') {
       sendResponse({ enabled: trackerEnabled });
+    } else if (message.type === 'GET_REWARD_NOTIFICATION_PERMISSION') {
+      browser.permissions.contains({ permissions: ['notifications'] }).then(granted => {
+        sendResponse({ ok: true, granted });
+      }).catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return true;
+    } else if (message.type === 'REQUEST_REWARD_NOTIFICATION_PERMISSION') {
+      browser.permissions.request({ permissions: ['notifications'] }).then(granted => {
+        sendResponse({ ok: true, granted });
+      }).catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return true;
+    } else if (message.type === 'REMOVE_REWARD_NOTIFICATION_PERMISSION') {
+      browser.permissions.remove({ permissions: ['notifications'] }).then(async () => {
+        const stillGranted = await browser.permissions.contains({ permissions: ['notifications'] });
+        if (stillGranted) {
+          sendResponse({ ok: false, error: 'The browser did not remove notification permission.' });
+        } else {
+          sendResponse({ ok: true, removed: true });
+        }
+      }).catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return true;
     } else if (message.type === 'SYNC_GAMES') {
       if (trackerEnabled === true) {
         const portsToSync = message.port ? [message.port] : TRACKED_PORTS;

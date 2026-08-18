@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.21',
+    date: 'Aug 19, 2026',
+    changes: [
+      'Add opt in desktop notifications for new rewards in Toon Tracker',
+    ]
+  },
+  {
     version: '1.2.20',
     date: 'Aug 12, 2026',
     changes: [

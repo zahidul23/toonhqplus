@@ -1363,6 +1363,8 @@ export function SidebarApp() {
   const [highlightGroupsEnabled, setHighlightGroupsEnabled] = useState(false);
   const [sidebarOnLeft, setSidebarOnLeft] = useState(false);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
+  const [rewardNotificationsEnabled, setRewardNotificationsEnabled] = useState(false);
+  const [rewardNotificationError, setRewardNotificationError] = useState<string | null>(null);
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -1925,7 +1927,7 @@ export function SidebarApp() {
   useEffect(() => {
     initSyncNotesRemoteListener(refresh);
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left']).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left', 'reward-notifications-enabled']).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
@@ -1934,6 +1936,18 @@ export function SidebarApp() {
       if (values['highlight-groups'] !== undefined) setHighlightGroupsEnabled(!!values['highlight-groups']);
       if (values['sidebar-on-left'] !== undefined) setSidebarOnLeft(!!values['sidebar-on-left']);
       if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
+      Promise.all([
+        browser.storage.local.get('reward-notifications-enabled'),
+        browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
+      ]).then(([stored, permission]: any[]) => {
+        if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+        const storedValue = stored['reward-notifications-enabled'];
+        const enabled = storedValue === true || (storedValue === undefined && values['reward-notifications-enabled'] === true);
+        if (storedValue === undefined && values['reward-notifications-enabled'] === true) {
+          browser.storage.local.set({ 'reward-notifications-enabled': true }).catch(console.error);
+        }
+        setRewardNotificationsEnabled(enabled && permission?.granted === true);
+      }).catch(console.error);
 
       let initialTab = values['active-tab'];
       if (initialTab === 'tracker' && values['tracker-enabled'] === false) {
@@ -1991,6 +2005,13 @@ export function SidebarApp() {
         getSetting<boolean>('notes-enabled').then(v => { if (v !== undefined) setNotesEnabled(v !== false); });
         getSetting<boolean>('sync-notes-enabled').then(v => { if (v !== undefined) setSyncNotesEnabledState(v === true); });
         getSetting<boolean>('tracker-enabled').then(v => { if (v !== undefined) setTrackerEnabled(v !== false); });
+        Promise.all([
+          browser.storage.local.get('reward-notifications-enabled'),
+          browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
+      ]).then(([v, permission]: any[]) => {
+        if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+        setRewardNotificationsEnabled(v['reward-notifications-enabled'] === true && permission?.granted === true);
+      });
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
         getSetting<string[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
@@ -2016,11 +2037,19 @@ export function SidebarApp() {
       }
     };
 
+    const handleExtensionStorageChange = (changes: Record<string, Browser.storage.StorageChange>, areaName: string) => {
+      if (areaName !== 'local' || !changes['reward-notifications-enabled']) return;
+      setRewardNotificationsEnabled(changes['reward-notifications-enabled'].newValue === true);
+      setRewardNotificationError(null);
+    };
+
     window.addEventListener('toonhqplus-db-changed', handleDbChange);
     browser.runtime.onMessage.addListener(handleMessage);
+    browser.storage?.onChanged?.addListener(handleExtensionStorageChange);
     return () => {
       window.removeEventListener('toonhqplus-db-changed', handleDbChange);
       browser.runtime.onMessage.removeListener(handleMessage);
+      browser.storage?.onChanged?.removeListener(handleExtensionStorageChange);
     };
   }, [refresh]);
 
@@ -2570,6 +2599,62 @@ export function SidebarApp() {
                           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${bossInfoEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${bossInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">New Reward Notifications</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Show a browser notification with the reward image, amount, and reward name when Toon Tracker detects a new reward.
+                          </div>
+                          {rewardNotificationError && (
+                            <div className="mt-1 text-[10px] font-semibold text-amber-300">{rewardNotificationError}</div>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const previousEnabled = rewardNotificationsEnabled;
+                            try {
+                              if (previousEnabled) {
+                                setRewardNotificationsEnabled(false);
+                                setRewardNotificationError(null);
+                                await browser.storage.local.set({ 'reward-notifications-enabled': false });
+                                const removal = await browser.runtime.sendMessage({ type: 'REMOVE_REWARD_NOTIFICATION_PERMISSION' });
+                                if (removal?.ok === false) throw new Error(removal.error || 'Could not remove notification permission.');
+                                return;
+                              }
+                              const permission = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
+                              if (permission?.ok === false) throw new Error(permission.error || 'Could not request notification permission.');
+                              if (permission?.granted === true) {
+                                setRewardNotificationsEnabled(true);
+                                setRewardNotificationError(null);
+                                await browser.storage.local.set({ 'reward-notifications-enabled': true });
+                              } else {
+                                setRewardNotificationsEnabled(false);
+                                await browser.storage.local.set({ 'reward-notifications-enabled': false });
+                                setRewardNotificationError('Extension notification permission was not granted.');
+                              }
+                            } catch (error) {
+                              console.error('[ToonHQ+] Failed to update reward notifications.', error);
+                              try {
+                                const [stored, permission] = await Promise.all([
+                                  browser.storage.local.get('reward-notifications-enabled'),
+                                  browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
+                                ]);
+                                if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+                                setRewardNotificationsEnabled(stored['reward-notifications-enabled'] === true && permission?.granted === true);
+                              } catch {
+                                setRewardNotificationsEnabled(previousEnabled);
+                              }
+                              window.alert('ToonHQ+ could not update reward notifications. Please try again.');
+                            }
+                          }}
+                          aria-label="Toggle new reward notifications"
+                          aria-pressed={rewardNotificationsEnabled}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${rewardNotificationsEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${rewardNotificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
 

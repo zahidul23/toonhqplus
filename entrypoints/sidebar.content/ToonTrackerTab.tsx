@@ -4,6 +4,7 @@ import type { ToonTrackerData } from './tracker';
 import { browser } from 'wxt/browser';
 import { cogs as cogsData } from './cogs';
 import { gags as gagsConfig } from './gags';
+import { SOS_DATA } from './sosData';
 import {
   REWARD_HIGHLIGHT_MS,
   RECENT_REWARD_LIMIT,
@@ -226,41 +227,6 @@ function SummonIcon({ active, type }: { active: boolean, type: 'cog' | 'bldg' | 
   );
 }
 
-const SOS_DATA: Record<string, { type: string; starRating: number }> = {
-  'Lord Lowden Clear': { type: 'Fire', starRating: 5 },
-  'Professor Pete': { type: 'Restock', starRating: 5 },
-  'Professor Guffaw': { type: 'Restock', starRating: 3 },
-  'Clerk Ray': { type: 'Restock', starRating: 3 },
-  'Doctor Drift': { type: 'Restock', starRating: 3 },
-  'Melody Wavers': { type: 'Restock', starRating: 3 },
-  'Shelly Seaweed': { type: 'Restock', starRating: 3 },
-  'Rocky': { type: 'Throw', starRating: 5 },
-  'Sticky Lou': { type: 'Toons Hit', starRating: 5 },
-  'Julius Wheezer': { type: 'Cogs Miss', starRating: 5 },
-  'Flippy': { type: 'Toon Up', starRating: 5 },
-  'Clerk Clara': { type: 'Trap', starRating: 5 },
-  'Lil Oldman': { type: 'Lure', starRating: 5 },
-  'Nancy Gas': { type: 'Lure', starRating: 4 },
-  'Barnacle Bessie': { type: 'Drop', starRating: 5 },
-  'Baker Bridget': { type: 'Restock', starRating: 3 },
-  'Soggy Nell': { type: 'Toons Hit', starRating: 4 },
-  'Mr. Freeze': { type: 'Cogs Miss', starRating: 4 },
-  'Daffy Don': { type: 'Toon Up', starRating: 4 },
-  'Clerk Penny': { type: 'Trap', starRating: 4 },
-  'Stinky Ned': { type: 'Lure', starRating: 3 },
-  'Moe Zart': { type: 'Sound', starRating: 5 },
-  'Franz Neckvein': { type: 'Drop', starRating: 4 },
-  'Sofie Squirt': { type: 'Restock', starRating: 3 },
-  'Soggy Bottom': { type: 'Toons Hit', starRating: 3 },
-  'Flim Flam': { type: 'Cogs Miss', starRating: 3 },
-  'Madam Chuckle': { type: 'Toon Up', starRating: 3 },
-  'Clerk Will': { type: 'Trap', starRating: 3 },
-  'Sid Sonata': { type: 'Sound', starRating: 4 },
-  'Barbara Seville': { type: 'Sound', starRating: 3 },
-  'Clumsy Ned': { type: 'Drop', starRating: 3 },
-  'Loopy Loopenloop': { type: 'Squirt', starRating: 5 },
-};
-
 const FACILITIES_DATA: Record<string, { items: { name: string; val: number }[] }> = {
   sell: { items: [{ name: 'Long Steel', val: 1630 }, { name: 'Short Steel, +5 Battles', val: 1503 }, { name: 'Short Steel, +4 Battles', val: 1376 }, { name: 'Short Steel, +3 Battles', val: 1249 }, { name: 'Short Steel, +2 Battles', val: 1121 }, { name: 'Short Steel, +1 Battle', val: 994 }, { name: 'Short Steel', val: 867 }, { name: 'Long Scrap', val: 638 }, { name: 'Short Scrap, +5 Battles', val: 590 }, { name: 'Short Scrap, +4 Battles', val: 542 }, { name: 'Short Scrap, +3 Battles', val: 494 }, { name: 'Short Scrap, +2 Battles', val: 446 }, { name: 'Short Scrap, +1 Battle', val: 398 }, { name: 'Short Scrap', val: 350 }, { name: 'Cog Building', val: 300 }] },
   cash: { items: [{ name: 'Bullion Mint', val: 1850 }, { name: 'Bullion Mint, Minimal', val: 1626 }, { name: 'Coin Mint', val: 807 }, { name: 'Coin Mint, Minimal', val: 702 }, { name: 'Cog Building', val: 300 }] },
@@ -297,7 +263,7 @@ const ToonHeader = React.memo(({
   startSync,
   trackerEnabled
 }: ToonHeaderProps) => (
-  <div className={`py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
+  <div className={`z-[300] py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
     {trackerEnabled !== true ? (
       <div className="flex-1 flex items-center min-w-0 gap-3">
         <div className="w-10 h-10 rounded-full border border-white/10 bg-black/20 overflow-hidden shrink-0 relative flex items-center justify-center">
@@ -1282,6 +1248,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [activeInstances, setActiveInstances] = useState<{ port: string; toonName: string; toonId: string; isPrimary: boolean, connected: boolean, authorized: boolean }[]>([]);
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
+  const [rewardNotificationsEnabled, setRewardNotificationsEnabled] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [showRewardPieChart, setShowRewardPieChart] = useState(false);
 
@@ -1301,6 +1268,58 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     window.addEventListener('toonhqplus-open-shtickerbook', handleOpen);
     return () => window.removeEventListener('toonhqplus-open-shtickerbook', handleOpen);
   }, []);
+
+  useEffect(() => {
+    Promise.all([
+      browser.storage.local.get('reward-notifications-enabled'),
+      browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
+    ]).then(([stored, permission]: any[]) => {
+      if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+      setRewardNotificationsEnabled(stored['reward-notifications-enabled'] === true && permission?.granted === true);
+    }).catch(console.error);
+
+    const handleStorageChange = (changes: Record<string, Browser.storage.StorageChange>, areaName: string) => {
+      if (areaName === 'local' && changes['reward-notifications-enabled']) {
+        setRewardNotificationsEnabled(changes['reward-notifications-enabled'].newValue === true);
+      }
+    };
+    browser.storage?.onChanged?.addListener(handleStorageChange);
+    return () => browser.storage?.onChanged?.removeListener(handleStorageChange);
+  }, []);
+
+  const toggleRewardNotifications = useCallback(async (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const previousEnabled = rewardNotificationsEnabled;
+    try {
+      if (previousEnabled) {
+        setRewardNotificationsEnabled(false);
+        await browser.storage.local.set({ 'reward-notifications-enabled': false });
+        const removal = await browser.runtime.sendMessage({ type: 'REMOVE_REWARD_NOTIFICATION_PERMISSION' });
+        if (removal?.ok === false) throw new Error(removal.error || 'Could not remove notification permission.');
+        return;
+      }
+
+      const permission = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
+      if (permission?.ok === false) throw new Error(permission.error || 'Could not request notification permission.');
+      const enabled = permission?.granted === true;
+      setRewardNotificationsEnabled(enabled);
+      await browser.storage.local.set({ 'reward-notifications-enabled': enabled });
+    } catch (error) {
+      console.error('[ToonHQ+] Failed to update reward notifications.', error);
+      try {
+        const [stored, permission] = await Promise.all([
+          browser.storage.local.get('reward-notifications-enabled'),
+          browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
+        ]);
+        if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+        setRewardNotificationsEnabled(stored['reward-notifications-enabled'] === true && permission?.granted === true);
+      } catch {
+        setRewardNotificationsEnabled(previousEnabled);
+      }
+      window.alert('ToonHQ+ could not update reward notifications. Please try again.');
+    }
+  }, [rewardNotificationsEnabled]);
 
   useEffect(() => {
     if (subView === 'rewards_detail' && (window as any)._pendingRewardCategory) {
@@ -1843,10 +1862,44 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 }}
                 className={`space-y-2 rounded-xl bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] h-full ${isExpanded ? 'cursor-pointer hover:brightness-125 transition-all group/rewcard border border-white/5 hover:border-emerald-500/30' : ''}`}
               >
-                <button onClick={() => toggleSection('rewards')} className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Rewards {isExpanded && <span className="text-[8px] text-emerald-400/60 ml-2 opacity-0 group-hover/rewcard:opacity-100 transition-opacity">(View Detailed)</span>}</h4>
-                  {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.rewards ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
-                </button>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleSection('rewards');
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    toggleSection('rewards');
+                  }}
+                  className="w-full flex items-center px-2 py-1 group cursor-pointer"
+                >
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Rewards</h4>
+                  {isExpanded && <span className="text-[8px] text-emerald-400/60 ml-2 opacity-0 group-hover/rewcard:opacity-100 transition-opacity">(View Detailed)</span>}
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                    type="button"
+                    onClick={toggleRewardNotifications}
+                    className={`relative z-[100] group/notify p-0.5 transition-all cursor-pointer ${rewardNotificationsEnabled ? 'text-emerald-300 opacity-100' : 'text-white/35 opacity-55 hover:opacity-90 hover:text-white/70'}`}
+                    aria-label={`${rewardNotificationsEnabled ? 'Disable' : 'Enable'} reward notifications`}
+                    aria-pressed={rewardNotificationsEnabled}
+                  >
+                    {rewardNotificationsEnabled ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 18H3c0-2 3-2 3-9 0-.69.12-1.35.33-1.96"/><path d="M8.26 3.68A6 6 0 0 1 18 8c0 2.14.28 3.64.66 4.71"/><path d="m2 2 20 20"/></svg>
+                    )}
+                    <span className="pointer-events-none absolute right-0 top-full z-[100] mt-2 w-max max-w-[220px] rounded-md border border-white/10 bg-slate-950 px-2 py-1.5 text-[9px] font-bold normal-case tracking-normal text-white/90 opacity-0 transition-opacity group-hover/notify:opacity-100">
+                      <span className="block">Reward notifications are {rewardNotificationsEnabled ? 'enabled.' : 'disabled.'}</span>
+                      <span className="block">Click to {rewardNotificationsEnabled ? 'disable.' : 'enable.'}</span>
+                    </span>
+                    </button>
+                    {!isExpanded && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.rewards ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>}
+                  </div>
+                </div>
                 {toonTrackerData.data.rewards && (
                   <div className={`flex justify-between items-center py-3 ${isExpanded ? 'px-2' : 'px-2'}`}>
                     {(() => {
