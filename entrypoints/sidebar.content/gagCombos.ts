@@ -130,7 +130,7 @@ export const GAG_COMBOS_BY_LEVEL: Record<number, readonly ComboSpec[]> = {
     [['sound', 5], ['sound', 5], ['sound', 5], ['sound', 3]],
     [['sound', 5, true], ['sound', 5, true], ['sound', 5, true]],
     [['sound', 5, true], ['sound', 5, true], ['sound', 4], ['throw', 4]],
-    [['sound', 6, true], ['sound', 4, true], ['sound', 4, true], ['sound', 3]],
+    [['sound', 6, true], ['sound', 4, true], ['sound', 4], ['sound', 4]],
     [['throw', 5], ['throw', 5]],
     [['throw', 4, true], ['throw', 4], ['throw', 4], ['throw', 4]],
      withLure(['throw', 4], ['throw', 4], ['throw', 4]),
