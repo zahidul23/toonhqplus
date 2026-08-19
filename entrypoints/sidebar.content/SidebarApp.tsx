@@ -2604,62 +2604,6 @@ export function SidebarApp() {
 
                       <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
                         <div className="flex flex-col flex-1 mr-4">
-                          <div className="text-sm font-bold text-white">New Reward Notifications</div>
-                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
-                            Show a browser notification with the reward image, amount, and reward name when Toon Tracker detects a new reward.
-                          </div>
-                          {rewardNotificationError && (
-                            <div className="mt-1 text-[10px] font-semibold text-amber-300">{rewardNotificationError}</div>
-                          )}
-                        </div>
-                        <button
-                          onClick={async () => {
-                            const previousEnabled = rewardNotificationsEnabled;
-                            try {
-                              if (previousEnabled) {
-                                setRewardNotificationsEnabled(false);
-                                setRewardNotificationError(null);
-                                await browser.storage.local.set({ 'reward-notifications-enabled': false });
-                                const removal = await browser.runtime.sendMessage({ type: 'REMOVE_REWARD_NOTIFICATION_PERMISSION' });
-                                if (removal?.ok === false) throw new Error(removal.error || 'Could not remove notification permission.');
-                                return;
-                              }
-                              const permission = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
-                              if (permission?.ok === false) throw new Error(permission.error || 'Could not request notification permission.');
-                              if (permission?.granted === true) {
-                                setRewardNotificationsEnabled(true);
-                                setRewardNotificationError(null);
-                                await browser.storage.local.set({ 'reward-notifications-enabled': true });
-                              } else {
-                                setRewardNotificationsEnabled(false);
-                                await browser.storage.local.set({ 'reward-notifications-enabled': false });
-                                setRewardNotificationError('Extension notification permission was not granted.');
-                              }
-                            } catch (error) {
-                              console.error('[ToonHQ+] Failed to update reward notifications.', error);
-                              try {
-                                const [stored, permission] = await Promise.all([
-                                  browser.storage.local.get('reward-notifications-enabled'),
-                                  browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
-                                ]);
-                                if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
-                                setRewardNotificationsEnabled(stored['reward-notifications-enabled'] === true && permission?.granted === true);
-                              } catch {
-                                setRewardNotificationsEnabled(previousEnabled);
-                              }
-                              window.alert('ToonHQ+ could not update reward notifications. Please try again.');
-                            }
-                          }}
-                          aria-label="Toggle new reward notifications"
-                          aria-pressed={rewardNotificationsEnabled}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${rewardNotificationsEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
-                        >
-                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${rewardNotificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
-                        <div className="flex flex-col flex-1 mr-4">
                           <div className="text-sm font-bold text-white">Show Toon Notes</div>
                           <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
                             Shows notes for saved Toony and Stinky Toons directly in the group members list.
@@ -2758,6 +2702,63 @@ export function SidebarApp() {
                           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${trackerEnabled !== false ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${trackerEnabled !== false ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div className="text-sm font-bold text-white">New Reward Notifications</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Show a browser notification your toon receives a new reward.
+                          </div>
+                          <div className="mt-1 text-[10px] font-semibold text-amber-300">Requires Toon Tracker Integration</div>
+                          {rewardNotificationError && (
+                            <div className="mt-1 text-[10px] font-semibold text-amber-300">{rewardNotificationError}</div>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const previousEnabled = rewardNotificationsEnabled;
+                            try {
+                              if (previousEnabled) {
+                                setRewardNotificationsEnabled(false);
+                                setRewardNotificationError(null);
+                                await browser.storage.local.set({ 'reward-notifications-enabled': false });
+                                const removal = await browser.runtime.sendMessage({ type: 'REMOVE_REWARD_NOTIFICATION_PERMISSION' });
+                                if (removal?.ok === false) throw new Error(removal.error || 'Could not remove notification permission.');
+                                return;
+                              }
+                              const permission = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
+                              if (permission?.ok === false) throw new Error(permission.error || 'Could not request notification permission.');
+                              if (permission?.granted === true) {
+                                setRewardNotificationsEnabled(true);
+                                setRewardNotificationError(null);
+                                await browser.storage.local.set({ 'reward-notifications-enabled': true });
+                              } else {
+                                setRewardNotificationsEnabled(false);
+                                await browser.storage.local.set({ 'reward-notifications-enabled': false });
+                                setRewardNotificationError('Extension notification permission was not granted.');
+                              }
+                            } catch (error) {
+                              console.error('[ToonHQ+] Failed to update reward notifications.', error);
+                              try {
+                                const [stored, permission] = await Promise.all([
+                                  browser.storage.local.get('reward-notifications-enabled'),
+                                  browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' }),
+                                ]);
+                                if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+                                setRewardNotificationsEnabled(stored['reward-notifications-enabled'] === true && permission?.granted === true);
+                              } catch {
+                                setRewardNotificationsEnabled(previousEnabled);
+                              }
+                              window.alert('ToonHQ+ could not update reward notifications. Please try again.');
+                            }
+                          }}
+                          aria-label="Toggle new reward notifications"
+                          aria-pressed={rewardNotificationsEnabled}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${rewardNotificationsEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${rewardNotificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
                     </div>

@@ -226,7 +226,7 @@ export default defineBackground(() => {
           iconUrl: await createRewardNotificationIcon(change),
           title: `+${change.count} ${style.label}`,
           message: detail,
-          contextMessage: data.data.toon.name,
+          contextMessage: `ToonHQ+\n${data.data.toon.name}`,
         },
       } as const;
     }))).filter((notification): notification is NonNullable<typeof notification> => notification !== null);
@@ -253,7 +253,7 @@ export default defineBackground(() => {
             : await createRewardNotificationIcon(remoteChanges[0]),
           title: `+${total} ${total === 1 ? 'Remote' : 'Remotes'}`,
           message: details.join('\n'),
-          contextMessage: data.data.toon.name,
+          contextMessage: `ToonHQ+\n${data.data.toon.name}`,
         },
       });
     }
