@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.22',
+    date: 'Aug 19, 2026',
+    changes: [
+      'Show the Toon Tracker requirement for reward notifications only when the integration is disabled',
+      'Display the Toon Tracker toggle as disabled on fresh installs',
+      'Add static constants for districts and locations'
+    ]
+  },
+  {
     version: '1.2.21',
     date: 'Aug 19, 2026',
     changes: [

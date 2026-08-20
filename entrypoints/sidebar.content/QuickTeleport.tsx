@@ -47,7 +47,55 @@ const DESTINATIONS: Destination[] = [
   { label: 'Fairway', description: 'First Fairway', type: 8, location: 4, options: { '10': 27 }, maxPlayers: 4, cardBg: '#65452e', cardBorder: '#b97a4d', suitKey: 'bossbot' },
 ];
 
-const TEST_DISTRICTS = new Set(['bounce grove', 'crunchville', 'kaboomberg', 'nutty river', 'patter plains', 'whamfield']);
+const TTR_DISTRICTS: District[] = [
+  { id: 1, name: 'Zapwood', game: 1, speedchat_only: false },
+  { id: 21, name: 'Gulp Gulch', game: 1, speedchat_only: true },
+  { id: 25, name: 'Splashport', game: 1, speedchat_only: false },
+  { id: 26, name: 'Hiccup Hills', game: 1, speedchat_only: false },
+  { id: 27, name: 'Kaboom Cliffs', game: 1, speedchat_only: false },
+  { id: 28, name: 'Whoosh Rapids', game: 1, speedchat_only: true },
+  { id: 29, name: 'Splat Summit', game: 1, speedchat_only: false },
+  { id: 30, name: 'Bounceboro', game: 1, speedchat_only: false },
+  { id: 31, name: 'Zoink Falls', game: 1, speedchat_only: false },
+  { id: 32, name: 'Boingbury', game: 1, speedchat_only: true },
+  { id: 33, name: 'Thwackville', game: 1, speedchat_only: false },
+  { id: 34, name: 'Fizzlefield', game: 1, speedchat_only: false },
+  { id: 36, name: 'Blam Canyon', game: 1, speedchat_only: false },
+  { id: 93, name: 'Splatville', game: 1, speedchat_only: false },
+].sort((a, b) => a.name.localeCompare(b.name));
+
+const TTR_LOCATIONS: Location[] = [
+  { id: 1, name: 'Alto Avenue', game: 1 },
+  { id: 2, name: 'Baritone Boulevard', game: 1 },
+  { id: 3, name: 'Barnacle Boulevard', game: 1 },
+  { id: 4, name: 'Bossbot HQ', game: 1 },
+  { id: 5, name: 'Cashbot HQ', game: 1 },
+  { id: 6, name: 'Chip \'n Dale\'s Acorn Acres', game: 1 },
+  { id: 7, name: 'Daisy Gardens Playground', game: 1 },
+  { id: 8, name: 'Donald\'s Dock Playground', game: 1 },
+  { id: 9, name: 'Donald\'s Dreamland Playground', game: 1 },
+  { id: 10, name: 'Elm Street', game: 1 },
+  { id: 11, name: 'Goofy Speedway', game: 1 },
+  { id: 12, name: 'Lawbot HQ', game: 1 },
+  { id: 13, name: 'Lighthouse Lane', game: 1 },
+  { id: 14, name: 'Loopy Lane', game: 1 },
+  { id: 15, name: 'Lullaby Lane', game: 1 },
+  { id: 16, name: 'Maple Street', game: 1 },
+  { id: 17, name: 'Minnie\'s Melodyland Playground', game: 1 },
+  { id: 18, name: 'Oak Street', game: 1 },
+  { id: 19, name: 'Pajama Place', game: 1 },
+  { id: 20, name: 'Polar Place', game: 1 },
+  { id: 21, name: 'Punchline Place', game: 1 },
+  { id: 22, name: 'Seaweed Street', game: 1 },
+  { id: 23, name: 'Sellbot HQ', game: 1 },
+  { id: 24, name: 'Silly Street', game: 1 },
+  { id: 25, name: 'Sleet Street', game: 1 },
+  { id: 26, name: 'Tenor Terrace', game: 1 },
+  { id: 27, name: 'The Brrrgh Playground', game: 1 },
+  { id: 28, name: 'Toontown Central Playground', game: 1 },
+  { id: 29, name: 'Walrus Way', game: 1 },
+  { id: 73, name: 'Sellbot Task Force Hideout', game: 1 },
+];
 
 const DESTINATION_ROWS = [
   { label: 'Sellbot', indices: [0, 4, 8], image: getExtensionImageUrl('images/suits/Sellbot.png'), color: '#9a21c7' },
@@ -142,28 +190,7 @@ function getCsrfToken(): string {
 }
 
 function getTtrCoreData(): { districts: District[]; locations: Location[] } {
-  for (const script of Array.from(document.scripts)) {
-    const source = script.textContent || '';
-    const marker = 'window.STATE = ';
-    const start = source.indexOf(marker);
-    if (start < 0) continue;
-    const jsonStart = start + marker.length;
-    const jsonEnd = source.indexOf(';', jsonStart);
-    if (jsonEnd < 0) continue;
-    try {
-      const state = JSON.parse(source.slice(jsonStart, jsonEnd));
-      if (Array.isArray(state.districts)) {
-        return {
-          districts: state.districts
-            .filter((district: District) => district.game === 1 && !TEST_DISTRICTS.has(district.name.trim().toLowerCase()))
-            .sort((a: District, b: District) => a.name.localeCompare(b.name)),
-          locations: (Array.isArray(state.locations) ? state.locations : [])
-            .filter((location: Location) => location.game === 1),
-        };
-      }
-    } catch { }
-  }
-  return { districts: [], locations: [] };
+  return { districts: TTR_DISTRICTS, locations: TTR_LOCATIONS };
 }
 
 async function readError(response: Response): Promise<string> {
@@ -186,7 +213,7 @@ function describeBoardingStatus(result: BoardingGroupStatus, districts: District
   const location = rawLocation ? formatLocationName(rawLocation) : undefined;
   if (result.type) return `Online in ${district}${location ? ` at ${location}` : ''}.\nAlready in a boarding group.`;
   if (result.location) return `Online in ${district} at ${location || `location ${result.location}`}.\nNot in a boarding group.`;
-  return `Online in ${district}.\nPrecise location unavailable. Not in a boarding group.`;
+  return `Online in ${district}.\nPrecise location unavailable.\nNot in a boarding group.`;
 }
 
 export function QuickTeleport() {
@@ -636,7 +663,9 @@ export function QuickTeleport() {
 
       {status && (
         <div className="flex items-center gap-2 px-1">
-          <p role="status" className="min-w-0 flex-1 whitespace-pre-line text-[10px] leading-snug text-green-100/75">{status}</p>
+          <div role="status" className="min-w-0 flex-1 text-[10px] leading-snug text-green-100/75">
+            {status.split('\n').map((line, index) => <div key={`${index}:${line}`}>{line}</div>)}
+          </div>
           <div className="group relative shrink-0" tabIndex={refreshDisabled ? 0 : -1}>
             <button
               type="button"

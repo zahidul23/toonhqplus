@@ -2693,15 +2693,15 @@ export function SidebarApp() {
                         </div>
                         <button
                           onClick={() => {
-                            const next = !(trackerEnabled !== false);
+                            const next = trackerEnabled !== true;
                             setTrackerEnabled(next);
                             setSetting('tracker-enabled', next).catch(console.error);
                             // Notify background script about the change
                             browser.runtime.sendMessage({ type: 'TRACKER_PREF_CHANGED', enabled: next });
                           }}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${trackerEnabled !== false ? 'bg-emerald-600' : 'bg-white/10'}`}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none ring-1 ring-white/10 ${trackerEnabled === true ? 'bg-emerald-600' : 'bg-white/10'}`}
                         >
-                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${trackerEnabled !== false ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${trackerEnabled === true ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
 
@@ -2711,7 +2711,9 @@ export function SidebarApp() {
                           <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
                             Show a browser notification your toon receives a new reward.
                           </div>
-                          <div className="mt-1 text-[10px] font-semibold text-amber-300">Requires Toon Tracker Integration</div>
+                          {hasLoadedSettings && trackerEnabled !== true && (
+                            <div className="mt-1 text-[10px] font-semibold text-amber-300">Requires Toon Tracker Integration</div>
+                          )}
                           {rewardNotificationError && (
                             <div className="mt-1 text-[10px] font-semibold text-amber-300">{rewardNotificationError}</div>
                           )}
