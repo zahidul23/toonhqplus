@@ -27,6 +27,7 @@ import {
   setSetting,
   deleteGroup as dbDeleteGroup,
   clearAllGroups,
+  cleanupToonCache,
   exportSavedToonData,
   replaceSavedToonData,
   type ToonRecord,
@@ -54,6 +55,7 @@ import {
   mergeIndexedDatabases,
   mergeLocalStorage,
   measureBytes,
+  normalizeToonIdentitiesInSnapshot,
   parseTransferDocument,
   pruneIndexedDbSnapshotForExport,
   restoreIndexedDatabases,
@@ -423,6 +425,19 @@ async function exportAllData(includeFullToonCache: boolean): Promise<{ json: str
     throw new Error(extensionResponse.error);
   }
 
+  const siteIndexedDB = normalizeToonIdentitiesInSnapshot(
+    await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })
+  );
+  const extensionSnapshot = extensionResponse?.snapshot
+    ? {
+        ...extensionResponse.snapshot,
+        indexedDB: normalizeToonIdentitiesInSnapshot(extensionResponse.snapshot.indexedDB || {}),
+      }
+    : {
+        localStorage: {},
+        indexedDB: {},
+        browserStorageLocal: {},
+      };
   const snapshot: TransferSnapshot = {
     app: 'toonhqplus',
     version: 1,
@@ -431,14 +446,10 @@ async function exportAllData(includeFullToonCache: boolean): Promise<{ json: str
       site: {
         localStorage: snapshotLocalStorage(window.localStorage),
         indexedDB: includeFullToonCache
-          ? await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })
-          : pruneIndexedDbSnapshotForExport(await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] })),
+          ? siteIndexedDB
+          : pruneIndexedDbSnapshotForExport(siteIndexedDB),
       },
-      extension: extensionResponse?.snapshot ?? {
-        localStorage: {},
-        indexedDB: {},
-        browserStorageLocal: {},
-      },
+      extension: extensionSnapshot,
     },
   };
 
@@ -452,15 +463,29 @@ async function exportAllData(includeFullToonCache: boolean): Promise<{ json: str
 }
 
 async function buildImportPlan(snapshot: TransferSnapshot): Promise<ImportPlanSummary> {
+  const normalizedSnapshot: TransferSnapshot = {
+    ...snapshot,
+    origins: {
+      ...snapshot.origins,
+      site: {
+        ...snapshot.origins.site,
+        indexedDB: normalizeToonIdentitiesInSnapshot(snapshot.origins.site.indexedDB || {}),
+      },
+      extension: {
+        ...snapshot.origins.extension,
+        indexedDB: normalizeToonIdentitiesInSnapshot(snapshot.origins.extension.indexedDB || {}),
+      },
+    },
+  };
   const siteCurrent = {
     localStorage: snapshotLocalStorage(window.localStorage),
     indexedDB: await snapshotIndexedDatabases({ fallbackNames: ['toonhqplus'] }),
   };
-  const sitePlan = analyzeOriginStorageMerge(siteCurrent, snapshot.origins.site, 'Site');
+  const sitePlan = analyzeOriginStorageMerge(siteCurrent, normalizedSnapshot.origins.site, 'Site');
 
   const extensionResponse = await browser.runtime.sendMessage({
     type: 'ANALYZE_EXTENSION_IMPORT',
-    snapshot: snapshot.origins.extension,
+    snapshot: normalizedSnapshot.origins.extension,
   });
 
   if (extensionResponse?.error) {
@@ -622,7 +647,21 @@ async function stageSyncNotesForImport(
 }
 
 async function importAllData(text: string, options: { mode: ImportMode; conflictPolicy: ImportConflictPolicy; parsedSnapshot?: TransferSnapshot }): Promise<void> {
-  const snapshot = options.parsedSnapshot ?? await parseTransferDocument(text);
+  const parsedSnapshot = options.parsedSnapshot ?? await parseTransferDocument(text);
+  const snapshot: TransferSnapshot = {
+    ...parsedSnapshot,
+    origins: {
+      ...parsedSnapshot.origins,
+      site: {
+        ...parsedSnapshot.origins.site,
+        indexedDB: normalizeToonIdentitiesInSnapshot(parsedSnapshot.origins.site.indexedDB || {}),
+      },
+      extension: {
+        ...parsedSnapshot.origins.extension,
+        indexedDB: normalizeToonIdentitiesInSnapshot(parsedSnapshot.origins.extension.indexedDB || {}),
+      },
+    },
+  };
   const savedToonRollback = await exportSavedToonData();
   const syncStaged = await stageSyncNotesForImport(snapshot, options, savedToonRollback);
 
@@ -657,6 +696,10 @@ async function importAllData(text: string, options: { mode: ImportMode; conflict
         conflictPolicy: options.conflictPolicy,
       });
     }
+
+    // Normalize any pre-existing local hash records left behind by a merge and
+    // enforce the same history limits used by portable exports.
+    await cleanupToonCache();
 
     if (!syncStaged) {
       await syncSavedToonsAfterLocalMutation();

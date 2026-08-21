@@ -353,6 +353,114 @@ function extractSettingValue<T = any>(records: any[], key: string): T | undefine
   return record?.value as T | undefined;
 }
 
+function normalizeToonIdentityDatabase(database: IndexedDbDatabaseSnapshot): IndexedDbDatabaseSnapshot {
+  const toonsStore = database.stores.toons;
+  if (!toonsStore) return database;
+
+  const canonicalIdByHash = new Map<string, string>();
+  for (const toon of toonsStore.records) {
+    const id = toon?.id == null ? '' : String(toon.id);
+    const hashId = toon?.hashId == null ? '' : String(toon.hashId);
+    if (id && hashId && !id.startsWith('#')) canonicalIdByHash.set(hashId, id);
+  }
+
+  if (canonicalIdByHash.size === 0) return database;
+
+  const canonicalizeId = (value: unknown): unknown => {
+    if (value == null) return value;
+    const id = String(value);
+    return canonicalIdByHash.get(id) ?? id;
+  };
+
+  const stores = { ...database.stores };
+  const toonsById = new Map<string, any>();
+  for (const toon of toonsStore.records) {
+    if (toon?.id == null) continue;
+    const id = String(canonicalizeId(toon.id));
+    const normalized = { ...toon, id };
+    const existing = toonsById.get(id);
+    // Prefer the already-canonical record over its older synthetic duplicate.
+    if (!existing || !String(toon.id).startsWith('#')) toonsById.set(id, normalized);
+  }
+  stores.toons = { ...toonsStore, records: Array.from(toonsById.values()) };
+
+  for (const storeName of ['toony_toons', 'stinky_toons'] as const) {
+    const store = stores[storeName];
+    if (!store) continue;
+    const records = new Map<string, any>();
+    for (const record of store.records) {
+      if (record?.toonId == null) continue;
+      const toonId = String(canonicalizeId(record.toonId));
+      records.set(toonId, { ...record, toonId });
+    }
+    stores[storeName] = { ...store, records: Array.from(records.values()) };
+  }
+
+  const notesStore = stores.notes;
+  if (notesStore) {
+    const records = new Map<string, any>();
+    for (const record of notesStore.records) {
+      if (record?.toonId == null) continue;
+      const originalId = String(record.toonId);
+      const toonId = String(canonicalizeId(originalId));
+      // Prefer a note already stored under the canonical ID.
+      if (!records.has(toonId) || originalId === toonId) records.set(toonId, { ...record, toonId });
+    }
+    stores.notes = { ...notesStore, records: Array.from(records.values()) };
+  }
+
+  const membersStore = stores.group_members;
+  if (membersStore) {
+    const records = new Map<string, any>();
+    for (const record of membersStore.records) {
+      if (record?.toonId == null) continue;
+      const toonId = String(canonicalizeId(record.toonId));
+      const key = JSON.stringify([record.groupId, toonId]);
+      const existing = records.get(key);
+      if (!existing) {
+        records.set(key, { ...record, toonId });
+        continue;
+      }
+
+      const joinedTimes = [existing.joined, record.joined]
+        .filter(Boolean)
+        .sort((a, b) => Date.parse(String(a)) - Date.parse(String(b)));
+      const isActive = !existing.left || !record.left;
+      const leftTimes = [existing.left, record.left]
+        .filter(Boolean)
+        .sort((a, b) => Date.parse(String(b)) - Date.parse(String(a)));
+      records.set(key, {
+        ...existing,
+        ...record,
+        toonId,
+        joined: joinedTimes[0] ?? existing.joined ?? record.joined,
+        left: isActive ? null : (leftTimes[0] ?? existing.left ?? record.left),
+      });
+    }
+    stores.group_members = { ...membersStore, records: Array.from(records.values()) };
+  }
+
+  const settingsStore = stores.settings;
+  if (settingsStore) {
+    stores.settings = {
+      ...settingsStore,
+      records: settingsStore.records.map((record) => record?.key === 'active-toon-ids' && Array.isArray(record.value)
+        ? { ...record, value: [...new Set(record.value.map(canonicalizeId).map(String))] }
+        : record),
+    };
+  }
+
+  return { ...database, stores };
+}
+
+export function normalizeToonIdentitiesInSnapshot(
+  snapshot: Record<string, IndexedDbDatabaseSnapshot>
+): Record<string, IndexedDbDatabaseSnapshot> {
+  return Object.fromEntries(
+    Object.entries(snapshot).map(([name, database]) => [name, normalizeToonIdentityDatabase(database)])
+  );
+}
+
 function collectReferencedToonIds(database: IndexedDbDatabaseSnapshot): Set<string> {
   const referenced = new Set<string>();
   const toonyRecords = database.stores.toony_toons?.records ?? [];
@@ -417,7 +525,7 @@ function getExportableGroupIds(database: IndexedDbDatabaseSnapshot): Set<number>
 export function pruneIndexedDbSnapshotForExport(snapshot: Record<string, IndexedDbDatabaseSnapshot>): Record<string, IndexedDbDatabaseSnapshot> {
   const pruned: Record<string, IndexedDbDatabaseSnapshot> = {};
 
-  for (const [databaseName, database] of Object.entries(snapshot)) {
+  for (const [databaseName, database] of Object.entries(normalizeToonIdentitiesInSnapshot(snapshot))) {
     const toonsStore = database.stores.toons;
     if (!toonsStore) {
       pruned[databaseName] = database;
