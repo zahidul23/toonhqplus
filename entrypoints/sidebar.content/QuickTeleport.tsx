@@ -110,6 +110,7 @@ let cachedToonsAt = 0;
 let toonsRequest: Promise<Toon[]> | null = null;
 const TOONS_CACHE_MS = 60_000;
 const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
+const BOARDING_GROUP_COOLDOWN_SECONDS = 5 * 60;
 const AUTO_BOARDING_CHECK_COOLDOWN_MS = 60_000;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
 const AUTO_DELIST_SETTING = 'quick-teleport-auto-delist';
@@ -305,6 +306,20 @@ export function QuickTeleport() {
     return () => window.clearInterval(timer);
   }, [refreshCooldown > 0]);
 
+  const hasActiveBoardingGroup = !!boardingStatus?.type;
+
+  useEffect(() => {
+    if (!hasActiveBoardingGroup) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setBoardingStatus(undefined);
+      setStatus('The boarding-group cooldown expired. You can try Quick Teleport again.');
+    }, BOARDING_GROUP_COOLDOWN_SECONDS * 1000);
+    return () => window.clearTimeout(timer);
+  }, [hasActiveBoardingGroup, toonId]);
+
   useEffect(() => {
     const refreshToons = () => {
       if (!isToonHqAuthenticated()) return;
@@ -418,7 +433,6 @@ export function QuickTeleport() {
   const selectedDepartment = selectedDestination.suitKey[0].toUpperCase() + selectedDestination.suitKey.slice(1);
   const disguiseRequirement = `Requires a Level 13 ${selectedDepartment} disguise. Current level: ${selectedSuitLevel}.`;
   const selectedDistrict = districts.find(district => String(district.id) === districtId);
-  const hasActiveBoardingGroup = !!boardingStatus?.type;
   const toonIsOffline = boardingStatus === null;
   const teleportDisabledReason = busy
     ? 'Teleport is in progress.'

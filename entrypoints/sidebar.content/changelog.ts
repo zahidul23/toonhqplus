@@ -9,10 +9,10 @@ export const changelog: ChangelogEntry[] = [
     version: '1.2.25',
     date: 'Aug 21, 2026',
     changes: [
-      'Redesign Recent Groups with smoother detail transitions and previous or next group navigation',
-      'Show full group names, clearer timestamps, and member counts in group history',
-      'Fix historical group members failing to appear after a Toon ID is consolidated',
-      'Paginate saved toon lists and toon search results in groups of 10'
+      'Redesign Recent Groups with cleaner navigation',
+      'Fix invited group members failing to appear in history',
+      'Paginate Stinky and Toony Toons lists',
+      'Auto re-enable Quick Teleport five minutes after creating group'
     ]
   },
   {
@@ -34,9 +34,8 @@ export const changelog: ChangelogEntry[] = [
     version: '1.2.22',
     date: 'Aug 19, 2026',
     changes: [
-      'Show the Toon Tracker requirement for reward notifications only when the integration is disabled',
-      'Display the Toon Tracker toggle as disabled on fresh installs',
-      'Add static constants for districts and locations'
+      'Fix Toon Tracker setting showing incorrect initial state',
+      'Fix districts and locations display in Quick Teleport'
     ]
   },
   {
