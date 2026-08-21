@@ -2471,6 +2471,7 @@ function BookSidebar({
   trackerEnabled,
   hasLoadedSettings,
   sidebarOnLeft,
+  onClose,
 }: {
   activeTab: InfoBookTab;
   activeFacility: number | null;
@@ -2479,7 +2480,16 @@ function BookSidebar({
   trackerEnabled: boolean | undefined;
   hasLoadedSettings: boolean;
   sidebarOnLeft: boolean;
+  onClose: () => void;
 }) {
+  const [bossesExpanded, setBossesExpanded] = useState(activeTab === 'bosses');
+  const [facilitiesExpanded, setFacilitiesExpanded] = useState(activeTab === 'facilities');
+
+  useEffect(() => {
+    if (activeTab === 'bosses') setBossesExpanded(true);
+    if (activeTab === 'facilities') setFacilitiesExpanded(true);
+  }, [activeTab]);
+
   const navButtonClass = (tab: InfoBookTab, extra = '') =>
     `w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer ${extra} ${activeTab === tab ? 'bg-[#145837] text-white shadow-inner' : 'text-green-100/80 hover:bg-black/20 hover:text-white'
     }`;
@@ -2492,13 +2502,25 @@ function BookSidebar({
 
         <button
           type="button"
-          onClick={() => { onTabChange('bosses'); onFacilityChange(null); }}
+          onClick={() => {
+            if (activeTab === 'bosses') {
+              setBossesExpanded((expanded) => !expanded);
+            } else {
+              setBossesExpanded(true);
+              onTabChange('bosses');
+              onFacilityChange(null);
+            }
+          }}
           className={navButtonClass('bosses', 'mb-1')}
+          aria-expanded={bossesExpanded}
         >
-          Bosses
+          <span className="flex items-center justify-between gap-2">
+            <span>Bosses</span>
+            <span className={`text-emerald-300/60 transition-transform ${bossesExpanded ? 'rotate-90' : ''}`} aria-hidden="true">›</span>
+          </span>
         </button>
 
-        <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
+        {bossesExpanded && <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
           {BOSSES_INFO.map((boss, idx) => {
             const isClickable = (boss as any).clickable !== false;
             if (!isClickable) return null;
@@ -2514,17 +2536,29 @@ function BookSidebar({
               </button>
             );
           })}
-        </div>
+        </div>}
 
         <button
           type="button"
-          onClick={() => { onTabChange('facilities'); onFacilityChange(null); }}
+          onClick={() => {
+            if (activeTab === 'facilities') {
+              setFacilitiesExpanded((expanded) => !expanded);
+            } else {
+              setFacilitiesExpanded(true);
+              onTabChange('facilities');
+              onFacilityChange(null);
+            }
+          }}
           className={navButtonClass('facilities', 'mb-1')}
+          aria-expanded={facilitiesExpanded}
         >
-          Facilities
+          <span className="flex items-center justify-between gap-2">
+            <span>Facilities</span>
+            <span className={`text-emerald-300/60 transition-transform ${facilitiesExpanded ? 'rotate-90' : ''}`} aria-hidden="true">›</span>
+          </span>
         </button>
 
-        <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
+        {facilitiesExpanded && <div className="mb-3 ml-2 space-y-1 border-l border-emerald-700/40 pl-2">
           {FACILITIES_INFO.map((facility, idx) => (
             <button
               key={facility.title}
@@ -2536,7 +2570,7 @@ function BookSidebar({
               {facility.title}
             </button>
           ))}
-        </div>
+        </div>}
 
         <button
           type="button"
@@ -2602,30 +2636,26 @@ function BookSidebar({
         </div>
       </nav>
 
-      <div className="mt-auto pt-2 border-t border-emerald-800/50 pb-20">
+      <div className={`mt-auto flex items-center gap-2 border-t border-emerald-800/50 pt-2 ${sidebarOnLeft ? '' : 'flex-row-reverse'}`}>
         <button
           type="button"
           onClick={() => { onTabChange('about'); onFacilityChange(null); }}
-          className={navButtonClass('about')}
+          className={`${navButtonClass('about')} flex min-w-0 flex-1 items-center justify-center`}
         >
           About
         </button>
+        <div className="h-10 w-px shrink-0 bg-emerald-800/60" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex shrink-0 cursor-pointer transition-all"
+          aria-label="Close Shticker Book"
+          title="Close Shticker Book"
+        >
+          <BookIcon className="text-emerald-200" isOpen={true} />
+        </button>
       </div>
     </div>
-  );
-}
-
-function CloseBookButton({ onClick, sidebarOnLeft }: { onClick: () => void; sidebarOnLeft: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`absolute bottom-4 z-20 inline-flex transition-all cursor-pointer ${sidebarOnLeft ? 'right-4' : 'left-4'}`}
-      aria-label="Close Shticker Book"
-      title="Close Shticker Book"
-    >
-      <BookIcon className="text-emerald-200" isOpen={true} />
-    </button>
   );
 }
 
@@ -2762,6 +2792,7 @@ export function ShtickerBook({
                 trackerEnabled={trackerEnabled}
                 hasLoadedSettings={hasLoadedSettings}
                 sidebarOnLeft={sidebarOnLeft}
+                onClose={closeBook}
               />
 
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
@@ -2801,8 +2832,6 @@ export function ShtickerBook({
                 {activeTab === 'about' && <AboutTabContent />}
               </div>
             </div>
-
-            <CloseBookButton onClick={closeBook} sidebarOnLeft={sidebarOnLeft} />
           </div>
         </div>
       )}
