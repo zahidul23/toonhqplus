@@ -394,13 +394,26 @@ export async function getToons(ids: ToonId[]): Promise<ToonRecord[]> {
 
   const db = await openDB();
   const store = tx(db, 'toons').objectStore('toons');
-  
-  // Use Promise.all with store.get for each ID in the same transaction
-  const results = await Promise.all(
-    validIds.map((id) => promisifyRequest<any>(store.get(id)))
-  );
-  
-  return results.filter(Boolean).map(normalizeToonRecord);
+  const hashIndex = store.index('hashId');
+
+  // Queue every request before awaiting so they all remain in the same IDB
+  // transaction. Hash IDs used by in-game memberships may have since been
+  // consolidated into numeric Toon records, so fall back to the hashId index.
+  const directRequests = validIds.map((id) => promisifyRequest<any>(store.get(id)));
+  const hashRequests = validIds
+    .filter((id) => id.startsWith('#'))
+    .map((id) => promisifyRequest<any>(hashIndex.get(id)));
+  const [directResults, hashResults] = await Promise.all([
+    Promise.all(directRequests),
+    Promise.all(hashRequests),
+  ]);
+
+  const unique = new Map<string, ToonRecord>();
+  [...directResults, ...hashResults].filter(Boolean).forEach((record) => {
+    const normalized = normalizeToonRecord(record);
+    unique.set(normalized.id, normalized);
+  });
+  return Array.from(unique.values());
 }
 
 // --- Toony / Stinky lists ------------------------------------------------------

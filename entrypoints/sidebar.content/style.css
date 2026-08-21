@@ -20,6 +20,44 @@
   }
 }
 
+@keyframes historyGroupSlideOutLeft {
+  to { opacity: 0; transform: translateX(-14px); }
+}
+
+@keyframes historyGroupSlideOutRight {
+  to { opacity: 0; transform: translateX(14px); }
+}
+
+@keyframes historyGroupSlideInFromLeft {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes historyGroupSlideInFromRight {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.history-group-detail--side-next-out {
+  animation: historyGroupSlideOutLeft 160ms ease-in both;
+  pointer-events: none;
+}
+
+.history-group-detail--side-next-in {
+  animation: historyGroupSlideInFromRight 240ms ease-out both;
+  pointer-events: none;
+}
+
+.history-group-detail--side-previous-out {
+  animation: historyGroupSlideOutRight 160ms ease-in both;
+  pointer-events: none;
+}
+
+.history-group-detail--side-previous-in {
+  animation: historyGroupSlideInFromLeft 240ms ease-out both;
+  pointer-events: none;
+}
+
 /* Ensure rem units work inside Shadow DOM (host is isolated from page root) */
 :host {
   font-size: 16px;
@@ -183,6 +221,67 @@
 
   to {
     opacity: 0;
+  }
+}
+
+@keyframes historyGroupDetailIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes historyGroupDetailOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes historyGroupsListIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.history-group-detail--opening {
+  animation: historyGroupDetailIn 240ms ease-out both;
+}
+
+.history-group-detail--closing {
+  animation: historyGroupDetailOut 180ms ease-in both;
+  pointer-events: none;
+}
+
+.history-groups-list--entering {
+  animation: historyGroupsListIn 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-group-detail--opening,
+  .history-group-detail--closing,
+  .history-groups-list--entering,
+  .history-group-detail--side-next-out,
+  .history-group-detail--side-next-in,
+  .history-group-detail--side-previous-out,
+  .history-group-detail--side-previous-in {
+    animation: none;
   }
 }
 

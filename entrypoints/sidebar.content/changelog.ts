@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.25',
+    date: 'Aug 21, 2026',
+    changes: [
+      'Redesign Recent Groups with smoother detail transitions and previous or next group navigation',
+      'Show full group names, clearer timestamps, and member counts in group history',
+      'Fix historical group members failing to appear after a Toon ID is consolidated'
+    ]
+  },
+  {
     version: '1.2.24',
     date: 'Aug 20, 2026',
     changes: [

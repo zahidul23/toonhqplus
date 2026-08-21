@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo, memo } from 'react';
 import { groupTypes } from './groupTypes';
-import { getGroupDisplayName, getGroupSimpleName } from './toonUtils';
+import { getGroupDisplayName } from './toonUtils';
 import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
 import { ShtickerBook } from './ShtickerBook.tsx';
@@ -33,6 +33,7 @@ import {
   type ToonId,
   type SavedToonDataSnapshot,
 } from './db';
+
 import {
   createLocalSyncNotesPayload,
   importSyncNotesPayload,
@@ -180,7 +181,8 @@ function formatRelativeTime(dateStr: string): string {
     const hours = Math.floor(diffInSeconds / 3600);
     return `${hours}h ago`;
   }
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const days = Math.floor(diffInSeconds / 86400);
+  return `${days}d ago`;
 }
 
 interface SyncNotesChoiceDialogState {
@@ -1350,6 +1352,11 @@ export function SidebarApp() {
   const [historyGroups, setHistoryGroups] = useState<Record<number, any>>({});
   const [historyGroupMembers, setHistoryGroupMembers] = useState<Record<number, any>>({});
   const [selectedHistoryGroup, setSelectedHistoryGroup] = useState<number | null>(null);
+  const [historyDetailPhase, setHistoryDetailPhase] = useState<'opening' | 'closing' | null>(null);
+  const [historyListEntering, setHistoryListEntering] = useState(false);
+  const [historySideTransition, setHistorySideTransition] = useState<{ direction: 'previous' | 'next', phase: 'out' | 'in' } | null>(null);
+  const historySideSwapTimeoutRef = useRef<number | null>(null);
+  const historySideFinishTimeoutRef = useRef<number | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [navbarConfig, setNavbarConfig] = useState<{ pinned: string[]; dropdown: string[] }>({
     pinned: ['invasions', 'groups', 'fishing', 'ccg'],
@@ -1460,7 +1467,12 @@ export function SidebarApp() {
     const toonsArr = await getToons(Array.from(visibleIds));
 
     const toonsMap: Record<ToonId, ToonData> = {};
-    for (const t of toonsArr) toonsMap[t.id] = t;
+    for (const t of toonsArr) {
+      toonsMap[t.id] = t;
+      // Group memberships created from in-game data can retain a synthetic
+      // hash ID after the Toon record is consolidated under a numeric ID.
+      if (t.hashId) toonsMap[t.hashId] = t;
+    }
     setHistoryToons(toonsMap);
 
     const groupsMap: Record<number, any> = {};
@@ -2362,11 +2374,43 @@ export function SidebarApp() {
               {activeTab === 'history' && (
                 <section className="flex-1 flex flex-col min-h-0">
                   <QuickTeleport />
-                  {selectedHistoryGroup === null ? (
-                    <div className="flex-1 flex flex-col min-h-0">
-                      <div className="mb-2 ml-2 shrink-0 flex items-center justify-between">
-                        <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
-                      </div>
+                  <div className="mb-2 ml-2 shrink-0 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
+                    <button
+                      onClick={() => {
+                        if (selectedHistoryGroup === null || historyDetailPhase === 'closing') return;
+                        if (historySideSwapTimeoutRef.current !== null) {
+                          window.clearTimeout(historySideSwapTimeoutRef.current);
+                          historySideSwapTimeoutRef.current = null;
+                        }
+                        if (historySideFinishTimeoutRef.current !== null) {
+                          window.clearTimeout(historySideFinishTimeoutRef.current);
+                          historySideFinishTimeoutRef.current = null;
+                        }
+                        setHistorySideTransition(null);
+                        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                          setSelectedHistoryGroup(null);
+                          return;
+                        }
+                        setHistoryDetailPhase('closing');
+                        window.setTimeout(() => {
+                          setSelectedHistoryGroup(null);
+                          setHistoryDetailPhase(null);
+                          setHistoryListEntering(true);
+                          window.setTimeout(() => setHistoryListEntering(false), 220);
+                        }, 180);
+                      }}
+                      disabled={selectedHistoryGroup === null || historyDetailPhase !== null}
+                      aria-hidden={selectedHistoryGroup === null}
+                      tabIndex={selectedHistoryGroup === null ? -1 : 0}
+                      className={`rounded bg-black/30 hover:bg-black/50 disabled:opacity-40 disabled:cursor-default px-2 py-1 text-xs text-white cursor-pointer ${selectedHistoryGroup === null ? 'invisible pointer-events-none' : ''}`}
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                  <div className="history-groups-shell flex-1 flex flex-col min-h-0 rounded border border-black/50 bg-black/40 p-2 shadow-inner overflow-hidden">
+                    {selectedHistoryGroup === null ? (
+                    <div className={`history-groups-list flex-1 flex flex-col min-h-0 ${historyListEntering ? 'history-groups-list--entering' : ''}`}>
                       <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar p-1.5 min-h-0">
                         {Object.values(historyGroups).length === 0 ? (
                           <div className="py-2 text-sm text-green-100/70 text-center">No history yet.</div>
@@ -2379,38 +2423,38 @@ export function SidebarApp() {
                             })
                             .slice(0, 20)
                             .map((group: any) => {
-                              const groupName = getGroupSimpleName(group.type, group.id, group.options);
+                              const groupName = getGroupDisplayName(group.type, group.id, group.options);
                               const groupMembers = historyGroupMembers[group.id];
                               return (
                                 <div
                                   key={group.id}
                                   className="group relative"
-                                  style={{ viewTransitionName: `group-card-${group.id}` } as React.CSSProperties}
                                 >
                                   <button
-                                    onClick={() => {
-                                      if ((document as any).startViewTransition) {
-                                        (document as any).startViewTransition(() => {
-                                          setSelectedHistoryGroup(group.id);
-                                        });
-                                      } else {
-                                        setSelectedHistoryGroup(group.id);
-                                      }
+                                     onClick={() => {
+                                       setSelectedHistoryGroup(group.id);
+                                       if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                                         setHistoryDetailPhase('opening');
+                                         window.setTimeout(() => setHistoryDetailPhase(null), 240);
+                                       }
                                     }}
                                     className="w-full text-left rounded border border-black/50 bg-black/40 hover:bg-black/60 p-3 shadow-sm transition-colors flex justify-between items-center cursor-pointer"
                                   >
                                     <div className="flex-1 min-w-0">
                                       <span
                                         className="block text-sm font-bold text-white truncate"
-                                        style={{ viewTransitionName: `group-title-${group.id}` } as React.CSSProperties}
                                       >
                                         {groupName}
                                       </span>
-                                      <span className="block text-xs text-green-200 mt-1">
+                                      <span
+                                        className="block text-xs text-green-200 mt-1"
+                                      >
                                         <RelativeTime date={group.userJoinedAt || group.created} />
                                       </span>
                                     </div>
-                                    <div className="text-sm font-medium text-emerald-300 shrink-0">
+                                    <div
+                                      className="text-sm font-medium text-emerald-300 shrink-0"
+                                    >
                                       {groupMembers?.toons?.length} toon{groupMembers?.toons?.length === 1 ? '' : 's'}
                                     </div>
                                   </button>
@@ -2432,6 +2476,33 @@ export function SidebarApp() {
                       const group = historyGroups[selectedHistoryGroup!];
                       if (!group) return null;
                       const toons = historyGroupMembers[group.id]?.toons || [];
+                      const orderedGroups = Object.values(historyGroups)
+                        .sort((a: any, b: any) => {
+                          const timeA = new Date(a.userJoinedAt || a.created).getTime();
+                          const timeB = new Date(b.userJoinedAt || b.created).getTime();
+                          return timeB - timeA;
+                        })
+                        .slice(0, 20) as any[];
+                      const groupIndex = orderedGroups.findIndex((item: any) => item.id === group.id);
+                      const previousGroup = groupIndex > 0 ? orderedGroups[groupIndex - 1] : null;
+                      const nextGroup = groupIndex >= 0 && groupIndex < orderedGroups.length - 1 ? orderedGroups[groupIndex + 1] : null;
+                      const selectHistoryGroup = (groupId: number, direction: 'previous' | 'next') => {
+                        if (historySideTransition) return;
+                        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                          setSelectedHistoryGroup(groupId);
+                          return;
+                        }
+                        setHistorySideTransition({ direction, phase: 'out' });
+                        historySideSwapTimeoutRef.current = window.setTimeout(() => {
+                          historySideSwapTimeoutRef.current = null;
+                          setSelectedHistoryGroup(groupId);
+                          setHistorySideTransition({ direction, phase: 'in' });
+                          historySideFinishTimeoutRef.current = window.setTimeout(() => {
+                            historySideFinishTimeoutRef.current = null;
+                            setHistorySideTransition(null);
+                          }, 240);
+                        }, 160);
+                      };
 
                       const activeMemberIds: ToonId[] = [];
                       const otherActiveIds: ToonId[] = [];
@@ -2486,56 +2557,74 @@ export function SidebarApp() {
                         });
 
                       return (
-                        <div className="flex-1 flex flex-col min-h-0">
-                          <div className="flex items-center gap-2 mb-3 shrink-0">
+                        <div
+                          className={`history-group-detail flex-1 flex flex-col min-h-0 ${historyDetailPhase ? `history-group-detail--${historyDetailPhase}` : ''} ${historySideTransition ? `history-group-detail--side-${historySideTransition.direction}-${historySideTransition.phase}` : ''} ${historyDetailPhase || historySideTransition ? 'pointer-events-none' : ''}`}
+                        >
+                          <div
+                            className="history-group-detail__heading flex items-center gap-2 shrink-0"
+                          >
                             <button
-                              onClick={() => {
-                                if ((document as any).startViewTransition) {
-                                  (document as any).startViewTransition(() => {
-                                    setSelectedHistoryGroup(null);
-                                  });
-                                } else {
-                                  setSelectedHistoryGroup(null);
-                                }
-                              }}
-                              className="rounded bg-black/30 hover:bg-black/50 px-2 py-1 text-xs text-white cursor-pointer"
+                              type="button"
+                              onClick={() => previousGroup && selectHistoryGroup(previousGroup.id, 'previous')}
+                              disabled={!previousGroup}
+                              aria-label="Previous recent group"
+                              title="Previous recent group"
+                              className="shrink-0 rounded bg-black/30 hover:bg-black/50 disabled:opacity-25 disabled:cursor-default px-2 py-2 text-sm text-white cursor-pointer"
                             >
-                              ← Back
+                              ←
                             </button>
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 text-center">
                               <h3
+                                data-group-id={group.id}
                                 className="text-sm font-bold text-green-50 break-words leading-tight"
-                                style={{ viewTransitionName: `group-title-${group.id}` } as React.CSSProperties}
                               >
                                 {getGroupDisplayName(group.type, group.id, group.options)}
                               </h3>
-                              <div className="text-[10px] text-green-200/50 mt-0.5 flex items-center gap-1.5">
+                              <div className="text-[10px] text-green-200/50 mt-0.5 flex items-center justify-center gap-1.5">
                                 <RelativeTime date={group.userJoinedAt || group.created} />
                                 <span className="opacity-30">•</span>
                                 <span>
                                   {`${new Date(group.userJoinedAt || group.created).toDateString()} ${new Date(group.userJoinedAt || group.created).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
                                 </span>
                               </div>
+                              <div className="text-[10px] text-green-200/40 mt-0.5">
+                                Group {groupIndex + 1} of {orderedGroups.length}
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => nextGroup && selectHistoryGroup(nextGroup.id, 'next')}
+                              disabled={!nextGroup}
+                              aria-label="Next recent group"
+                              title="Next recent group"
+                              className="shrink-0 rounded bg-black/30 hover:bg-black/50 disabled:opacity-25 disabled:cursor-default px-2 py-2 text-sm text-white cursor-pointer"
+                            >
+                              →
+                            </button>
                           </div>
-                          <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
-                            {activeToRender.length > 0 && (
-                              <>
-                                <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-1">Group Members</div>
-                                {renderRows(activeToRender)}
-                              </>
-                            )}
-                            {leftMemberIds.length > 0 && (
-                              <>
-                                <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2 opacity-50">Toons that left</div>
-                                <div className="opacity-60">{renderRows(leftMemberIds)}</div>
-                              </>
-                            )}
+                          <ul
+                            className="history-group-detail__body flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0"
+                          >
+                            <div className="flex flex-col gap-1.5">
+                              {activeToRender.length > 0 && (
+                                <>
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1">Group Members ({activeToRender.length})</div>
+                                  {renderRows(activeToRender)}
+                                </>
+                              )}
+                              {leftMemberIds.length > 0 && (
+                                <>
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1 py-1 mt-2 opacity-50">Toons that left ({leftMemberIds.length})</div>
+                                  <div className="opacity-60">{renderRows(leftMemberIds)}</div>
+                                </>
+                              )}
+                            </div>
                           </ul>
                         </div>
                       );
                     })()
-                  )}
+                    )}
+                  </div>
                 </section>
               )}
 
