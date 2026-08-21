@@ -226,8 +226,12 @@ async function resolveHashIdInStore(id: string, store: IDBObjectStore): Promise<
   if (!id.startsWith('#')) return id;
   const index = store.index('hashId');
   const candidates = await promisifyRequest<any[]>(index.getAll(IDBKeyRange.only(id)));
-  const real = candidates.find(c => !String(c.id).startsWith('#'));
-  return real ? String(real.id) : id;
+  const preferred = preferCanonicalToonRecord(candidates);
+  return preferred ? String(preferred.id) : id;
+}
+
+function preferCanonicalToonRecord(candidates: any[]): any | undefined {
+  return candidates.find(candidate => !String(candidate.id).startsWith('#')) ?? candidates[0];
 }
 
 export async function resolveToonId(id: ToonId): Promise<ToonId> {
@@ -274,9 +278,10 @@ export async function getToon(id: ToonId): Promise<ToonRecord | undefined> {
 
 export async function getToonByHashId(hashId: string): Promise<ToonRecord | undefined> {
   const db = await openDB();
-  const rec = await promisifyRequest<any>(
-    tx(db, 'toons').objectStore('toons').index('hashId').get(hashId)
+  const candidates = await promisifyRequest<any[]>(
+    tx(db, 'toons').objectStore('toons').index('hashId').getAll(IDBKeyRange.only(hashId))
   );
+  const rec = preferCanonicalToonRecord(candidates);
   return rec ? normalizeToonRecord(rec) : undefined;
 }
 
@@ -284,9 +289,12 @@ export async function getToonsByHashIds(hashIds: string[]): Promise<ToonRecord[]
   const db = await openDB();
   const index = tx(db, 'toons').objectStore('toons').index('hashId');
   const results = await Promise.all(
-    hashIds.map(h => promisifyRequest<any>(index.get(h)))
+    hashIds.map(h => promisifyRequest<any[]>(index.getAll(IDBKeyRange.only(h))))
   );
-  return results.filter(Boolean).map(normalizeToonRecord);
+  return results
+    .map(preferCanonicalToonRecord)
+    .filter(Boolean)
+    .map(normalizeToonRecord);
 }
 
 export async function searchToons(query: string, page: number, pageSize: number): Promise<{ results: ToonRecord[], total: number }> {
@@ -400,16 +408,17 @@ export async function getToons(ids: ToonId[]): Promise<ToonRecord[]> {
   // transaction. Hash IDs used by in-game memberships may have since been
   // consolidated into numeric Toon records, so fall back to the hashId index.
   const directRequests = validIds.map((id) => promisifyRequest<any>(store.get(id)));
-  const hashRequests = validIds
-    .filter((id) => id.startsWith('#'))
-    .map((id) => promisifyRequest<any>(hashIndex.get(id)));
+  const hashIds = validIds.filter((id) => id.startsWith('#'));
+  const hashRequests = hashIds
+    .map((id) => promisifyRequest<any[]>(hashIndex.getAll(IDBKeyRange.only(id))));
   const [directResults, hashResults] = await Promise.all([
     Promise.all(directRequests),
     Promise.all(hashRequests),
   ]);
 
   const unique = new Map<string, ToonRecord>();
-  [...directResults, ...hashResults].filter(Boolean).forEach((record) => {
+  const preferredHashResults = hashResults.map(preferCanonicalToonRecord).filter(Boolean);
+  [...directResults, ...preferredHashResults].filter(Boolean).forEach((record) => {
     const normalized = normalizeToonRecord(record);
     unique.set(normalized.id, normalized);
   });

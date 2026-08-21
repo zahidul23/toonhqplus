@@ -693,7 +693,7 @@ async function applyRowHighlights(savedToonLists?: SavedToonLists) {
 
       [...fetchedById, ...fetchedByHash].forEach(rec => {
         if (rec.id) toons[rec.id] = rec as ToonData;
-        if (rec.hashId) toons[rec.id] = rec as ToonData; // Also ensure standard id maps
+        if (rec.hashId) toons[rec.hashId] = rec as ToonData;
       });
     }
 
@@ -1391,13 +1391,33 @@ function applyToonHash(toon: any) {
   }
 }
 
-function applyGroupHighlights(
+async function applyGroupHighlights(
   groupsState: Record<number, any>,
   toonyToonsMemory: Set<string>,
   stinkyToonsMemory: Set<string>,
   generateToonHashFn: (name: string, photo: string) => string,
   highlightGroupsEnabled: boolean
 ) {
+  const hashIds = new Set<string>();
+  Object.values(groupsState).forEach((group: any) => {
+    if (!Array.isArray(group?.members)) return;
+    group.members.forEach((member: any) => {
+      if (member.left || !member.toon) return;
+      const toon = member.toon;
+      if (toon.id == null || isNaN(Number(toon.id))) {
+        hashIds.add(String(toon.hashId ?? generateToonHashFn(toon.name || '', toon.photo || '')));
+      }
+    });
+  });
+
+  const hashAliases = new Map<string, string>();
+  if (hashIds.size > 0) {
+    const records = await getToonsByHashIds(Array.from(hashIds));
+    records.forEach((record) => {
+      if (record.hashId) hashAliases.set(record.hashId, record.id);
+    });
+  }
+
   document.querySelectorAll('.groups-list-item').forEach(groupCard => {
     const groupId = groupCard.getAttribute('group-id');
     if (!groupId) return;
@@ -1418,7 +1438,7 @@ function applyGroupHighlights(
       if (!toon) return;
       const numericId = toon.id != null && !isNaN(Number(toon.id)) ? String(Number(toon.id)) : null;
       const hashId = toon.hashId ?? generateToonHashFn(toon.name || '', toon.photo || '');
-      const id = numericId ?? String(hashId);
+      const id = numericId ?? hashAliases.get(String(hashId)) ?? String(hashId);
 
       if (seenToons.has(id)) return;
       seenToons.add(id);
@@ -1492,7 +1512,13 @@ function applyGroupHighlights(
 }
 
 function applyCurrentGroupHighlights() {
-  applyGroupHighlights(groupsState, toonyToonsMemory, stinkyToonsMemory, generateToonHash, highlightGroupsEnabled);
+  void applyGroupHighlights(
+    groupsState,
+    toonyToonsMemory,
+    stinkyToonsMemory,
+    generateToonHash,
+    highlightGroupsEnabled,
+  ).catch(error => console.error('[ToonHQ+] Failed to apply group highlights:', error));
 }
 
 async function getSavedToonLists(): Promise<SavedToonLists> {
