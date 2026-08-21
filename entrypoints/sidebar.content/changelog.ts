@@ -11,7 +11,8 @@ export const changelog: ChangelogEntry[] = [
     changes: [
       'Redesign Recent Groups with smoother detail transitions and previous or next group navigation',
       'Show full group names, clearer timestamps, and member counts in group history',
-      'Fix historical group members failing to appear after a Toon ID is consolidated'
+      'Fix historical group members failing to appear after a Toon ID is consolidated',
+      'Paginate saved toon lists and toon search results in groups of 10'
     ]
   },
   {

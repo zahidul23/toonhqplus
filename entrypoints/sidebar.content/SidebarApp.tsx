@@ -1343,6 +1343,31 @@ function TooltipAnchor({
 
 import { ToonTrackerTab } from './ToonTrackerTab';
 
+const SAVED_TOONS_PAGE_SIZE = 10;
+
+function SavedToonsPagination({ page, totalItems, onPageChange }: {
+  page: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.ceil(totalItems / SAVED_TOONS_PAGE_SIZE);
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1} className="cursor-pointer rounded p-1 text-green-200 transition-colors hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent" title="Previous page" aria-label="Previous page">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+      <span className="text-[10px] font-bold tracking-widest text-green-200/50 tabular-nums">
+        {(page - 1) * SAVED_TOONS_PAGE_SIZE + 1}-{Math.min(page * SAVED_TOONS_PAGE_SIZE, totalItems)} of {totalItems}
+      </span>
+      <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages} className="cursor-pointer rounded p-1 text-green-200 transition-colors hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent" title="Next page" aria-label="Next page">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+      </button>
+    </div>
+  );
+}
+
 export function SidebarApp() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'tracker' | 'history' | 'toons' | 'settings'>('history');
@@ -1384,7 +1409,19 @@ export function SidebarApp() {
   const [neutralCollapsed, setNeutralCollapsed] = useState(false);
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [searchPage, setSearchPage] = useState(1);
+  const [toonyPage, setToonyPage] = useState(1);
+  const [stinkyPage, setStinkyPage] = useState(1);
+  const [notesPage, setNotesPage] = useState(1);
+  const searchResultsRef = useRef<HTMLUListElement>(null);
+  const toonyListRef = useRef<HTMLUListElement>(null);
+  const stinkyListRef = useRef<HTMLUListElement>(null);
+  const notesListRef = useRef<HTMLUListElement>(null);
   const pageSize = 10;
+
+  useEffect(() => { searchResultsRef.current?.scrollTo({ top: 0 }); }, [searchPage]);
+  useEffect(() => { toonyListRef.current?.scrollTo({ top: 0 }); }, [toonyPage]);
+  useEffect(() => { stinkyListRef.current?.scrollTo({ top: 0 }); }, [stinkyPage]);
+  useEffect(() => { notesListRef.current?.scrollTo({ top: 0 }); }, [notesPage]);
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -2176,8 +2213,11 @@ export function SidebarApp() {
 
                   {searchTerm ? (
                     <section className="flex-1 flex flex-col min-h-0">
-                      <h3 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-widest text-green-200/50 px-1">Search Results</h3>
-                      <ul className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
+                      <div className="mb-1 flex shrink-0 items-center justify-between gap-2 px-1">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-green-200/50">Search Results</h3>
+                        <SavedToonsPagination page={searchPage} totalItems={searchTotal} onPageChange={setSearchPage} />
+                      </div>
+                      <ul ref={searchResultsRef} className="flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0">
                         {searchTerm.length < 2 ? (
                           <div className="py-6 text-center text-green-200/40 italic text-xs">Enter at least 2 characters to search...</div>
                         ) : isSearching ? (
@@ -2220,29 +2260,6 @@ export function SidebarApp() {
                         )}
                       </ul>
 
-                      {searchTotal > pageSize && (
-                        <div className="mt-2 flex items-center justify-between px-2 py-1.5 bg-black/20 rounded border border-white/5 mx-2 mb-2">
-                          <button
-                            onClick={() => setSearchPage((p) => Math.max(1, p - 1))}
-                            disabled={searchPage === 1}
-                            className="p-1 rounded text-green-200 hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
-                            title="Previous page"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-                          </button>
-                          <span className="text-[10px] font-bold text-green-200/50 uppercase tracking-widest tabular-nums">
-                            Page {searchPage} of {Math.ceil(searchTotal / pageSize)}
-                          </span>
-                          <button
-                            onClick={() => setSearchPage((p) => Math.min(Math.ceil(searchTotal / pageSize), p + 1))}
-                            disabled={searchPage >= Math.ceil(searchTotal / pageSize)}
-                            className="p-1 rounded text-green-200 hover:bg-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
-                            title="Next page"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-                          </button>
-                        </div>
-                      )}
                     </section>
                   ) : (
                     <>
@@ -2254,6 +2271,11 @@ export function SidebarApp() {
                             const toonyToons = [...new Set(favorites)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
                             const stinkyToons = [...new Set(blocked)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
                             const neutralToons = [...new Set(Object.keys(notes))].filter(id => !favorites.includes(id) && !blocked.includes(id) && historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
+                            const clampPage = (page: number, itemCount: number) => Math.min(page, Math.max(1, Math.ceil(itemCount / SAVED_TOONS_PAGE_SIZE)));
+                            const currentToonyPage = clampPage(toonyPage, toonyToons.length);
+                            const currentStinkyPage = clampPage(stinkyPage, stinkyToons.length);
+                            const currentNotesPage = clampPage(notesPage, neutralToons.length);
+                            const pageItems = (items: string[], page: number) => items.slice((page - 1) * SAVED_TOONS_PAGE_SIZE, page * SAVED_TOONS_PAGE_SIZE);
                             const getSectionClass = (collapsed: boolean) =>
                               `transition-all duration-300 ease-in-out flex flex-col min-h-2 ${collapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`;
                             const sectionStyle = (collapsed: boolean): React.CSSProperties | undefined =>
@@ -2300,27 +2322,23 @@ export function SidebarApp() {
                               <>
                                 {toonyToons.length > 0 && (
                                   <section className={getSectionClass(toonyCollapsed)} style={sectionStyle(toonyCollapsed)}>
-                                    <button
-                                      onClick={() => {
-                                        startCollapseAnimation();
-                                        const next = !toonyCollapsed;
-                                        setToonyCollapsed(next);
-                                        setSetting('toony-collapsed', next).catch(console.error);
-                                      }}
-                                      className="mb-1 ml-2 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
-                                    >
-                                      <span>Toony Toons</span>
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
-                                    </button>
+                                    <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
+                                      <button onClick={() => { startCollapseAnimation(); const next = !toonyCollapsed; setToonyCollapsed(next); setSetting('toony-collapsed', next).catch(console.error); }} className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white">
+                                        <span>Toony Toons</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
+                                      </button>
+                                      {!toonyCollapsed && <SavedToonsPagination page={currentToonyPage} totalItems={toonyToons.length} onPageChange={setToonyPage} />}
+                                    </div>
                                     <div className={getSectionBodyClass(toonyCollapsed)}>
-                                      <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
-                                        {toonyToons.map(renderToonRow)}
+                                      <ul ref={toonyListRef} className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                        {pageItems(toonyToons, currentToonyPage).map(renderToonRow)}
                                       </ul>
                                     </div>
                                   </section>
                                 )}
                                 {stinkyToons.length > 0 && (
                                   <section className={getSectionClass(stinkyCollapsed)} style={sectionStyle(stinkyCollapsed)}>
+                                    <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -2328,20 +2346,23 @@ export function SidebarApp() {
                                         setStinkyCollapsed(next);
                                         setSetting('stinky-collapsed', next).catch(console.error);
                                       }}
-                                      className="mb-1 ml-2 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                      className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white"
                                     >
                                       <span>Stinky Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${stinkyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
+                                    {!stinkyCollapsed && <SavedToonsPagination page={currentStinkyPage} totalItems={stinkyToons.length} onPageChange={setStinkyPage} />}
+                                    </div>
                                     <div className={getSectionBodyClass(stinkyCollapsed)}>
-                                      <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
-                                        {stinkyToons.map(renderToonRow)}
+                                      <ul ref={stinkyListRef} className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                        {pageItems(stinkyToons, currentStinkyPage).map(renderToonRow)}
                                       </ul>
                                     </div>
                                   </section>
                                 )}
                                 {neutralToons.length > 0 && (
                                   <section className={getSectionClass(neutralCollapsed)} style={sectionStyle(neutralCollapsed)}>
+                                    <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
                                     <button
                                       onClick={() => {
                                         startCollapseAnimation();
@@ -2349,14 +2370,16 @@ export function SidebarApp() {
                                         setNeutralCollapsed(next);
                                         setSetting('neutral-collapsed', next).catch(console.error);
                                       }}
-                                      className="mb-1 ml-2 shrink-0 flex items-center justify-between text-sm font-medium text-green-50 hover:text-white cursor-pointer transition-colors outline-none pb-0.5"
+                                      className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white"
                                     >
                                       <span>Notes</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                     </button>
+                                    {!neutralCollapsed && <SavedToonsPagination page={currentNotesPage} totalItems={neutralToons.length} onPageChange={setNotesPage} />}
+                                    </div>
                                     <div className={getSectionBodyClass(neutralCollapsed)}>
-                                      <ul className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
-                                        {neutralToons.map(renderToonRow)}
+                                      <ul ref={notesListRef} className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                        {pageItems(neutralToons, currentNotesPage).map(renderToonRow)}
                                       </ul>
                                     </div>
                                   </section>
