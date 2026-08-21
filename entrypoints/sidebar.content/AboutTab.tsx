@@ -1,19 +1,5 @@
 import React from 'react';
-import { BookIcon } from './ShtickerBook';
 import { changelog } from './changelog';
-
-const contributors: { name: string; image: string; color: string }[] = [
-  // {
-  //   name: "Toony Hoque",
-  //   image: "https://rendition.toontownrewritten.com/render/7414000001501b451bba1b25002525010400010000000000000000010000032c00/waving/256x256.webp",
-  //   color: "from-purple-500/20"
-  // },
-  {
-    name: "Holland",
-    image: "https://rendition.toontownrewritten.com/render/7405010101b31ba51bbc1b10001f10010400123f00000000000000000000000000/portrait-grin/256x256.webp",
-    color: "from-purple-500/20"
-  },
-];
 
 export function AboutTabContent() {
   return (
@@ -41,11 +27,15 @@ export function AboutTabContent() {
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Comprehensive Bosses & Facilities Data
+                  Comprehensive Bosses & Facilities Information
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Calculators for Boiler and Cog Battles
+                  Calculators for Cogs, Facilities and The Boiler
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Customizable Navigation Bar
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -57,16 +47,20 @@ export function AboutTabContent() {
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Customizable Navigation Bar
+                  Companion App Support
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Notifications for New Rewards
                 </li>
               </ul>
             </div>
 
             <div className="pt-4 border-t border-white/5">
               <h5 className="text-sm font-black uppercase tracking-widest text-blue-400 mb-1">Feedback & Support</h5>
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="flex-1 space-y-3">
-                  <p className="text-sm text-white/60">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-white/60 py-2">
                     Have any questions, suggestions, complaints, or other feedback? Feel free to reach out!
                   </p>
                   <div className="space-y-2 text-sm">
@@ -76,40 +70,38 @@ export function AboutTabContent() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-white/40 font-bold w-16">Email:</span>
-                      <a href="mailto:toonyhoque@gmail.com" className="text-blue-400 hover:text-blue-300 font-bold transition-colors">toonyhoque@gmail.com</a>
+                      <a href="mailto:feedback@toontown.help" className="text-blue-400 hover:text-blue-300 font-bold transition-colors">feedback@toontown.help</a>
                     </div>
                   </div>
                 </div>
-                <div className="shrink-0">
-                  <img
-                    src="https://rendition.toontownrewritten.com/render/7414000001501b451bba1b25002525010400010000000000000000010000032c00/waving/128x128.png"
-                    alt="Waving Toon"
-                    className="w-32 h-32 object-contain"
-                  />
+
+                <div className="flex items-center gap-3 pt-3">
+                  <div className="h-px flex-1 bg-gradient-to-l from-white/20 to-transparent" />
+                  <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-300/65">My Toons</div>
+                  <div className="h-px flex-1 bg-gradient-to-r from-white/20 to-transparent" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex min-w-0 flex-col items-center">
+                    <div className="toon-name-tag">Toony Hoque</div>
+                    <img
+                      src="https://rendition.toontownrewritten.com/render/7414000001501b451bba1b25002525010400010000000000000000010000032c00/waving/128x128.png"
+                      alt="Toony Hoque waving"
+                      className="mt-1 h-28 w-full object-contain"
+                      style={{ transform: 'translate(8px, 5px)' }}
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-col items-center">
+                    <div className="toon-name-tag">Braveheart</div>
+                    <img
+                      src="https://rendition.toontownrewritten.com/render/7405010101401b351bbc1b13001313010400034c00012e00031a001f0000031000/waving/128x128.webp"
+                      alt="Braveheart waving"
+                      className="mt-1 h-28 w-full object-contain"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-
-            {contributors.length > 0 && <div className="pt-4 border-t border-white/5">
-              <h5 className="text-sm font-black uppercase tracking-widest text-purple-400 mb-2">Developers</h5>
-              <div className="flex flex-wrap gap-10">
-                {contributors.map((contributor, i) => (
-                  <div key={i} className="flex flex-col items-center gap-0 group cursor-default">
-                    <div className="relative">
-                      <div className={`absolute inset-0 bg-gradient-to-b ${contributor.color} to-transparent blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-                      <img
-                        src={contributor.image}
-                        alt={contributor.name}
-                        className="w-24 h-24 object-contain relative z-10 filter brightness-75 group-hover:brightness-110 group-hover:scale-105 transition-all duration-500"
-                      />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/30 group-hover:text-purple-400 transition-colors duration-300">
-                      {contributor.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>}
           </div>
 
           <div className="mt-auto pt-6 border-t border-white/5 text-center space-y-4">
@@ -136,33 +128,18 @@ export function AboutTabContent() {
                   {entry.changes.map((change, i) => {
                     const match = change.match(/^\[(.*?)\]\s*(.*)$/);
                     if (match) {
-                      const [, tag, text] = match;
-                      const getTagStyles = (t: string) => {
-                        const low = t.toLowerCase();
-                        if (low.includes('feature')) return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
-                        if (low.includes('ui')) return 'text-blue-400 bg-blue-400/10 border-blue-400/20';
-                        if (low.includes('bug')) return 'text-rose-400 bg-rose-400/10 border-rose-400/20';
-                        if (low.includes('performance')) return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
-                        if (low.includes('major') || low.includes('update')) return 'text-purple-400 bg-purple-400/10 border-purple-400/20';
-                        if (low.includes('privacy')) return 'text-slate-400 bg-slate-400/10 border-slate-400/20';
-                        return 'text-white/50 bg-white/5 border-white/10';
-                      };
+                      const [, , text] = match;
 
                       return (
-                        <li key={i} className="text-xs text-white/70 leading-relaxed flex items-start gap-2.5 group">
-
-                          <div className="flex-1">
-                            <span className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-wider transition-all duration-300 mr-2 mb-1.5 ${getTagStyles(tag)}`}>
-                              {tag}
-                            </span>
-                            <span className="group-hover:text-white transition-colors">{text}</span>
-                          </div>
+                        <li key={i} className="text-xs text-white/70 leading-relaxed flex items-baseline gap-2.5 group">
+                          <span className="text-emerald-500/40 shrink-0">•</span>
+                          <span className="group-hover:text-white transition-colors">{text}</span>
                         </li>
                       );
                     }
                     return (
-                      <li key={i} className="text-xs text-white/70 leading-relaxed flex gap-2.5 items-start">
-                        <span className="text-emerald-500/40 mt-1.5 shrink-0">•</span>
+                      <li key={i} className="text-xs text-white/70 leading-relaxed flex gap-2.5 items-baseline">
+                        <span className="text-emerald-500/40 shrink-0">•</span>
                         <span>{change}</span>
                       </li>
                     );

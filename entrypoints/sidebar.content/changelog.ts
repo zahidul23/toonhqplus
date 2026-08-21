@@ -19,7 +19,15 @@ export const changelog: ChangelogEntry[] = [
     version: '1.2.24',
     date: 'Aug 20, 2026',
     changes: [
-      'Fix Firefox specific issues with notifications permissions and ToonHQ websocket connection',
+      'Fix Firefox specific issues with websocket connections',
+    ]
+  },
+  {
+    version: '1.2.23',
+    date: 'Aug 20, 2026',
+    changes: [
+      'Fix Firefox specific issues with notifications permissions',
+      'Simplify the reward notification settings toggle'
     ]
   },
   {

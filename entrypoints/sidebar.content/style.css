@@ -1,6 +1,33 @@
 /* Tailwind v4 - WXT will replace :root with :host when injecting into Shadow DOM */
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Alie';
+  src: url('https://static.toontown.help/fonts/Alie.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+/* Matches the in-game nametag overlay used by ToonCalc. */
+.toon-name-tag {
+  max-width: 100%;
+  padding: 1px 4px 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(204, 204, 204, 0.5);
+  color: rgb(76, 76, 179);
+  font-family: 'Alie', cursive;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-rendering: geometricPrecision;
+  white-space: nowrap;
+  -webkit-font-smoothing: antialiased;
+}
+
 /* Shared by the desktop ToonCalc gag calculator embedded in the Shticker Book. */
 .gag-cog-viewport { width: min(696px, 100%); overflow: hidden; }
 .gag-cog-track-positioned { transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1); }
