@@ -1295,16 +1295,27 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
       if (previousEnabled) {
         setRewardNotificationsEnabled(false);
         await browser.storage.local.set({ 'reward-notifications-enabled': false });
-        const removal = await browser.runtime.sendMessage({ type: 'REMOVE_REWARD_NOTIFICATION_PERMISSION' });
-        if (removal?.ok === false) throw new Error(removal.error || 'Could not remove notification permission.');
         return;
       }
 
-      const permission = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
-      if (permission?.ok === false) throw new Error(permission.error || 'Could not request notification permission.');
-      const enabled = permission?.granted === true;
-      setRewardNotificationsEnabled(enabled);
-      await browser.storage.local.set({ 'reward-notifications-enabled': enabled });
+      const permission = await browser.runtime.sendMessage({ type: 'GET_REWARD_NOTIFICATION_PERMISSION' });
+      if (permission?.ok === false) throw new Error(permission.error || 'Could not check notification permission.');
+      if (permission?.granted === true) {
+        setRewardNotificationsEnabled(true);
+        await browser.storage.local.set({ 'reward-notifications-enabled': true });
+        return;
+      }
+
+      if (import.meta.env.FIREFOX) {
+        const opened = await browser.runtime.sendMessage({ type: 'OPEN_REWARD_NOTIFICATION_SETTINGS' });
+        if (opened?.ok === false) throw new Error(opened.error || 'Could not open notification settings.');
+      } else {
+        const requested = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
+        if (requested?.ok === false) throw new Error(requested.error || 'Could not request notification permission.');
+        const enabled = requested?.granted === true;
+        setRewardNotificationsEnabled(enabled);
+        await browser.storage.local.set({ 'reward-notifications-enabled': enabled });
+      }
     } catch (error) {
       console.error('[ToonHQ+] Failed to update reward notifications.', error);
       try {

@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.24',
+    date: 'Aug 20, 2026',
+    changes: [
+      'Fix Firefox specific issues with notifications permissions and ToonHQ websocket connection',
+    ]
+  },
+  {
     version: '1.2.22',
     date: 'Aug 19, 2026',
     changes: [

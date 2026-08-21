@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'ToonHQ+',
     description: 'ToonHQ+ (ToonHQ Plus) is an unofficial independently created browser extension that enhances the ToonHQ experience.',
-    version: '1.2.22',
+    version: '1.2.24',
     permissions: ['storage', 'alarms'],
     optional_permissions: ['notifications'],
     host_permissions: [

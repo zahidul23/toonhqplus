@@ -36,7 +36,12 @@ function loadMickeyNumbersFont() {
         new FontFace('MickeyNumbers', await responses[0].arrayBuffer()).load(),
         new FontFace('MickeyNumbersFill', await responses[1].arrayBuffer()).load(),
       ]);
-      for (const font of fonts) (self as any).fonts.add(font);
+      // Chrome MV3 exposes the worker FontFaceSet on self, while Firefox MV2
+      // runs this background script in a document and exposes document.fonts.
+      const fontSet: FontFaceSet | undefined = (self as any).fonts ?? (globalThis as any).document?.fonts;
+      if (!fontSet) return false;
+      for (const font of fonts) fontSet.add(font);
+      await fontSet.ready;
       return true;
     } catch {
       return false;

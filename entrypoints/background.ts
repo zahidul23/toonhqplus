@@ -224,9 +224,9 @@ export default defineBackground(() => {
         options: {
           type: 'basic',
           iconUrl: await createRewardNotificationIcon(change),
-          title: `+${change.count} ${style.label}`,
-          message: detail,
-          contextMessage: `ToonHQ+\n${data.data.toon.name}`,
+          title: `+${change.count} ${style.label}${import.meta.env.FIREFOX ? ' • ToonHQ+' : ''}`,
+          message: import.meta.env.FIREFOX ? `${detail}\n\n${data.data.toon.name}` : detail,
+          ...(!import.meta.env.FIREFOX ? { contextMessage: `ToonHQ+\n${data.data.toon.name}` } : {}),
         },
       } as const;
     }))).filter((notification): notification is NonNullable<typeof notification> => notification !== null);
@@ -251,9 +251,9 @@ export default defineBackground(() => {
           iconUrl: hasHealingRemote && hasDamageRemote
             ? browser.runtime.getURL('images/remotes-combined.png' as any)
             : await createRewardNotificationIcon(remoteChanges[0]),
-          title: `+${total} ${total === 1 ? 'Remote' : 'Remotes'}`,
-          message: details.join('\n'),
-          contextMessage: `ToonHQ+\n${data.data.toon.name}`,
+          title: `+${total} ${total === 1 ? 'Remote' : 'Remotes'}${import.meta.env.FIREFOX ? ' • ToonHQ+' : ''}`,
+          message: import.meta.env.FIREFOX ? `${details.join('\n')}\n\n${data.data.toon.name}` : details.join('\n'),
+          ...(!import.meta.env.FIREFOX ? { contextMessage: `ToonHQ+\n${data.data.toon.name}` } : {}),
         },
       });
     }
@@ -558,6 +558,36 @@ export default defineBackground(() => {
         sendResponse({ ok: true, granted });
       }).catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
       return true;
+    } else if (message.type === 'OPEN_REWARD_NOTIFICATION_SETTINGS') {
+      const openRewardNotificationSettings = async () => {
+        if (import.meta.env.FIREFOX) {
+          await browser.tabs.create({ url: browser.runtime.getURL('notification-settings.html' as any) });
+          return { ok: true, opened: 'tab' };
+        }
+
+        const popupApi = (browser as any).action?.openPopup
+          ? (browser as any).action
+          : (browser as any).browserAction;
+
+        if (popupApi?.openPopup) {
+          try {
+            await popupApi.openPopup();
+            return { ok: true, opened: 'popup' };
+          } catch {
+            // Firefox before 149 requires an extension user gesture to open a
+            // toolbar popup. Fall back to the same extension page in a tab.
+          }
+        }
+
+        await browser.tabs.create({
+          url: browser.runtime.getURL('notification-settings.html' as any),
+        });
+        return { ok: true, opened: 'tab' };
+      };
+
+      openRewardNotificationSettings().then(sendResponse)
+        .catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return true;
     } else if (message.type === 'REMOVE_REWARD_NOTIFICATION_PERMISSION') {
       browser.permissions.remove({ permissions: ['notifications'] }).then(async () => {
         const stillGranted = await browser.permissions.contains({ permissions: ['notifications'] });
@@ -682,6 +712,13 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener(() => {
     initializeBackground().catch(console.error);
+  });
+
+  // Firefox temporary-extension reloads do not reliably emit onStartup or
+  // onInstalled for the newly created background page. Always restore the
+  // persisted tracker preference when this background context starts.
+  initializeBackground().catch(error => {
+    console.error('[ToonTracker BG] Failed to initialize tracker:', error);
   });
 
   // Add installation/update listener to reload toonhq tabs

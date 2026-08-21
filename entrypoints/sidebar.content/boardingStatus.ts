@@ -1,4 +1,5 @@
 import { isToonHqAuthenticated } from './toonHqPageState';
+import { pageFetch } from './pageFetch';
 
 export type BoardingGroupStatus = null | {
   district?: number;
@@ -61,7 +62,7 @@ async function postBoardingSubscription(toonId: number, sid: string, request: 's
   const csrfToken = getCsrfToken();
   if (!csrfToken) throw new Error('Could not read ToonHQ\'s CSRF token.');
 
-  const response = await fetch('/api/groups/boarding_request/', {
+  const response = await pageFetch(new URL('/api/groups/boarding_request/', window.location.origin).href, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -177,7 +178,7 @@ async function requestBoardingGroupStatus(toonId: number): Promise<BoardingGroup
   });
 
   try {
-    const response = await fetch('/api/groups/boarding_request/', {
+    const response = await pageFetch(new URL('/api/groups/boarding_request/', window.location.origin).href, {
       method: 'POST',
       credentials: 'include',
       headers: {

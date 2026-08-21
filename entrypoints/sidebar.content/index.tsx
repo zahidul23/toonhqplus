@@ -4,6 +4,7 @@ import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
 import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingRequests, setBoardingCreationSubscription, setBoardingGroupsSocketSid } from './boardingStatus';
 import { getToonHqActiveTtrToonId, getToonHqOwnedToons, isToonHqAuthenticated, takeEmbeddedSocketAuthToken } from './toonHqPageState';
+import { pageFetch } from './pageFetch';
 import './style.css';
 import {
   openDB,
@@ -1747,7 +1748,7 @@ export default defineContentScript({
         pendingSocketAuthToken = null;
         if (!token) {
           if (!csrfToken) return;
-          const response = await fetch('/api/accounts/socket_auth/', {
+          const response = await pageFetch(new URL('/api/accounts/socket_auth/', window.location.origin).href, {
             method: 'POST',
             credentials: 'include',
             headers: { 'X-CSRFToken': decodeURIComponent(csrfToken) },
@@ -1780,7 +1781,41 @@ export default defineContentScript({
 
     const connectWebSocket = () => {
       if (groupTrackerDisposed) return;
-      const ws = new WebSocket('wss://toonhq.org/socket.io/?protocol=3&EIO=4&transport=websocket');
+      if (activeGroupSocket && (
+        activeGroupSocket.readyState === WebSocket.CONNECTING
+        || activeGroupSocket.readyState === WebSocket.OPEN
+      )) return;
+
+      // Keep the extension-owned socket on the same ToonHQ origin as the page.
+      // This matters when ToonHQ is reached through a canonical subdomain: the
+      // Socket.IO session and its authenticated HTTP requests must share an
+      // origin for boarding requests and Quick Teleport to work together.
+      const socketUrl = new URL('/socket.io/', window.location.origin);
+      socketUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socketUrl.searchParams.set('protocol', '3');
+      socketUrl.searchParams.set('EIO', '4');
+      socketUrl.searchParams.set('transport', 'websocket');
+
+      let ws: WebSocket;
+      try {
+        // Firefox MV2 content scripts have an expanded isolated global. Create
+        // the socket through the page window (the same route used by
+        // pageFetch) so it receives the page principal, appears in the page's
+        // Network monitor, and shares ToonHQ's authenticated socket context.
+        const pageContent = (globalThis as any).content;
+        const WebSocketConstructor = typeof pageContent?.WebSocket === 'function'
+          ? pageContent.WebSocket
+          : WebSocket;
+        ws = new WebSocketConstructor(socketUrl.href) as WebSocket;
+      } catch (error) {
+        console.warn('[ToonHQ+] Could not open the groups WebSocket:', error);
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(() => {
+          reconnectTimeout = null;
+          connectWebSocket();
+        }, 5000);
+        return;
+      }
       activeGroupSocket = ws;
 
       ws.addEventListener('open', () => {

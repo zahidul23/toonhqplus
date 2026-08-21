@@ -4,6 +4,7 @@ import { BoardingGroupStatus, getBoardingGroupStatus, getCachedBoardingGroupStat
 import { getSettings, setSetting } from './db';
 import { getToonSuitLevel } from './toonUtils';
 import { getToonHqActiveToonId, getToonHqOwnedToons, isToonHqAuthenticated } from './toonHqPageState';
+import { pageFetch } from './pageFetch';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
@@ -172,7 +173,7 @@ async function loadTtrToons(): Promise<Toon[]> {
     return cachedToons;
   }
 
-  toonsRequest = fetch('/api/toons/', { credentials: 'include' })
+  toonsRequest = pageFetch(new URL('/api/toons/', window.location.origin).href, { credentials: 'include' })
     .then(async response => {
       if (!response.ok) throw new Error(await readError(response));
       const data = await response.json();
@@ -481,7 +482,7 @@ export function QuickTeleport() {
     setBusy(true);
     setStatus(`Creating a temporary group for ${destinationFullName}...`);
     try {
-      const createResponse = await fetch('/api/groups/create/', {
+      const createResponse = await pageFetch(new URL('/api/groups/create/', window.location.origin).href, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json;charset=UTF-8', 'X-CSRFToken': csrfToken },
@@ -504,7 +505,7 @@ export function QuickTeleport() {
       if (!Number.isFinite(createdGroupId)) throw new Error('ToonHQ did not return the new group ID.');
 
       if (autoDelist) {
-        const leaveResponse = await fetch(`/api/groups/${createdGroupId}/leave/`, {
+        const leaveResponse = await pageFetch(new URL(`/api/groups/${createdGroupId}/leave/`, window.location.origin).href, {
           method: 'POST',
           credentials: 'include',
           headers: { 'X-CSRFToken': csrfToken },
