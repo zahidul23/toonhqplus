@@ -77,7 +77,7 @@ const LAWBOT_DATA = {
     { name: 'Shh!', junior: '25% Dmg', senior: '50% Dmg', note: 'Silence: Retaliates Sound dmg' },
   ],
   specialMoves: [
-    { name: 'Witness Protection', effect: 'Gag Immunity', note: 'Immune to Sound/Throw/Squirt/Drop. Heal +30-50.' },
+    { name: 'Witness Protection', effect: 'Gag Immunity', note: 'Immune to all damage until a cog is defeated.' },
     { name: 'Book Smart', effect: 'Dmg Up', note: '+15-30% Dmg. Reduces Lure to 1 turn.' },
     { name: 'Objection', effect: 'Gag Mandate', note: 'Must use Sound/Throw/Squirt/Drop or take dmg.' },
     { name: 'Objection Sustained', effect: 'Gag Ordinance', note: '15-25 dmg. Lockout 1 track (3-4 rounds).' },

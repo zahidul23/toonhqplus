@@ -1031,7 +1031,7 @@ const ToonSuitsView = React.memo(({
             </div>
             {!isMaxed && suit.promotion && remaining > 0 && setExpandedSuitId && (
               <div className="pt-1 mt-1 border-t border-white/10">
-                <button onClick={(e) => { e.stopPropagation(); setExpandedSuitId(expandedSuitId === id ? null : id); }} className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group">
+                <button onClick={(e) => { e.stopPropagation(); setExpandedSuitId(expandedSuitId === id ? null : id); }} className="w-full py-1.5 flex items-center justify-center gap-2 rounded hover:bg-black/10 transition-colors group cursor-pointer">
                   <span className="text-[9.5px] font-black uppercase tracking-[0.2em] opacity-40 group-hover:opacity-100 transition-opacity" style={{ color: colors.text }}>{expandedSuitId === id ? 'Hide Recommendations' : 'Show Recommendations'}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSuitId === id ? 'rotate-180' : ''}`} style={{ color: colors.accent }}><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
@@ -1863,33 +1863,25 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
           <div className={`animate-in fade-in slide-in-from-bottom-2 duration-300 ${isExpanded ? 'grid grid-cols-[320px_1fr] gap-4' : 'flex flex-col gap-4'}`}>
             <div className="flex flex-col gap-4">
               <div
-                onClick={(e) => {
-                  if (isExpanded) {
-                    e.stopPropagation();
-                    window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', {
-                      detail: { tab: 'reward_details' }
-                    }));
-                  }
-                }}
-                className={`space-y-2 rounded-xl bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] h-full ${isExpanded ? 'cursor-pointer hover:brightness-125 transition-all group/rewcard border border-white/5 hover:border-emerald-500/30' : ''}`}
+                className={`space-y-2 rounded-xl bg-[linear-gradient(180deg,rgba(8,47,73,0.4),rgba(3,7,18,0.55))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] h-full ${isExpanded ? 'border border-white/5' : ''}`}
               >
                 <div
-                  role="button"
-                  tabIndex={0}
+                  role={isExpanded ? undefined : 'button'}
+                  tabIndex={isExpanded ? undefined : 0}
                   onClick={(event) => {
+                    if (isExpanded) return;
                     event.stopPropagation();
                     toggleSection('rewards');
                   }}
                   onKeyDown={(event) => {
-                    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+                    if (isExpanded || event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
                     event.preventDefault();
                     event.stopPropagation();
                     toggleSection('rewards');
                   }}
-                  className="w-full flex items-center px-2 py-1 group cursor-pointer"
+                  className={`w-full flex items-center px-2 py-1 group ${isExpanded ? '' : 'cursor-pointer'}`}
                 >
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Rewards</h4>
-                  {isExpanded && <span className="text-[8px] text-emerald-400/60 ml-2 opacity-0 group-hover/rewcard:opacity-100 transition-opacity">(View Detailed)</span>}
                   <div className="ml-auto flex items-center gap-2">
                     <button
                     type="button"
@@ -1970,7 +1962,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                                 detail: { tab: 'reward_details' }
                               }));
                             }}
-                            className="text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors"
+                            className="text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
                           >
                             Show All
                           </button>
@@ -1991,7 +1983,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
             </div>
             <div className={isExpanded ? "flex flex-col gap-4" : "contents"}>
               <div className="space-y-2 rounded-xl border border-fuchsia-300/10 bg-[linear-gradient(180deg,rgba(88,28,135,0.22),rgba(17,24,39,0.5))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                <button onClick={() => toggleSection('suits')} className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer">
+                <button onClick={() => !isExpanded && toggleSection('suits')} className={`w-full flex items-center justify-between px-2 py-1 group ${isExpanded ? 'cursor-default' : 'cursor-pointer'}`}>
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">Cog Suits</h4>
                   {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.suits ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
                 </button>
@@ -2005,7 +1997,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 )}
               </div>
               <div className="space-y-2 rounded-xl border border-amber-300/20 bg-[linear-gradient(180deg,rgba(120,53,15,0.22),rgba(28,25,23,0.45))] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                <button onClick={() => toggleSection('tasks')} className="w-full flex items-center justify-between px-2 py-1 group cursor-pointer">
+                <button onClick={() => !isExpanded && toggleSection('tasks')} className={`w-full flex items-center justify-between px-2 py-1 group ${isExpanded ? 'cursor-default' : 'cursor-pointer'}`}>
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white transition-colors">ToonTasks</h4>
                   {!isExpanded && <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${expandedSections.tasks ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg></div>}
                 </button>
