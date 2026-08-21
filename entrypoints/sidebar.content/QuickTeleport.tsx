@@ -426,6 +426,7 @@ export function QuickTeleport() {
 
   const selectedToon = toons.find(toon => String(toon.id) === toonId);
   const selectedDestination = DESTINATIONS[destinationIndex];
+  const selectedDestinationFullName = getDestinationFullName(selectedDestination);
   const selectedSuitRowIndex = Math.max(0, DESTINATION_ROWS.findIndex(row => row.indices.includes(destinationIndex)));
   const selectedSuitRow = DESTINATION_ROWS[selectedSuitRowIndex];
   const selectedSuitLevel = getToonSuitLevel(selectedToon?.[selectedDestination.suitKey]);
@@ -671,7 +672,7 @@ export function QuickTeleport() {
 
       <div className="group relative w-full" tabIndex={teleportDisabledReason ? 0 : -1}>
         <button type="button" aria-describedby={teleportDisabledReason ? 'quick-teleport-disabled-reason' : undefined} disabled={!!teleportDisabledReason} onClick={teleport} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-          {checkingStatus ? 'Checking...' : busy ? (autoDelist ? 'Teleporting...' : 'Creating...') : autoDelist ? `Teleport to ${selectedDestination.label}` : `Create ${selectedDestination.label} Group`}
+          {checkingStatus ? 'Checking...' : busy ? (autoDelist ? 'Teleporting...' : 'Creating...') : autoDelist ? `Teleport to ${selectedDestinationFullName}` : `Create ${selectedDestinationFullName} Group`}
         </button>
         {teleportDisabledReason && <HoverTooltip id="quick-teleport-disabled-reason">{teleportDisabledReason}</HoverTooltip>}
       </div>
