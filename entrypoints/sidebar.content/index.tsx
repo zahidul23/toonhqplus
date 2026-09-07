@@ -6,6 +6,7 @@ import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingReq
 import { getToonHqActiveTtrToonId, getToonHqOwnedToons, isToonHqAuthenticated, takeEmbeddedSocketAuthToken } from './toonHqPageState';
 import { pageFetch } from './pageFetch';
 import './style.css';
+import { DISPLAY_MODE_SETTING } from '../lib/displayMode';
 import {
   openDB,
   migrateFromLocalStorage,
@@ -1364,7 +1365,8 @@ const DEFAULT_SETTINGS: Record<string, any> = {
     dropdown: ['field-offices', 'gardening', 'doodles']
   },
   'sidebar-open': false,
-  'active-tab': 'history'
+  'active-tab': 'history',
+  [DISPLAY_MODE_SETTING]: 'auto',
 };
 
 function generateToonHash(name: string, photo: string) {

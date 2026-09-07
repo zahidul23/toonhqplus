@@ -1,4 +1,5 @@
 import { closeDB, getSetting, setSetting } from './sidebar.content/db';
+import { normalizeDisplayMode } from './lib/displayMode';
 import { checkRewards, getRewardHistoryKey, pruneRewardHistory, isDeepEqual } from './sidebar.content/trackerUtils';
 import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardChange, RewardHistoryEntry } from './sidebar.content/trackerUtils';
@@ -548,6 +549,16 @@ export default defineBackground(() => {
       sendResponse({ received: true });
     } else if (message.type === 'GET_TRACKER_PREF') {
       sendResponse({ enabled: trackerEnabled });
+    } else if (message.type === 'DISPLAY_MODE_CHANGED') {
+      const mode = normalizeDisplayMode(message.mode);
+      browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] }).then(tabs => {
+        tabs.forEach(tab => {
+          if (tab.id) {
+            browser.tabs.sendMessage(tab.id, { type: 'DISPLAY_MODE_CHANGED', mode }).catch(() => { });
+          }
+        });
+      }).catch(console.error);
+      sendResponse({ received: true });
     } else if (message.type === 'GET_REWARD_NOTIFICATION_PERMISSION') {
       browser.permissions.contains({ permissions: ['notifications'] }).then(granted => {
         sendResponse({ ok: true, granted });

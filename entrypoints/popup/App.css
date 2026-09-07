@@ -195,6 +195,16 @@ h1 {
   line-height: 1.4;
 }
 
+.display-mode-select {
+  background: #101010;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
 /* Toggle Switch Styles */
 .switch {
   position: relative;

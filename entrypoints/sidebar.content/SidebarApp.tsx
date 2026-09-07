@@ -34,6 +34,7 @@ import {
   type ToonId,
   type SavedToonDataSnapshot,
 } from './db';
+import { DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
 
 import {
   createLocalSyncNotesPayload,
@@ -1437,6 +1438,7 @@ export function SidebarApp() {
   const [syncNotesChoiceDialog, setSyncNotesChoiceDialog] = useState<SyncNotesChoiceDialogState | null>(null);
   const [highlightGroupsEnabled, setHighlightGroupsEnabled] = useState(false);
   const [sidebarOnLeft, setSidebarOnLeft] = useState(false);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('auto');
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [activeToonIds, setActiveToonIds] = useState<ToonId[]>([]);
   const [justAddedId, setJustAddedId] = useState<ToonId | null>(null);
@@ -2017,7 +2019,7 @@ export function SidebarApp() {
   useEffect(() => {
     initSyncNotesRemoteListener(refresh);
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left']).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left', DISPLAY_MODE_SETTING]).then(values => {
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
@@ -2025,6 +2027,7 @@ export function SidebarApp() {
       if (values['sync-notes-enabled'] !== undefined) setSyncNotesEnabledState(values['sync-notes-enabled'] === true);
       if (values['highlight-groups'] !== undefined) setHighlightGroupsEnabled(!!values['highlight-groups']);
       if (values['sidebar-on-left'] !== undefined) setSidebarOnLeft(!!values['sidebar-on-left']);
+      if (values[DISPLAY_MODE_SETTING] !== undefined) setDisplayMode(normalizeDisplayMode(values[DISPLAY_MODE_SETTING]));
       if (values['tracker-enabled'] !== undefined) setTrackerEnabled(!!values['tracker-enabled']);
       let initialTab = values['active-tab'];
       if (initialTab === 'tracker' && values['tracker-enabled'] === false) {
@@ -2082,6 +2085,7 @@ export function SidebarApp() {
         getSetting<boolean>('notes-enabled').then(v => { if (v !== undefined) setNotesEnabled(v !== false); });
         getSetting<boolean>('sync-notes-enabled').then(v => { if (v !== undefined) setSyncNotesEnabledState(v === true); });
         getSetting<boolean>('tracker-enabled').then(v => { if (v !== undefined) setTrackerEnabled(v !== false); });
+        getSetting<DisplayMode>(DISPLAY_MODE_SETTING).then(v => { if (v !== undefined) setDisplayMode(normalizeDisplayMode(v)); });
         getSetting<string>('active-tab').then(v => { if (v) setActiveTab(v as any); });
         getSetting<boolean>('sidebar-open').then(v => { if (v !== undefined) setOpen(!!v); });
         getSetting<string[]>('active-toon-ids').then(ids => { if (ids) setActiveToonIds(ids); });
@@ -2104,6 +2108,9 @@ export function SidebarApp() {
             return currentTab;
           });
         }
+      }
+      if (message.type === 'DISPLAY_MODE_CHANGED') {
+        setDisplayMode(normalizeDisplayMode(message.mode));
       }
     };
 
@@ -2706,6 +2713,29 @@ export function SidebarApp() {
                           setSetting('navbar-config', newConfig).catch(console.error);
                         }}
                       />
+
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1">
+                          <div className="text-sm font-bold text-white">Display Mode</div>
+                          <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Choose light, dark, or follow your system theme on ToonHQ pages.
+                          </div>
+                        </div>
+                        <select
+                          aria-label="Display Mode"
+                          value={displayMode}
+                          onChange={(event) => {
+                            const next = normalizeDisplayMode(event.target.value);
+                            setDisplayMode(next);
+                            setSetting(DISPLAY_MODE_SETTING, next).catch(console.error);
+                          }}
+                          className="shrink-0 rounded border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-400"
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="light">Light</option>
+                          <option value="dark">Dark</option>
+                        </select>
+                      </div>
 
                       <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
                         <div className="flex flex-col flex-1 mr-4">
