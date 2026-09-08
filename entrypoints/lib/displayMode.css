@@ -179,19 +179,25 @@ html[data-toonhq-plus-display-mode="dark"] .card.filter-panel {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24) !important;
 }
 
-/* The Doodles filter toggle/header sits above the filter card content and
-   keeps the light theme's text color unless it is overridden explicitly. */
-html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel > a,
-html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel > a *,
+/* Keep Doodle filter headings readable without making the expand control look
+   selected. Depending on viewport, ToonHQ places that control above the body
+   or directly inside it. */
 html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-header,
 html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-header *,
 html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .filter-header,
-html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .filter-header *,
-html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-body > a,
-html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-body > a * {
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .filter-header * {
   background-color: var(--hq-dark-raised) !important;
   color: #ffffff !important;
   border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel > a,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel > a *,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-body > a,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-body > a * {
+  background-color: transparent !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
 }
 
 /* ToonHQ's Bootstrap table reset uses !important white cells, so cover the
@@ -509,7 +515,7 @@ html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items > li a {
   color: var(--hq-dark-muted) !important;
 }
 
-html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items > li a:is(.active, :hover, :focus-visible) {
+html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items:has(> li:nth-child(2)) > li a:is(.active, :hover, :focus-visible) {
   color: #ffffff !important;
   box-shadow: inset 0 -3px var(--hq-dark-accent);
 }
