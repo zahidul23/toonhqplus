@@ -11,6 +11,7 @@ html[data-toonhq-plus-display-mode="dark"] {
   --hq-dark-border-strong: #688578;
   --hq-dark-link: #8ccdf5;
   --hq-dark-accent: #a1d6b3;
+  --hq-dark-subnav: #4b7d5c;
   color-scheme: dark;
 }
 
@@ -22,6 +23,7 @@ html[data-toonhq-plus-display-mode="dark"] :is(.theme--generic, .theme--generic-
   --hq-dark-border: #49465e;
   --hq-dark-border-strong: #817a9b;
   --hq-dark-accent: #c5bbed;
+  --hq-dark-subnav: #534f6d;
 }
 
 html[data-toonhq-plus-display-mode="dark"] :is(.theme--invasions, .theme--notifications, .theme--fishing) {
@@ -31,6 +33,11 @@ html[data-toonhq-plus-display-mode="dark"] :is(.theme--invasions, .theme--notifi
   --hq-dark-border: #3b5367;
   --hq-dark-border-strong: #7594ae;
   --hq-dark-accent: #97cff1;
+  --hq-dark-subnav: #397895;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--fishing {
+  --hq-dark-subnav: #4678b2;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--shop {
@@ -40,6 +47,7 @@ html[data-toonhq-plus-display-mode="dark"] .theme--shop {
   --hq-dark-border: #5a4939;
   --hq-dark-border-strong: #9e8268;
   --hq-dark-accent: #f7c28e;
+  --hq-dark-subnav: #805b3e;
 }
 
 html[data-toonhq-plus-display-mode="dark"] body {
@@ -47,8 +55,8 @@ html[data-toonhq-plus-display-mode="dark"] body {
   color: var(--hq-dark-text) !important;
 }
 
-/* Match only the top navigation bar to each page's footer accent. Secondary
-   navigation stays on ToonHQ's original page-specific colors. */
+/* Keep the top bar dark and saturated so the lighter secondary navigation
+   reads as a distinct layer, following the Field Offices and CCG treatment. */
 html[data-toonhq-plus-display-mode="dark"] .theme--generic .navbar.navbar-default,
 html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid .navbar.navbar-default {
   background-color: #362f77 !important;
@@ -60,24 +68,24 @@ html[data-toonhq-plus-display-mode="dark"] .theme--home .navbar.navbar-default {
 
 html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default {
-  background-color: #284a35 !important;
+  background-color: #376447 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--invasions .navbar.navbar-default {
-  background-color: #174b69 !important;
+  background-color: #216d94 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--notifications .navbar.navbar-default {
-  background-color: #174b69 !important;
+  background-color: #216d94 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--fishing .navbar.navbar-default {
-  background-color: #2f4882 !important;
+  background-color: #405fa8 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--fos .navbar.navbar-default,
 html[data-toonhq-plus-display-mode="dark"] .theme--guilds .navbar.navbar-default {
-  background-color: #222030 !important;
+  background-color: #37334f !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--shop .navbar.navbar-default {
@@ -252,7 +260,8 @@ html[data-toonhq-plus-display-mode="dark"] .theme .subnav__btn,
 html[data-toonhq-plus-display-mode="dark"] .theme .subnav-wrapper .btn.btn-subnav {
   background-color: #376447 !important;
   color: #ffffff !important;
-  border-color: #4d7d5d !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .tt-card h1,
@@ -285,7 +294,7 @@ html[data-toonhq-plus-display-mode="dark"] .dropdown-menu {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35) !important;
 }
 
-/* More/Profile menus follow the top navbar's page-specific footer color. */
+/* More/Profile menus follow the top-navbar color. */
 html[data-toonhq-plus-display-mode="dark"] .theme--generic .navbar.navbar-default .dropdown-menu,
 html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid .navbar.navbar-default .dropdown-menu {
   background-color: #362f77 !important;
@@ -297,24 +306,24 @@ html[data-toonhq-plus-display-mode="dark"] .theme--home .navbar.navbar-default .
 
 html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default .dropdown-menu,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default .dropdown-menu {
-  background-color: #284a35 !important;
+  background-color: #376447 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--invasions .navbar.navbar-default .dropdown-menu {
-  background-color: #174b69 !important;
+  background-color: #216d94 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--notifications .navbar.navbar-default .dropdown-menu {
-  background-color: #174b69 !important;
+  background-color: #216d94 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--fishing .navbar.navbar-default .dropdown-menu {
-  background-color: #2f4882 !important;
+  background-color: #405fa8 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--fos .navbar.navbar-default .dropdown-menu,
 html[data-toonhq-plus-display-mode="dark"] .theme--guilds .navbar.navbar-default .dropdown-menu {
-  background-color: #222030 !important;
+  background-color: #37334f !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--shop .navbar.navbar-default .dropdown-menu {
@@ -429,9 +438,21 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .modal-image-cl
 }
 
 html[data-toonhq-plus-display-mode="dark"] .vuedal label,
-html[data-toonhq-plus-display-mode="dark"] .vuedal p,
+html[data-toonhq-plus-display-mode="dark"] .vuedal p:not(.gt__name),
 html[data-toonhq-plus-display-mode="dark"] .modal-content label,
-html[data-toonhq-plus-display-mode="dark"] .modal-content p {
+html[data-toonhq-plus-display-mode="dark"] .modal-content p:not(.gt__name) {
+  color: var(--hq-dark-text) !important;
+}
+
+/* Expanded Look for Groups choices should belong to the dark dialog rather
+   than retaining the site's light option panel. */
+html[data-toonhq-plus-display-mode="dark"] .vuedal .gt__options {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal .gt__options h6 {
   color: var(--hq-dark-text) !important;
 }
 
@@ -457,7 +478,7 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog :is(.message__n
   color: var(--hq-dark-muted) !important;
 }
 
-html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal, .info-card) a:not(.btn):not(.modal-image-close):not(.attr-filter__option),
+html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal, .info-card) a:not(.btn):not(.modal-image-close):not(.attr-filter__option):not(.gt__toggle),
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .text-primary {
   color: var(--hq-dark-link) !important;
 }
@@ -509,7 +530,7 @@ html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .navbar
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme :is(.subnav, .subnav-wrapper) {
-  background-color: var(--hq-dark-raised) !important;
+  background-color: var(--hq-dark-subnav) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items > li a {
@@ -555,11 +576,6 @@ html[data-toonhq-plus-display-mode="dark"] .form-control:focus,
 html[data-toonhq-plus-display-mode="dark"] .multiselect--active .multiselect__tags {
   border-color: var(--hq-dark-accent) !important;
   box-shadow: 0 0 0 2px var(--hq-dark-border) !important;
-}
-
-html[data-toonhq-plus-display-mode="dark"] .theme :is(a, button, input, select, textarea):focus-visible {
-  outline: 2px solid var(--hq-dark-accent);
-  outline-offset: 3px;
 }
 
 /* Alerts retain their meaning, with quieter fills and readable copy. */
@@ -649,13 +665,13 @@ html[data-toonhq-plus-display-mode="dark"] .vuedal .btn.btn-option {
   background-color: var(--hq-dark-raised) !important;
   border-color: var(--hq-dark-border-strong) !important;
   color: var(--hq-dark-text) !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .vuedal .btn.btn-option.active {
   background-color: #376447 !important;
-  border-color: #a1d6b3 !important;
   color: #ffffff !important;
-  box-shadow: inset 0 0 0 1px #a1d6b3;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .vuedal .btn.btn-option:not(.active):hover {
