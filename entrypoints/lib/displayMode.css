@@ -565,7 +565,7 @@ html[data-toonhq-plus-display-mode="dark"] :is(.multiselect__option--highlight, 
 }
 
 html[data-toonhq-plus-display-mode="dark"] .multiselect__option--selected.multiselect__option--highlight {
-  background-color: #713e49 !important;
+  background-color: #376447 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .multiselect--disabled {
@@ -632,6 +632,12 @@ html[data-toonhq-plus-display-mode="dark"] .vue-dropdown__content {
   box-shadow: 0 12px 28px #0005;
 }
 
+/* The dark-mode dimmer gives the content and footer equal stacking levels, so
+   the later footer paints over the open filter. Raise the containing context. */
+html[data-toonhq-plus-display-mode="dark"] .theme--groups > .sl__content {
+  z-index: 2 !important;
+}
+
 html[data-toonhq-plus-display-mode="dark"] :is(.group-filters h6, .no-groups) {
   color: var(--hq-dark-text) !important;
 }
@@ -684,4 +690,16 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog :is(.sc-alert, 
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__boarding {
   color: #c5bbed !important;
+}
+
+/* Keep leader notes recognizably pink without the light-theme alert glare. */
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__note.alert-pink {
+  background-color: #211820 !important;
+  border-color: #9f648a !important;
+  color: #f8edf4 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__note.alert-pink :is(.gdetails__note-header, strong) {
+  color: #ffd9ef !important;
+  font-weight: 400 !important;
 }
