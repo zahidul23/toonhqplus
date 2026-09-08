@@ -1,0 +1,664 @@
+/* ToonHQ+ website theme. Imported as text and injected once at document_start.
+   All rules are scoped to dark mode; the site's light theme remains native.
+   Edit these tokens first, then the component sections below. */
+html[data-toonhq-plus-display-mode="dark"] {
+  --hq-dark-base: #111a18;
+  --hq-dark-surface: #1b2925;
+  --hq-dark-raised: #263a32;
+  --hq-dark-text: #e7eee9;
+  --hq-dark-muted: #adbbb4;
+  --hq-dark-border: #3a5046;
+  --hq-dark-border-strong: #688578;
+  --hq-dark-link: #8ccdf5;
+  --hq-dark-accent: #a1d6b3;
+  color-scheme: dark;
+}
+
+/* A slight tint ties neutral surfaces to the section's existing artwork. */
+html[data-toonhq-plus-display-mode="dark"] :is(.theme--generic, .theme--generic-solid, .theme--home, .theme--fos, .theme--guilds) {
+  --hq-dark-base: #171622;
+  --hq-dark-surface: #242333;
+  --hq-dark-raised: #333149;
+  --hq-dark-border: #49465e;
+  --hq-dark-border-strong: #817a9b;
+  --hq-dark-accent: #c5bbed;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.theme--invasions, .theme--notifications, .theme--fishing) {
+  --hq-dark-base: #111c26;
+  --hq-dark-surface: #1b2b38;
+  --hq-dark-raised: #273c4d;
+  --hq-dark-border: #3b5367;
+  --hq-dark-border-strong: #7594ae;
+  --hq-dark-accent: #97cff1;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--shop {
+  --hq-dark-base: #211b17;
+  --hq-dark-surface: #2c2621;
+  --hq-dark-raised: #40352b;
+  --hq-dark-border: #5a4939;
+  --hq-dark-border-strong: #9e8268;
+  --hq-dark-accent: #f7c28e;
+}
+
+html[data-toonhq-plus-display-mode="dark"] body {
+  background-color: var(--hq-dark-base) !important;
+  color: var(--hq-dark-text) !important;
+}
+
+/* Match only the top navigation bar to each page's footer accent. Secondary
+   navigation stays on ToonHQ's original page-specific colors. */
+html[data-toonhq-plus-display-mode="dark"] .theme--generic .navbar.navbar-default,
+html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid .navbar.navbar-default {
+  background-color: #362f77 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--home .navbar.navbar-default {
+  background-color: #302b59 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default,
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default {
+  background-color: #284a35 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--invasions .navbar.navbar-default {
+  background-color: #174b69 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--notifications .navbar.navbar-default {
+  background-color: #174b69 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--fishing .navbar.navbar-default {
+  background-color: #2f4882 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--fos .navbar.navbar-default,
+html[data-toonhq-plus-display-mode="dark"] .theme--guilds .navbar.navbar-default {
+  background-color: #222030 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .navbar.navbar-default {
+  background-color: #623817 !important;
+}
+
+/* The background dimmer creates a stacking context for each page shell. Keep
+   the navbar above the page banners so its overflowing menus remain visible. */
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default {
+  position: relative;
+  z-index: 20 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .sl__header {
+  position: relative;
+  z-index: 20 !important;
+  overflow: visible !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .dropdown-menu {
+  z-index: 40 !important;
+}
+
+/* Dim only the bright patterned backgrounds; keep ToonHQ's layered artwork
+   intact and leave cards, controls, and content at their normal contrast. */
+html[data-toonhq-plus-display-mode="dark"] .theme--generic,
+html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid,
+html[data-toonhq-plus-display-mode="dark"] .theme--home,
+html[data-toonhq-plus-display-mode="dark"] .theme--invasions,
+html[data-toonhq-plus-display-mode="dark"] .theme--notifications,
+html[data-toonhq-plus-display-mode="dark"] .theme--fishing,
+html[data-toonhq-plus-display-mode="dark"] .theme--groups,
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop {
+  position: relative;
+  isolation: isolate;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--generic::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--home::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--invasions::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--notifications::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--fishing::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--groups::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.52);
+}
+
+/* Groups and Gardening use busier, lighter artwork; keep more of it visible. */
+html[data-toonhq-plus-display-mode="dark"] .theme--groups::before,
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening::before {
+  background: rgba(0, 0, 0, 0.46);
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--generic > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--home > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--invasions > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--notifications > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--fishing > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--groups > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
+html[data-toonhq-plus-display-mode="dark"] .theme--shop > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Preserve ToonHQ's inactive navigation link colors; only the active/hover
+   state gets the dark-mode contrast treatment. */
+html[data-toonhq-plus-display-mode="dark"] .navbar.navbar-default .navbar-nav > li:hover > a:not(.sign-up),
+html[data-toonhq-plus-display-mode="dark"] .navbar.navbar-default .navbar-nav > li.active > a:not(.sign-up) {
+  color: #f2fff5 !important;
+}
+
+/* Match the dark-mode header logo to the footer's unoutlined logo asset. */
+html[data-toonhq-plus-display-mode="dark"] .navbar-left__logo img[alt="ToonHQ"] {
+  content: url("/static/dist/img/logo-sm.642a444f.png") !important;
+  width: 160px !important;
+  height: 55px !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--home {
+  background-color: #16251f !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .tt-card,
+html[data-toonhq-plus-display-mode="dark"] .info-card,
+html[data-toonhq-plus-display-mode="dark"] .card.filter-panel {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* The Doodles filter toggle/header sits above the filter card content and
+   keeps the light theme's text color unless it is overridden explicitly. */
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel > a,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel > a *,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-header,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-header *,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .filter-header,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .filter-header *,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-body > a,
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .filter-panel .card-body > a * {
+  background-color: var(--hq-dark-raised) !important;
+  color: #ffffff !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+/* ToonHQ's Bootstrap table reset uses !important white cells, so cover the
+   page tables as well as the card-specific tables above. */
+html[data-toonhq-plus-display-mode="dark"] .theme table,
+html[data-toonhq-plus-display-mode="dark"] .theme .table,
+html[data-toonhq-plus-display-mode="dark"] .theme .table td,
+html[data-toonhq-plus-display-mode="dark"] .theme .table th,
+html[data-toonhq-plus-display-mode="dark"] .theme .track-card table,
+html[data-toonhq-plus-display-mode="dark"] .theme .track-card table td,
+html[data-toonhq-plus-display-mode="dark"] .theme .track-card table th {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .card,
+html[data-toonhq-plus-display-mode="dark"] .theme .track-card,
+html[data-toonhq-plus-display-mode="dark"] .theme .panel,
+html[data-toonhq-plus-display-mode="dark"] .theme .list-group-item {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .card-header,
+html[data-toonhq-plus-display-mode="dark"] .theme .card-footer,
+html[data-toonhq-plus-display-mode="dark"] .theme .panel-heading,
+html[data-toonhq-plus-display-mode="dark"] .theme .panel-footer {
+  background-color: var(--hq-dark-raised) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .info-card--groups:has(.info-card__content.toony-group) {
+  background-color: #285b3c !important;
+  color: #edfff2 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .info-card--groups:has(.info-card__content.stinky-group) {
+  background-color: #653b3b !important;
+  color: #fff0f0 !important;
+}
+
+/* Preserve inactive secondary-nav link colors; keep active links readable. */
+html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items > li a.active {
+  color: #ffffff !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .subnav__btn,
+html[data-toonhq-plus-display-mode="dark"] .theme .subnav-wrapper .btn.btn-subnav {
+  background-color: #376447 !important;
+  color: #ffffff !important;
+  border-color: #4d7d5d !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .tt-card h1,
+html[data-toonhq-plus-display-mode="dark"] .tt-card h2,
+html[data-toonhq-plus-display-mode="dark"] .tt-card h3,
+html[data-toonhq-plus-display-mode="dark"] .tt-card h4,
+html[data-toonhq-plus-display-mode="dark"] .tt-card h5,
+html[data-toonhq-plus-display-mode="dark"] .tt-card h6,
+html[data-toonhq-plus-display-mode="dark"] .info-card h1,
+html[data-toonhq-plus-display-mode="dark"] .info-card h2,
+html[data-toonhq-plus-display-mode="dark"] .info-card h3,
+html[data-toonhq-plus-display-mode="dark"] .info-card h4,
+html[data-toonhq-plus-display-mode="dark"] .info-card h5,
+html[data-toonhq-plus-display-mode="dark"] .info-card h6 {
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .tt-card .table,
+html[data-toonhq-plus-display-mode="dark"] .tt-card .table td,
+html[data-toonhq-plus-display-mode="dark"] .tt-card .table th {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .dropdown-menu {
+  background-color: #284a35 !important;
+  border-color: var(--hq-dark-border) !important;
+  color: var(--hq-dark-text) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* More/Profile menus follow the top navbar's page-specific footer color. */
+html[data-toonhq-plus-display-mode="dark"] .theme--generic .navbar.navbar-default .dropdown-menu,
+html[data-toonhq-plus-display-mode="dark"] .theme--generic-solid .navbar.navbar-default .dropdown-menu {
+  background-color: #362f77 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--home .navbar.navbar-default .dropdown-menu {
+  background-color: #302b59 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default .dropdown-menu,
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default .dropdown-menu {
+  background-color: #284a35 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--invasions .navbar.navbar-default .dropdown-menu {
+  background-color: #174b69 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--notifications .navbar.navbar-default .dropdown-menu {
+  background-color: #174b69 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--fishing .navbar.navbar-default .dropdown-menu {
+  background-color: #2f4882 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--fos .navbar.navbar-default .dropdown-menu,
+html[data-toonhq-plus-display-mode="dark"] .theme--guilds .navbar.navbar-default .dropdown-menu {
+  background-color: #222030 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .navbar.navbar-default .dropdown-menu {
+  background-color: #623817 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .user-dropdown .dropdown-menu,
+html[data-toonhq-plus-display-mode="dark"] .theme .user-dropdown .dropdown-menu * {
+  color: #ffffff !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .dropdown-menu > li > a:hover,
+html[data-toonhq-plus-display-mode="dark"] .dropdown-menu .dropdown-item:hover {
+  background-color: #376447 !important;
+}
+
+/* Preserve each More-menu page link's ToonHQ color and tint the hover state
+   relative to the current page nav instead of applying a fixed green. */
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .dropdown-menu > li > a:hover,
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .dropdown-menu .dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .form-control,
+html[data-toonhq-plus-display-mode="dark"] select,
+html[data-toonhq-plus-display-mode="dark"] textarea {
+  background-color: var(--hq-dark-base) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border-strong) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .form-control::placeholder,
+html[data-toonhq-plus-display-mode="dark"] textarea::placeholder {
+  color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedals {
+  background-color: rgba(3, 12, 8, 0.78) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal,
+html[data-toonhq-plus-display-mode="dark"] .vuedal.modal-content,
+html[data-toonhq-plus-display-mode="dark"] .modal-content {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .invasion-info,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toonatar__backdrop {
+  background-color: #264d36 !important;
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog {
+  background-color: #264d36 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__messages-hidden,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__footer {
+  background-color: var(--hq-dark-raised) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__messages-hidden,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__body,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__alert,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__footer {
+  border-color: var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__header {
+  background-color: #284a35 !important;
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__header-title,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__back,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__back i {
+  color: #d7f0df !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .message__bubble {
+  background-color: #304b3a !important;
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table td,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table th {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+}
+
+/* Re-apply saved-toon row colors after the dialog table reset. The extra
+   table/class qualifiers are intentional: Bootstrap's dark table rule is
+   more specific than the base injected highlight rule. */
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.toonhq-plus-favorite,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.toonhq-plus-favorite td {
+  background-color: rgba(34, 197, 94, 0.24) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.toonhq-plus-blocked,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.toonhq-plus-blocked td {
+  background-color: rgba(239, 68, 68, 0.24) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .modal-image-close {
+  background-color: var(--hq-dark-raised) !important;
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal label,
+html[data-toonhq-plus-display-mode="dark"] .vuedal p,
+html[data-toonhq-plus-display-mode="dark"] .modal-content label,
+html[data-toonhq-plus-display-mode="dark"] .modal-content p {
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .alert.alert-primary {
+  background-color: #193b4b !important;
+  color: #c7efff !important;
+  border-color: #2c6b84 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme__accent-bg {
+  filter: brightness(0.82);
+}
+
+/* Text: several site titles are divs, and Bootstrap text utilities override
+   inherited card colors. Keep semantic colors explicit instead of filtering. */
+html[data-toonhq-plus-display-mode="dark"] .info-card__title,
+html[data-toonhq-plus-display-mode="dark"] .info-card .group-synced {
+  color: var(--hq-dark-accent) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal, .filter-panel, .filters) :is(.text-muted, .form-text, .splash__content),
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog :is(.message__name, .message__time, .speedchat__footer) {
+  color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal, .info-card) a:not(.btn):not(.modal-image-close):not(.attr-filter__option),
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .text-primary {
+  color: var(--hq-dark-link) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal, .info-card) .text-success {
+  color: #94d6ae !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal) :is(hr, .modal-footer),
+html[data-toonhq-plus-display-mode="dark"] .track-card :is(th, td) {
+  border-color: var(--hq-dark-border) !important;
+}
+
+/* Navigation: retain ToonHQ's section colors in lighter dark-theme shades.
+   Use hrefs so these follow links moved into More by the user's nav settings. */
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .navbar-nav > li > a:not(.sign-up),
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .dropdown-menu a {
+  color: var(--hq-nav-color, #e4e9ed) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .navbar a[href*="/invasions/"] {
+  --hq-nav-color: #91d3ff;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .navbar a:is([href*="/groups/"], [href*="/gardening/"]) {
+  --hq-nav-color: #9cdbaf;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .navbar a[href*="/fishing/"] {
+  --hq-nav-color: #acbfff;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .navbar a:is([href*="/field-offices/"], [href*="/ccg/"]) {
+  --hq-nav-color: #cdc0f0;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .navbar a[href*="/doodles/"] {
+  --hq-nav-color: #ffc38d;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .navbar .nav-link.dropdown-toggle {
+  --hq-nav-color: #ffa5ad;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .navbar-nav > li > a:is(.active, :hover, :focus-visible) {
+  color: var(--hq-nav-color, #ffffff) !important;
+  background-color: #ffffff0d !important;
+  box-shadow: inset 0 -3px var(--hq-nav-color, #ffffff) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme :is(.subnav, .subnav-wrapper) {
+  background-color: var(--hq-dark-raised) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items > li a {
+  color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .subnav__items > li a:is(.active, :hover, :focus-visible) {
+  color: #ffffff !important;
+  box-shadow: inset 0 -3px var(--hq-dark-accent);
+}
+
+/* Vue Multiselect is not a native select or .form-control. These styles cover
+   group creation/filtering, toon selection, and account dialogs together. */
+html[data-toonhq-plus-display-mode="dark"] :is(.multiselect__tags, .multiselect__input, .multiselect__single, .multiselect__content-wrapper) {
+  background-color: var(--hq-dark-base) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border-strong) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .multiselect__placeholder,
+html[data-toonhq-plus-display-mode="dark"] .multiselect__input::placeholder {
+  color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .multiselect__select::before {
+  border-top-color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.multiselect__option--highlight, .multiselect__option--selected, .multiselect__tag) {
+  background-color: var(--hq-dark-raised) !important;
+  color: #ffffff !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .multiselect__option--selected.multiselect__option--highlight {
+  background-color: #713e49 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .multiselect--disabled {
+  opacity: 0.55;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .form-control:focus,
+html[data-toonhq-plus-display-mode="dark"] .multiselect--active .multiselect__tags {
+  border-color: var(--hq-dark-accent) !important;
+  box-shadow: 0 0 0 2px var(--hq-dark-border) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme :is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--hq-dark-accent);
+  outline-offset: 3px;
+}
+
+/* Alerts retain their meaning, with quieter fills and readable copy. */
+html[data-toonhq-plus-display-mode="dark"] .alert-warning {
+  background-color: #45371f !important;
+  color: #ffe0a0 !important;
+  border-color: #80633a !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .alert-danger {
+  background-color: #492a31 !important;
+  color: #ffc0c6 !important;
+  border-color: #80515b !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .alert-success {
+  background-color: #244433 !important;
+  color: #b9ebcb !important;
+  border-color: #4a7b5c !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .alert :is(p, label, a) {
+  color: inherit !important;
+}
+
+/* Doodle score badges and swatches: preserve the render's actual colors. */
+html[data-toonhq-plus-display-mode="dark"] .info-card__score {
+  background-color: var(--hq-dark-raised) !important;
+  color: var(--hq-dark-accent) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .attr-filter__option {
+  background-color: #bbb6b0 !important;
+}
+
+/* Trait colors are inserted inline by ToonHQ. Match only those known colors. */
+html[data-toonhq-plus-display-mode="dark"] .info-card--doodle span[style*="rgb(80, 98, 219)"] {
+  color: #b4baff !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .info-card--doodle span[style*="rgb(11, 164, 103)"] {
+  color: #98dcb4 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .info-card--doodle span[style*="rgb(119, 119, 119)"] {
+  color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-filters,
+html[data-toonhq-plus-display-mode="dark"] .vue-dropdown__content {
+  background-color: var(--hq-dark-surface) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border) !important;
+  box-shadow: 0 12px 28px #0005;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.group-filters h6, .no-groups) {
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .alert-info {
+  background-color: #223c4d !important;
+  color: #c6e6fa !important;
+  border-color: #42657d !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal .species__image {
+  /* These are monochrome silhouettes, not Toon photos or gag artwork. */
+  filter: invert(0.85);
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal .species__name {
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.vue-swatches__container, .vue-swatches__wrapper, .vue-swatches__fallback__wrapper) {
+  background-color: var(--hq-dark-raised) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vue-swatches__fallback__input {
+  background-color: var(--hq-dark-base) !important;
+  color: var(--hq-dark-text) !important;
+}
+
+/* Radio-style group options need a clear selected state as well as contrast. */
+html[data-toonhq-plus-display-mode="dark"] .vuedal .btn.btn-option {
+  background-color: var(--hq-dark-raised) !important;
+  border-color: var(--hq-dark-border-strong) !important;
+  color: var(--hq-dark-text) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal .btn.btn-option.active {
+  background-color: #376447 !important;
+  border-color: #a1d6b3 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px #a1d6b3;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .vuedal .btn.btn-option:not(.active):hover {
+  border-color: var(--hq-dark-accent) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog :is(.sc-alert, .speedchat__messages-hidden) {
+  color: var(--hq-dark-muted) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__boarding {
+  color: #c5bbed !important;
+}
