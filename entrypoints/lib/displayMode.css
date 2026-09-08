@@ -130,13 +130,13 @@ html[data-toonhq-plus-display-mode="dark"] .theme--shop::before {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.52);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* Groups and Gardening use busier, lighter artwork; keep more of it visible. */
 html[data-toonhq-plus-display-mode="dark"] .theme--groups::before,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening::before {
-  background: rgba(0, 0, 0, 0.46);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--generic > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
@@ -177,6 +177,7 @@ html[data-toonhq-plus-display-mode="dark"] .card.filter-panel {
   color: var(--hq-dark-text) !important;
   border-color: var(--hq-dark-border) !important;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24) !important;
+  opacity: 0.94 !important;
 }
 
 /* Keep Doodle filter headings readable without making the expand control look
