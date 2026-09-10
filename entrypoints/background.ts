@@ -16,6 +16,26 @@ import {
   type ExtensionStorageSnapshot,
 } from './lib/storageTransfer';
 
+const VIEW_TOON_STYLE_CONTEXT_MENU_ID = 'view-toon-style';
+const TTR_RENDITION_ORIGIN = 'https://rendition.toontownrewritten.com';
+
+function getToonStyleUrl(sourceUrl: string): string | null {
+  try {
+    const url = new URL(sourceUrl);
+    if (url.origin !== TTR_RENDITION_ORIGIN) return null;
+
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    if (pathParts[0] !== 'render') return null;
+
+    const dna = pathParts[1];
+    if (!dna || !/^[0-9a-f]+$/i.test(dna)) return null;
+
+    return `https://toontown.help/style?dna=${encodeURIComponent(dna)}`;
+  } catch {
+    return null;
+  }
+}
+
 export default defineBackground(() => {
   const connections = new Map<string, { ws: WebSocket; data: ToonTrackerData | null; authorized: boolean }>();
   let primaryPort: string | null = null;
@@ -723,6 +743,22 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener(() => {
     initializeBackground().catch(console.error);
+
+    browser.contextMenus.remove(VIEW_TOON_STYLE_CONTEXT_MENU_ID).catch(() => { }).finally(() => {
+      browser.contextMenus.create({
+        id: VIEW_TOON_STYLE_CONTEXT_MENU_ID,
+        title: 'View their style on toontown.help',
+        contexts: ['image'],
+        targetUrlPatterns: [`${TTR_RENDITION_ORIGIN}/render/*`],
+      });
+    });
+  });
+
+  browser.contextMenus.onClicked.addListener((info) => {
+    if (info.menuItemId !== VIEW_TOON_STYLE_CONTEXT_MENU_ID || !info.srcUrl) return;
+
+    const styleUrl = getToonStyleUrl(info.srcUrl);
+    if (styleUrl) browser.tabs.create({ url: styleUrl }).catch(console.error);
   });
 
   // Firefox temporary-extension reloads do not reliably emit onStartup or
