@@ -34,7 +34,8 @@ import {
   type ToonId,
   type SavedToonDataSnapshot,
 } from './db';
-import { DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
+import { DARK_MODE_NOTICE_DISMISSED_KEY, DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
+import { useSystemDisplayMode } from '../lib/useSystemDisplayMode';
 
 import {
   createLocalSyncNotesPayload,
@@ -1179,6 +1180,7 @@ function NavbarSettings({
 }) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<{ list: 'pinned' | 'dropdown', index: number } | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const moveItem = (id: string, from: 'pinned' | 'dropdown', to: 'pinned' | 'dropdown', atIndex?: number) => {
     const newConfig = { ...config };
@@ -1295,54 +1297,54 @@ function NavbarSettings({
   };
 
   return (
-    <div className="flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1">
-      <p className="text-xs text-green-100/70 leading-relaxed bg-black/20 p-2 rounded border border-white/5">
-        Drag and drop items to customize your navigation bar. <strong>Pinned Pages</strong> show in the main bar, while <strong>Hidden Pages</strong> move to the "More" menu.
-      </p>
-      <div>
-        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]/60">Pinned Pages</h5>
-        <div className="flex flex-col">
-          {config.pinned.map((id, i) => (
-            <React.Fragment key={id}>
-              {renderDropZone('pinned', i)}
-              {renderItemRow(id, 'pinned')}
-            </React.Fragment>
-          ))}
-          {config.pinned.length > 0 && renderDropZone('pinned', config.pinned.length)}
-          {config.pinned.length === 0 && (
-            <div
-              onDragOver={(e) => onDragOver(e, 'pinned', 0)}
-              onDragLeave={() => setDragOverInfo(null)}
-              onDrop={(e) => onDrop(e, 'pinned', 0)}
-              className={`transition-all duration-200 text-center text-xs italic p-4 border-2 border-dashed rounded ${dragOverInfo?.list === 'pinned' && dragOverInfo?.index === 0 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200' : 'text-green-200/30 border-white/5'}`}
-            >
-              Drop items here to pin.
-            </div>
-          )}
+    <div className="overflow-hidden rounded-lg border border-white/5 bg-black/20">
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls="toonhq-plus-navigation-settings"
+        onClick={() => setIsExpanded(expanded => !expanded)}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 p-2.5 text-left transition-colors hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300"
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-white">Navigation</div>
+          <div className="mt-0.5 text-[10px] leading-tight text-green-200/50">Choose which pages appear in the navigation bar.</div>
         </div>
-      </div>
-      <div>
-        <h5 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]/60">Hidden Pages</h5>
-        <div className="flex flex-col">
-          {config.dropdown.map((id, i) => (
-            <React.Fragment key={id}>
-              {renderDropZone('dropdown', i)}
-              {renderItemRow(id, 'dropdown')}
-            </React.Fragment>
-          ))}
-          {config.dropdown.length > 0 && renderDropZone('dropdown', config.dropdown.length)}
-          {config.dropdown.length === 0 && (
-            <div
-              onDragOver={(e) => onDragOver(e, 'dropdown', 0)}
-              onDragLeave={() => setDragOverInfo(null)}
-              onDrop={(e) => onDrop(e, 'dropdown', 0)}
-              className={`transition-all duration-200 text-center text-xs italic p-4 border-2 border-dashed rounded ${dragOverInfo?.list === 'dropdown' && dragOverInfo?.index === 0 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200' : 'text-green-200/30 border-white/5'}`}
-            >
-              Drop items here to hide.
+        <svg className={`h-4 w-4 shrink-0 text-green-200/60 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div id="toonhq-plus-navigation-settings" className="flex flex-col gap-3 border-t border-white/5 p-2.5">
+          <p className="rounded border border-white/5 bg-black/20 p-2 text-xs leading-relaxed text-green-100/70">
+            Drag and drop items to customize your navigation bar. <strong>Pinned Pages</strong> show in the main bar, while <strong>Hidden Pages</strong> move to the "More" menu.
+          </p>
+          <div>
+            <h5 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]/60">Pinned Pages</h5>
+            <div className="flex flex-col">
+              {config.pinned.map((id, i) => (
+                <React.Fragment key={id}>{renderDropZone('pinned', i)}{renderItemRow(id, 'pinned')}</React.Fragment>
+              ))}
+              {config.pinned.length > 0 && renderDropZone('pinned', config.pinned.length)}
+              {config.pinned.length === 0 && (
+                <div onDragOver={(e) => onDragOver(e, 'pinned', 0)} onDragLeave={() => setDragOverInfo(null)} onDrop={(e) => onDrop(e, 'pinned', 0)} className={`rounded border-2 border-dashed p-4 text-center text-xs italic transition-all duration-200 ${dragOverInfo?.list === 'pinned' && dragOverInfo?.index === 0 ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200' : 'border-white/5 text-green-200/30'}`}>Drop items here to pin.</div>
+              )}
             </div>
-          )}
+          </div>
+          <div>
+            <h5 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]/60">Hidden Pages</h5>
+            <div className="flex flex-col">
+              {config.dropdown.map((id, i) => (
+                <React.Fragment key={id}>{renderDropZone('dropdown', i)}{renderItemRow(id, 'dropdown')}</React.Fragment>
+              ))}
+              {config.dropdown.length > 0 && renderDropZone('dropdown', config.dropdown.length)}
+              {config.dropdown.length === 0 && (
+                <div onDragOver={(e) => onDragOver(e, 'dropdown', 0)} onDragLeave={() => setDragOverInfo(null)} onDrop={(e) => onDrop(e, 'dropdown', 0)} className={`rounded border-2 border-dashed p-4 text-center text-xs italic transition-all duration-200 ${dragOverInfo?.list === 'dropdown' && dragOverInfo?.index === 0 ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200' : 'border-white/5 text-green-200/30'}`}>Drop items here to hide.</div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1413,6 +1415,7 @@ function SavedToonsPagination({ page, totalItems, onPageChange }: {
 }
 
 export function SidebarApp() {
+  const systemDisplayMode = useSystemDisplayMode();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'tracker' | 'history' | 'toons' | 'settings'>('history');
   const [favorites, setFavorites] = useState<ToonId[]>([]);
@@ -1453,6 +1456,7 @@ export function SidebarApp() {
   const [stinkyCollapsed, setStinkyCollapsed] = useState(false);
   const [neutralCollapsed, setNeutralCollapsed] = useState(false);
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
+  const [showDarkModeNotice, setShowDarkModeNotice] = useState(false);
   const [searchPage, setSearchPage] = useState(1);
   const [toonyPage, setToonyPage] = useState(1);
   const [stinkyPage, setStinkyPage] = useState(1);
@@ -1467,6 +1471,19 @@ export function SidebarApp() {
   useEffect(() => { toonyListRef.current?.scrollTo({ top: 0 }); }, [toonyPage]);
   useEffect(() => { stinkyListRef.current?.scrollTo({ top: 0 }); }, [stinkyPage]);
   useEffect(() => { notesListRef.current?.scrollTo({ top: 0 }); }, [notesPage]);
+  useEffect(() => {
+    if (!hasLoadedSettings || displayMode !== 'auto' || systemDisplayMode !== 'Dark') return;
+    try {
+      if (localStorage.getItem(DARK_MODE_NOTICE_DISMISSED_KEY) === 'true') return;
+    } catch {
+      // Show the notice when the dismissal preference cannot be read.
+    }
+    setShowDarkModeNotice(true);
+    if (!open) {
+      setOpen(true);
+      setSetting('sidebar-open', true).catch(console.error);
+    }
+  }, [displayMode, hasLoadedSettings, open, systemDisplayMode]);
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -2190,7 +2207,55 @@ export function SidebarApp() {
         </div>
 
         {open && (
-          <aside className="w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0">
+          <aside className="relative w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0">
+            {showDarkModeNotice && (
+              <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pb-4 pt-12">
+                <section role="dialog" aria-modal="true" aria-labelledby="toonhq-plus-theme-notice-title" className="w-full rounded-xl border border-emerald-300/20 bg-[#103d29] p-4 text-white shadow-2xl">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">ToonHQ+ display mode</div>
+                  <h2 id="toonhq-plus-theme-notice-title" className="mt-1 text-lg font-bold">Dark theme applied</h2>
+                  <p className="mt-2 text-xs leading-relaxed text-green-100/75">
+                    Your system prefers dark mode, so ToonHQ+ has applied a dark theme to ToonHQ.
+                  </p>
+
+                  <div className="mt-4 text-[10px] font-bold text-green-100/80">Choose your display mode</div>
+                  <div className="mt-1.5 grid w-full grid-cols-3 gap-0.5 rounded-lg border border-white/10 bg-black/30 p-0.5" role="radiogroup" aria-label="Display Mode">
+                    {(['light', 'dark', 'auto'] as DisplayMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="radio"
+                        aria-checked={displayMode === mode}
+                        onClick={() => {
+                          setDisplayMode(mode);
+                          setSetting(DISPLAY_MODE_SETTING, mode).catch(console.error);
+                          browser.runtime.sendMessage({ type: 'DISPLAY_MODE_CHANGED', mode }).catch(console.error);
+                        }}
+                        className={`min-w-0 cursor-pointer rounded-md px-1 py-2 text-[10px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${displayMode === mode ? 'bg-emerald-600 text-white shadow-md' : 'text-green-100/60 hover:bg-white/5 hover:text-white'}`}
+                      >
+                        {mode === 'auto' ? `System (${systemDisplayMode})` : mode[0].toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="mt-3 text-[10px] leading-relaxed text-green-100/55">You can change this at any time in ToonHQ+ settings.</p>
+                  <button
+                    type="button"
+                    data-dismiss
+                    onClick={() => {
+                      try {
+                        localStorage.setItem(DARK_MODE_NOTICE_DISMISSED_KEY, 'true');
+                      } catch {
+                        // Still dismiss for the current page if storage is unavailable.
+                      }
+                      setShowDarkModeNotice(false);
+                    }}
+                    className="mt-4 w-full cursor-pointer rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                  >
+                    Got it
+                  </button>
+                </section>
+              </div>
+            )}
             <div className="flex border-b border-[#0a2e1d]/80 bg-[#0c3622]">
               {hasLoadedSettings && trackerEnabled !== false && (
                 <button
@@ -2714,27 +2779,31 @@ export function SidebarApp() {
                         }}
                       />
 
-                      <div className="flex items-center justify-between gap-3 rounded-lg bg-black/20 p-2.5 border border-white/5">
-                        <div className="flex flex-col flex-1">
+                      <div className="flex flex-col gap-2.5 rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col">
                           <div className="text-sm font-bold text-white">Display Mode</div>
                           <div className="text-[10px] text-green-200/50 leading-tight mt-0.5">
                             Choose light, dark, or follow your system theme on ToonHQ pages.
                           </div>
                         </div>
-                        <select
-                          aria-label="Display Mode"
-                          value={displayMode}
-                          onChange={(event) => {
-                            const next = normalizeDisplayMode(event.target.value);
-                            setDisplayMode(next);
-                            setSetting(DISPLAY_MODE_SETTING, next).catch(console.error);
-                          }}
-                          className="shrink-0 rounded border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-400"
-                        >
-                          <option value="auto">Auto</option>
-                          <option value="light">Light</option>
-                          <option value="dark">Dark</option>
-                        </select>
+                        <div className="grid w-full grid-cols-3 gap-0.5 rounded-lg border border-white/10 bg-black/30 p-0.5" role="radiogroup" aria-label="Display Mode">
+                          {(['light', 'dark', 'auto'] as DisplayMode[]).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              role="radio"
+                              aria-checked={displayMode === mode}
+                              onClick={() => {
+                                setDisplayMode(mode);
+                                setSetting(DISPLAY_MODE_SETTING, mode).catch(console.error);
+                                browser.runtime.sendMessage({ type: 'DISPLAY_MODE_CHANGED', mode }).catch(console.error);
+                              }}
+                              className={`min-w-0 cursor-pointer rounded-md px-1.5 py-1.5 text-[10px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${displayMode === mode ? 'bg-emerald-600 text-white shadow-md' : 'text-green-100/60 hover:bg-white/5 hover:text-white'}`}
+                            >
+                              {mode === 'auto' ? `System (${systemDisplayMode})` : mode[0].toUpperCase() + mode.slice(1)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">

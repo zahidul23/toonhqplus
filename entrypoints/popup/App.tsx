@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSetting, setSetting } from '../sidebar.content/db';
 import { DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
+import { useSystemDisplayMode } from '../lib/useSystemDisplayMode';
 import './App.css';
 import logo from '@/assets/logo-32.png';
 
@@ -8,6 +9,7 @@ function App() {
   const [trackerEnabled, setTrackerEnabled] = useState<boolean>(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('auto');
   const [loading, setLoading] = useState<boolean>(true);
+  const systemDisplayMode = useSystemDisplayMode();
 
   useEffect(() => {
     getSetting<boolean>('tracker-enabled').then((val) => {
@@ -40,8 +42,7 @@ function App() {
     }).catch(console.error);
   };
 
-  const handleDisplayModeChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const next = normalizeDisplayMode(e.target.value);
+  const handleDisplayModeChange = async (next: DisplayMode) => {
     setDisplayMode(next);
     await setSetting(DISPLAY_MODE_SETTING, next);
     browser.runtime.sendMessage({ type: 'DISPLAY_MODE_CHANGED', mode: next }).catch(console.error);
@@ -96,21 +97,25 @@ function App() {
         <div className="settings-section">
           <h2 className="settings-title">Settings</h2>
           <div className="settings-card">
-            <div className="settings-header">
-              <label htmlFor="display-mode">Display Mode</label>
-              <select
-                id="display-mode"
-                className="display-mode-select"
-                value={displayMode}
-                onChange={handleDisplayModeChange}
-              >
-                <option value="auto">Auto</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
+            <div className="settings-header display-mode-header">
+              <span>Display Mode</span>
+              <div className="display-mode-toggle" role="radiogroup" aria-label="Display Mode">
+                {(['light', 'dark', 'auto'] as DisplayMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={displayMode === mode}
+                    className={displayMode === mode ? 'active' : ''}
+                    onClick={() => handleDisplayModeChange(mode)}
+                  >
+                    {mode === 'auto' ? `System (${systemDisplayMode})` : mode[0].toUpperCase() + mode.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="settings-desc">
-              Use ToonHQ's normal light theme, a dark theme, or follow your system settings automatically.
+              Use ToonHQ's normal light theme, a dark theme, or follow your system settings.
             </p>
           </div>
           <div className="settings-card">

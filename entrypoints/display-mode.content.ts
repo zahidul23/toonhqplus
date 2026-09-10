@@ -7,14 +7,12 @@ const DB_NAME = 'toonhqplus';
 function readDisplayMode(): Promise<DisplayMode | undefined> {
   return new Promise((resolve) => {
     let request: IDBOpenDBRequest;
-
     try {
       request = indexedDB.open(DB_NAME);
     } catch {
       resolve(undefined);
       return;
     }
-
     request.onerror = () => resolve(undefined);
     request.onsuccess = () => {
       const db = request.result;
@@ -23,7 +21,6 @@ function readDisplayMode(): Promise<DisplayMode | undefined> {
         resolve(undefined);
         return;
       }
-
       try {
         const transaction = db.transaction('settings', 'readonly');
         const get = transaction.objectStore('settings').get(DISPLAY_MODE_SETTING);
@@ -56,12 +53,10 @@ export default defineContentScript({
 
     let selectedMode: DisplayMode = 'auto';
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
-
     const applyMode = () => {
       const isDark = selectedMode === 'dark' || (selectedMode === 'auto' && systemTheme.matches);
       root.dataset.toonhqPlusDisplayMode = isDark ? 'dark' : 'light';
     };
-
     const loadMode = async () => {
       const storedMode = await readDisplayMode();
       if (storedMode !== undefined) selectedMode = storedMode;
@@ -78,9 +73,7 @@ export default defineContentScript({
 
     const handleSettingChange = (event: Event) => {
       const detail = (event as CustomEvent<{ store?: string; key?: IDBValidKey }>).detail;
-      if (detail?.store === 'settings' && detail.key === DISPLAY_MODE_SETTING) {
-        loadMode().catch(() => applyMode());
-      }
+      if (detail?.store === 'settings' && detail.key === DISPLAY_MODE_SETTING) loadMode().catch(() => applyMode());
     };
     window.addEventListener('toonhqplus-db-changed', handleSettingChange);
 

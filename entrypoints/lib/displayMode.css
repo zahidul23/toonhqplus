@@ -68,7 +68,7 @@ html[data-toonhq-plus-display-mode="dark"] .theme--home .navbar.navbar-default {
 
 html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default {
-  background-color: #376447 !important;
+  background-color: #284a35 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--invasions .navbar.navbar-default {
@@ -144,7 +144,7 @@ html[data-toonhq-plus-display-mode="dark"] .theme--shop::before {
 /* Groups and Gardening use busier, lighter artwork; keep more of it visible. */
 html[data-toonhq-plus-display-mode="dark"] .theme--groups::before,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening::before {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--generic > :not(.vuedals):not(.v-toast):not(.modal):not(.modal-backdrop),
