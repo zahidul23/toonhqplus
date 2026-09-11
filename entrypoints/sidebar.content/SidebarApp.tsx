@@ -2211,10 +2211,13 @@ export function SidebarApp() {
             {showDarkModeNotice && (
               <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pb-4 pt-12">
                 <section role="dialog" aria-modal="true" aria-labelledby="toonhq-plus-theme-notice-title" className="w-full rounded-xl border border-emerald-300/20 bg-[#103d29] p-4 text-white shadow-2xl">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">ToonHQ+ display mode</div>
+                  
                   <h2 id="toonhq-plus-theme-notice-title" className="mt-1 text-lg font-bold">Dark theme applied</h2>
                   <p className="mt-2 text-xs leading-relaxed text-green-100/75">
-                    Your system prefers dark mode, so ToonHQ+ has applied a dark theme to ToonHQ.
+                    Your system is set to dark mode, so ToonHQ+ has applied a dark theme to ToonHQ.
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-green-100/75">
+                    This is a temporary feature until the official dark mode for ToonHQ is available.
                   </p>
 
                   <div className="mt-4 text-[10px] font-bold text-green-100/80">Choose your display mode</div>
