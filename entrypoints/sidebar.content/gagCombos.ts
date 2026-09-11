@@ -163,6 +163,7 @@ export const GAG_COMBOS_BY_LEVEL: Record<number, readonly ComboSpec[]> = {
     [['sound', 6], ['sound', 5], ['sound', 5], ['sound', 5]],
     [['throw', 6], ['throw', 6]],
     [['squirt', 5], ['squirt', 5], ['squirt', 5]],
+    withLure(['squirt', 5, true], ['squirt', 5]),
     [['drop', 5], ['drop', 4]],
   ],
   16: [
@@ -171,6 +172,7 @@ export const GAG_COMBOS_BY_LEVEL: Record<number, readonly ComboSpec[]> = {
     [['drop', 5], ['drop', 5]],
   ],
   17: [
+    withLure(['throw', 5, true], ['throw', 5]),
     [['throw', 5], ['throw', 5], ['throw', 5]],
     [['squirt', 6], ['squirt', 6], ['squirt', 6]],
     [['sound', 6, true], ['sound', 6, true], ['sound', 6, true]],
