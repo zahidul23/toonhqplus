@@ -99,6 +99,7 @@ function calculateDamage(gags: Array<SelectedGag | null>, preLured: boolean) {
   const bonuses: Array<{ trackId: TrackId; amount: number }> = [];
   let lured = preLured;
   const hasSelectedLure = gags.some((gag) => gag?.trackId === 'lure');
+  const selectedTrapCount = gags.filter((gag) => gag?.trackId === 'trap').length;
 
   for (const trackId of TRACK_IDS) {
     const trackGags = gags.filter((gag): gag is SelectedGag => gag?.trackId === trackId);
@@ -110,7 +111,10 @@ function calculateDamage(gags: Array<SelectedGag | null>, preLured: boolean) {
     }
 
     if (trackId === 'lure') {
-      lured = true;
+      // A successful Lure immediately springs a Trap selected in the same
+      // combo. Once the Trap hits, the Cog is no longer lured, so a later
+      // Drop can hit normally.
+      lured = selectedTrapCount === 0;
       continue;
     }
 
@@ -232,8 +236,11 @@ function calculateAccuracy(gags: Array<SelectedGag | null>, preLured: boolean, c
       stunSources.push({ trackId, gagCount: trackGags.length, amount });
     }
 
-    if (trackId === 'lure' && accuracy > 0) lured = true;
-    if (trackId === 'trap') lured = false;
+    if (trackId === 'lure' && accuracy > 0) {
+      // Lure springs the selected Trap and consumes the lure status before
+      // later tracks (especially Drop) resolve.
+      lured = selectedTrapCount === 0;
+    }
     if (trackId === 'sound' || trackId === 'throw' || trackId === 'squirt') lured = false;
   }
 
@@ -912,7 +919,7 @@ export function GagCalculator() {
                 )}
               </div>
               <span className="h-3 text-xs font-black tabular-nums text-white">
-                {gag ? `${gag.damage}${gag.trackId === 'lure' ? '%' : ''}` : ''}
+                {gag ? `${gag.trackId === 'lure' && gag.variant === 'sos' ? 100 : gag.damage}${gag.trackId === 'lure' ? '%' : ''}` : ''}
               </span>
             </div>
           ))}
