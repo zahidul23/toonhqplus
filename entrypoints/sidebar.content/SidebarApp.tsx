@@ -1457,6 +1457,7 @@ export function SidebarApp() {
   const [neutralCollapsed, setNeutralCollapsed] = useState(false);
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [showDarkModeNotice, setShowDarkModeNotice] = useState(false);
+  const hasInitializedDarkModeNoticeRef = useRef(false);
   const [searchPage, setSearchPage] = useState(1);
   const [toonyPage, setToonyPage] = useState(1);
   const [stinkyPage, setStinkyPage] = useState(1);
@@ -1473,17 +1474,17 @@ export function SidebarApp() {
   useEffect(() => { notesListRef.current?.scrollTo({ top: 0 }); }, [notesPage]);
   useEffect(() => {
     if (!hasLoadedSettings || displayMode !== 'auto' || systemDisplayMode !== 'Dark') return;
+    if (hasInitializedDarkModeNoticeRef.current) return;
+    hasInitializedDarkModeNoticeRef.current = true;
     try {
       if (localStorage.getItem(DARK_MODE_NOTICE_DISMISSED_KEY) === 'true') return;
     } catch {
       // Show the notice when the dismissal preference cannot be read.
     }
     setShowDarkModeNotice(true);
-    if (!open) {
-      setOpen(true);
-      setSetting('sidebar-open', true).catch(console.error);
-    }
-  }, [displayMode, hasLoadedSettings, open, systemDisplayMode]);
+    setOpen(true);
+    setSetting('sidebar-open', true).catch(console.error);
+  }, [displayMode, hasLoadedSettings, systemDisplayMode]);
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);

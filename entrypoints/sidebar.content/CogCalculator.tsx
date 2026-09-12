@@ -698,7 +698,30 @@ export function CogCalculator() {
   const [activeCogSlot, setActiveCogSlot] = useState<number | null>(null);
   const [presetMenuOpen, setPresetMenuOpen] = useState<boolean>(false);
   const [activePreset, setActivePreset] = useState<string | null>(localStorage.getItem('cog-calc-preset') || null);
-  const [roundAccuracyTooltip, setRoundAccuracyTooltip] = useState<{ result: ReturnType<typeof calculateRoundAccuracy>; round: number; position: { left: number; top: number }; root: Element | DocumentFragment } | null>(null);
+  const [roundAccuracyTooltip, setRoundAccuracyTooltip] = useState<{ result: ReturnType<typeof calculateRoundAccuracy>; round: number; anchor: { left: number; top: number; bottom: number }; root: Element | DocumentFragment } | null>(null);
+  const [roundAccuracyTooltipPosition, setRoundAccuracyTooltipPosition] = useState<{ left: number; top: number } | null>(null);
+  const roundAccuracyTooltipRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const tooltip = roundAccuracyTooltipRef.current;
+    if (!roundAccuracyTooltip || !tooltip) {
+      setRoundAccuracyTooltipPosition(null);
+      return;
+    }
+
+    const viewportPadding = 8;
+    const tooltipGap = 12;
+    const bounds = tooltip.getBoundingClientRect();
+    const halfWidth = bounds.width / 2;
+    const left = Math.min(window.innerWidth - viewportPadding - halfWidth, Math.max(viewportPadding + halfWidth, roundAccuracyTooltip.anchor.left));
+    const belowTop = roundAccuracyTooltip.anchor.bottom + tooltipGap;
+    const aboveTop = roundAccuracyTooltip.anchor.top - bounds.height - tooltipGap;
+    const top = belowTop + bounds.height <= window.innerHeight - viewportPadding
+      ? belowTop
+      : Math.max(viewportPadding, Math.min(window.innerHeight - viewportPadding - bounds.height, aboveTop));
+
+    setRoundAccuracyTooltipPosition({ left, top });
+  }, [roundAccuracyTooltip]);
 
   useEffect(() => {
     localStorage.setItem('cog-calc-cogs', JSON.stringify(cogs));
@@ -1346,7 +1369,7 @@ export function CogCalculator() {
                       setRoundAccuracyTooltip({
                         result: roundAccuracyResults[rIdx],
                         round: rIdx + 1,
-                        position: { left: Math.min(window.innerWidth - 130, Math.max(130, bounds.left + bounds.width / 2)), top: bounds.bottom + 12 },
+                        anchor: { left: bounds.left + bounds.width / 2, top: bounds.top, bottom: bounds.bottom },
                         root: element.getRootNode() instanceof ShadowRoot ? element.getRootNode() as ShadowRoot : document.body,
                       });
                     }}
@@ -1788,7 +1811,7 @@ export function CogCalculator() {
         </div>
       </div>
       {roundAccuracyTooltip && createPortal(
-        <div role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltip.position.left, top: roundAccuracyTooltip.position.top }}>
+        <div ref={roundAccuracyTooltipRef} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] max-h-[calc(100vh-1rem)] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltipPosition?.left ?? roundAccuracyTooltip.anchor.left, top: roundAccuracyTooltipPosition?.top ?? roundAccuracyTooltip.anchor.bottom + 12, visibility: roundAccuracyTooltipPosition ? 'visible' : 'hidden' }}>
           <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/15 bg-[#020712]" aria-hidden="true" />
           <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} accuracy</div>
           {roundAccuracyTooltip.result.perCog.map((cog) => (
@@ -1801,9 +1824,9 @@ export function CogCalculator() {
                   {entry.specialRule ? (entry.trackId !== 'trap' ? <div className="pl-2">{entry.specialRule}</div> : null) : <div className="pl-2">
                     <div>Base accuracy: {entry.baseAccuracy}%</div>
                     {entry.organicBonus > 0 && <div>Organic bonus: +{entry.organicBonus}%{entry.baseAccuracy + entry.organicBonus > MAX_TOON_ACCURACY ? ' (base capped at 95%)' : ''}</div>}
-                    <div>Effective accuracy modifier: {MAX_TRACK_EXP_BONUS}% - {entry.defense}% = {MAX_TRACK_EXP_BONUS - entry.defense > 0 ? '+' : ''}{MAX_TRACK_EXP_BONUS - entry.defense}%</div>
-                    {entry.trapPlacementBonus > 0 && <div>Trap placement bonus to Lure: +{entry.trapPlacementBonus}%</div>}
-                    {entry.lureBonus > 0 && <div>Multi-Lure bonus: +{entry.lureBonus}%</div>}
+                    <div>Estimated effective evasion: {MAX_TRACK_EXP_BONUS - entry.defense > 0 ? '+' : ''}{MAX_TRACK_EXP_BONUS - entry.defense}%</div>
+                    {entry.trapPlacementBonus > 0 && <div>Trap Bonus: +{entry.trapPlacementBonus}%</div>}
+                    {entry.lureBonus > 0 && <div>Multi-Lure Bonus: +{entry.lureBonus}%</div>}
                     {entry.stunBonus > 0 && <div>Stun bonus: +{entry.stunBonus}%</div>}
                     <div className="mt-0.5 text-white">{entry.rawAccuracy > MAX_TOON_ACCURACY ? `Result: ${entry.rawAccuracy}% raw → ~${formatAccuracy(entry.accuracy)}% estimated soft cap` : `Result: ${formatAccuracy(entry.accuracy)}%`}</div>
                   </div>}
@@ -1812,7 +1835,8 @@ export function CogCalculator() {
             </div>
           ))}
           <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] font-bold text-white/65">
-            <div>All-target-only tracks use one roll against the strongest Cog. In mixed tracks, single-target rolls stay independent and the all-target gag inherits them.</div>
+            <div>All-target-only tracks use one roll against the strongest Cog.</div>
+            <div>In mixed tracks, single-target rolls stay independent and the all-target gag inherits them.</div>
             <div className="mt-1 tabular-nums">{roundAccuracyTooltip.result.factors.map((factor) => `${formatAccuracy(factor.accuracy)}%`).join(' × ')}</div>
             <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(roundAccuracyTooltip.result.total)}% chance every gag hits every attacked Cog</div>
           </div>

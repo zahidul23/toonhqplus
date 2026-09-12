@@ -446,6 +446,7 @@ function CogCarousel({
   const [activeLevel, setActiveLevel] = useState(focusLevel);
   const [accuracyTooltip, setAccuracyTooltip] = useState<{ breakdown: ReturnType<typeof calculateAccuracy>; position: { left: number; top: number }; root: Element | DocumentFragment } | null>(null);
   const activeLevelRef = useRef(focusLevel);
+  const programmaticLevelRef = useRef<number | null>(null);
   const levels = Array.from({ length: 20 }, (_, index) => index + 1);
 
   useLayoutEffect(() => {
@@ -490,6 +491,8 @@ function CogCarousel({
     let settleTimer = 0;
     let target = viewport.scrollLeft;
     let lastTime = 0;
+    let programmaticStart = 0;
+    let programmaticFrom = viewport.scrollLeft;
     let settling = false;
     let targetLevel: number | null = null;
     let instant = false;
@@ -499,7 +502,7 @@ function CogCarousel({
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const clamp = (left: number) => Math.max(0, Math.min(viewport.scrollWidth - viewport.clientWidth, left));
     const animate = (time: number) => {
-      // Slot widths change as cards approach the center; measure the destination each frame.
+      // Re-measure in case the viewport changes while the animation is running.
       if (targetLevel !== null) {
         const card = viewport.querySelector<HTMLElement>(`[data-level="${targetLevel}"]`);
         if (card) target = clamp(card.offsetLeft + card.offsetWidth / 2 - viewport.clientWidth / 2);
@@ -507,6 +510,23 @@ function CogCarousel({
       const elapsed = lastTime ? Math.min(time - lastTime, 64) : 16;
       lastTime = time;
       const difference = target - viewport.scrollLeft;
+      if (programmaticLevelRef.current !== null) {
+        if (!programmaticStart) programmaticStart = time;
+        const progress = instant || reducedMotion.matches ? 1 : Math.min(1, (time - programmaticStart) / 240);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        viewport.scrollLeft = programmaticFrom + (target - programmaticFrom) * eased;
+        if (progress < 1) {
+          frame = requestAnimationFrame(animate);
+        } else {
+          viewport.scrollLeft = target;
+          frame = 0;
+          lastTime = 0;
+          programmaticStart = 0;
+          programmaticLevelRef.current = null;
+          viewport.classList.remove('is-scrolling');
+        }
+        return;
+      }
       viewport.scrollLeft += difference * (instant || reducedMotion.matches ? 1 : 1 - Math.exp(-elapsed / 65));
       settledFrames = Math.abs(difference) <= 1 ? settledFrames + 1 : 0;
       if (settledFrames < 3) {
@@ -515,6 +535,7 @@ function CogCarousel({
         viewport.scrollLeft = target;
         frame = 0;
         lastTime = 0;
+        programmaticLevelRef.current = null;
         if (settling) viewport.classList.remove('is-scrolling');
       }
     };
@@ -538,8 +559,13 @@ function CogCarousel({
       drag = null;
       frame = 0;
       lastTime = 0;
+      programmaticStart = 0;
+      programmaticFrom = viewport.scrollLeft;
       settledFrames = 0;
       targetLevel = level;
+      programmaticLevelRef.current = level;
+      activeLevelRef.current = level;
+      setActiveLevel(level);
       instant = behavior === 'instant';
       settling = true;
       viewport.classList.remove('is-dragging');
@@ -554,6 +580,7 @@ function CogCarousel({
           (delta > 0 && viewport.scrollLeft >= viewport.scrollWidth - viewport.clientWidth - 1)) return;
       event.preventDefault();
       targetLevel = null;
+      programmaticLevelRef.current = null;
       instant = false;
       settledFrames = 0;
       if (!frame) target = viewport.scrollLeft;
@@ -569,6 +596,7 @@ function CogCarousel({
       event.preventDefault();
       cancelAnimationFrame(frame);
       targetLevel = null;
+      programmaticLevelRef.current = null;
       instant = false;
       settledFrames = 0;
       frame = 0;
@@ -601,6 +629,7 @@ function CogCarousel({
         frame = 0;
         lastTime = 0;
         window.clearTimeout(settleTimer);
+        programmaticLevelRef.current = null;
         viewport.classList.remove('is-scrolling');
         return;
       }
@@ -631,7 +660,7 @@ function CogCarousel({
 
   useLayoutEffect(() => {
     scrollToLevel(focusLevel);
-  }, [focusLevel, selectedGags, preLured]);
+  }, [focusLevel]);
 
   return (
     <section className="gag-cog-carousel" aria-label="Cog levels" aria-roledescription="carousel">
@@ -644,7 +673,7 @@ function CogCarousel({
         }}
         onScroll={() => {
           const viewport = viewportRef.current;
-          if (!viewport) return;
+          if (!viewport || programmaticLevelRef.current !== null) return;
           const cards = Array.from(viewport.querySelectorAll<HTMLElement>('[data-level]'));
           const center = viewport.scrollLeft + viewport.clientWidth / 2;
           const closest = cards.reduce((best, card) => Math.abs(card.offsetLeft + card.offsetWidth / 2 - center) < Math.abs(best.offsetLeft + best.offsetWidth / 2 - center) ? card : best);
@@ -661,9 +690,9 @@ function CogCarousel({
             const allHitAccuracy = cardAccuracyBreakdown.total;
             const isFocus = level === activeLevel;
             const isHighestDefeated = level === highestDefeated;
-            const distance = Math.abs(level - activeLevel);
+            const distance = Math.abs(level - focusLevel);
             const difference = Math.abs(damage - hp);
-            const cardScale = isHighestDefeated ? 1 : isFocus ? 0.8 : distance === 1 ? 0.76 : distance === 2 ? 0.7 : 0.64;
+            const cardScale = isHighestDefeated ? 1 : level === focusLevel ? 0.8 : distance === 1 ? 0.76 : 0.7;
             return (
               <div key={level} data-level={level} className="gag-cog-slot"
                 style={{ width: `calc(var(--cog-width) * ${cardScale} + 10px)` }}>
@@ -684,7 +713,7 @@ function CogCarousel({
                 }`}
               style={{
                 transform: `translateX(${isHighestDefeated ? 'var(--cog-pin-x, 0px)' : '0px'}) scale(${cardScale})`,
-                opacity: isHighestDefeated ? 1 : isFocus ? 0.85 : distance === 1 ? 0.72 : distance === 2 ? 0.52 : distance === 3 ? 0.38 : 0.28,
+                opacity: isHighestDefeated ? 1 : level === focusLevel ? 0.85 : distance === 1 ? 0.72 : 0.52,
               }}
             >
               <img

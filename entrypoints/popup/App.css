@@ -195,46 +195,6 @@ h1 {
   line-height: 1.4;
 }
 
-.display-mode-toggle {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: 100%;
-  gap: 3px;
-  padding: 3px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 9px;
-}
-
-.display-mode-header {
-  align-items: stretch;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.display-mode-toggle button {
-  padding: 0.35rem 0.5rem;
-  color: #b9cfc2;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 0.68rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.display-mode-toggle button.active {
-  color: #fff;
-  background: #198754;
-  box-shadow: 0 2px 8px rgba(25, 135, 84, 0.35);
-}
-
-.display-mode-toggle button:focus-visible {
-  outline: 2px solid #86efac;
-  outline-offset: 1px;
-}
-
 /* Toggle Switch Styles */
 .switch {
   position: relative;
