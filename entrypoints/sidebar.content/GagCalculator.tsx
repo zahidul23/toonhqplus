@@ -247,6 +247,52 @@ function formatAccuracy(value: number) {
   return Number(value.toFixed(2)).toString();
 }
 
+function AccuracyBreakdownTooltip({ breakdown, position, root, id }: {
+  breakdown: ReturnType<typeof calculateAccuracy>;
+  position: { left: number; top: number };
+  root: Element | DocumentFragment;
+  id: string;
+}) {
+  const getTrackName = (trackId: TrackId) => tracks.find((track) => track.id === trackId)?.name ?? trackId;
+  const getTrackColor = (trackId: TrackId) => tracks.find((track) => track.id === trackId)?.color ?? 'white';
+
+  return createPortal(
+    <div id={id} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max min-w-56 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: position.left, top: position.top }}>
+      <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/15 bg-[#020712]" aria-hidden="true" />
+      <div className="mb-1.5 text-xs font-black text-white">Level {breakdown.cogLevel} Cog ({breakdown.cogLevel > 12 ? 'estimated ' : ''}{breakdown.cogDefense} evasion)</div>
+      {breakdown.breakdown.map((entry) => (
+        <div key={entry.trackId} className="mb-1.5 text-[11px] font-black tabular-nums last:mb-0" style={{ color: getTrackColor(entry.trackId) }}>
+          <div>{getTrackName(entry.trackId)}: {formatAccuracy(entry.accuracy)}%</div>
+          {entry.specialRule && entry.trackId !== 'trap' ? <div className="pl-2 text-[10px] font-bold text-white/65">{entry.specialRule}</div> : !entry.specialRule ? (
+            <div className="pl-2 text-[10px] font-bold leading-snug text-white/65">
+              <div>Base accuracy: {entry.baseAccuracy}%</div>
+              {entry.organicBonus > 0 && <div>Organic bonus: +{entry.organicBonus}%{entry.baseAccuracy + entry.organicBonus > MAX_TOON_ACCURACY ? ' (base capped at 95%)' : ''}</div>}
+              <div>Maxed track EXP: +{entry.expBonus}%</div>
+              <div>Level {breakdown.cogLevel} evasion: -{entry.defense}%</div>
+              {entry.trapPlacementBonus > 0 && <>
+                <div>Trap placement bonus to Lure: +{entry.trapPlacementBonus}%</div>
+                <div className="pl-2" style={{ color: getTrackColor('trap') }}>↳ First trapped Cog: +10%</div>
+                {entry.trapPlacementCount > 1 && <div className="pl-2" style={{ color: getTrackColor('trap') }}>↳ {entry.trapPlacementCount - 1} additional trapped Cog{entry.trapPlacementCount === 2 ? '' : 's'} × 5% = +{(entry.trapPlacementCount - 1) * 5}%</div>}
+              </>}
+              {entry.lureBonus > 0 && <div>Multi-Lure bonus: +{entry.lureBonus}%</div>}
+              {entry.stunBonus > 0 && <>
+                <div>Stun bonus: +{entry.stunBonus}%</div>
+                {entry.stunSources.map((source) => <div key={source.trackId} className="pl-2" style={{ color: getTrackColor(source.trackId) }}>↳ {getTrackName(source.trackId)}: {source.trackId === 'trap' ? '+50%' : `${source.gagCount} gag${source.gagCount === 1 ? '' : 's'} × 25% = +${source.amount}%`}</div>)}
+              </>}
+              <div className="mt-0.5 text-white">Result: {entry.uncappedAccuracy}% raw{entry.uncappedAccuracy > MAX_TOON_ACCURACY ? ` → ~${formatAccuracy(entry.accuracy)}% estimated soft cap` : ` → ${formatAccuracy(entry.accuracy)}%`}</div>
+            </div>
+          ) : null}
+        </div>
+      ))}
+      <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] font-bold tabular-nums text-white/65">
+        <div>{breakdown.breakdown.map((entry) => `${formatAccuracy(entry.accuracy)}%`).join(' × ')}</div>
+        <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(breakdown.total)}% chance every selected gag hits</div>
+      </div>
+    </div>,
+    root,
+  );
+}
+
 function GagChoice({
   gag,
   track,
@@ -398,6 +444,7 @@ function CogCarousel({
   const focusLevel = highestDefeated || 1;
   const viewportRef = useRef<HTMLDivElement>(null);
   const [activeLevel, setActiveLevel] = useState(focusLevel);
+  const [accuracyTooltip, setAccuracyTooltip] = useState<{ breakdown: ReturnType<typeof calculateAccuracy>; position: { left: number; top: number }; root: Element | DocumentFragment } | null>(null);
   const activeLevelRef = useRef(focusLevel);
   const levels = Array.from({ length: 20 }, (_, index) => index + 1);
 
@@ -610,7 +657,8 @@ function CogCarousel({
         {levels.map((level) => {
           const hp = COG_HEALTH[level];
           const defeated = damage >= hp;
-            const allHitAccuracy = calculateAccuracy(selectedGags, preLured, level).total;
+            const cardAccuracyBreakdown = calculateAccuracy(selectedGags, preLured, level);
+            const allHitAccuracy = cardAccuracyBreakdown.total;
             const isFocus = level === activeLevel;
             const isHighestDefeated = level === highestDefeated;
             const distance = Math.abs(level - activeLevel);
@@ -650,13 +698,26 @@ function CogCarousel({
               <div className={`text-sm font-black tabular-nums ${defeated ? 'text-red-300' : 'text-amber-300'}`}>
                 {defeated ? `+${difference} Over` : `-${difference} Short`}
               </div>
-              <div className="whitespace-nowrap text-sm font-black tabular-nums text-sky-300">{formatAccuracy(allHitAccuracy)}% Accuracy</div>
+              <div
+                className="whitespace-nowrap rounded px-1 text-sm font-black tabular-nums text-sky-300 underline decoration-dotted decoration-sky-300/60 underline-offset-2"
+                onMouseEnter={(event) => {
+                  const element = event.currentTarget;
+                  const bounds = element.getBoundingClientRect();
+                  setAccuracyTooltip({
+                    breakdown: cardAccuracyBreakdown,
+                    position: { left: Math.min(window.innerWidth - 110, Math.max(110, bounds.left + bounds.width / 2)), top: bounds.bottom + 8 },
+                    root: element.getRootNode() instanceof ShadowRoot ? element.getRootNode() as ShadowRoot : document.body,
+                  });
+                }}
+                onMouseLeave={() => setAccuracyTooltip(null)}
+              >{formatAccuracy(allHitAccuracy)}% Accuracy</div>
             </button>
             </div>
           );
         })}
       </div>
       </div>
+      {accuracyTooltip && <AccuracyBreakdownTooltip id="cog-card-accuracy-tooltip" breakdown={accuracyTooltip.breakdown} position={accuracyTooltip.position} root={accuracyTooltip.root} />}
     </section>
   );
 }
@@ -750,7 +811,7 @@ export function GagCalculator() {
   };
 
   return (
-    <div className="flex min-h-full w-full items-start justify-start gap-4">
+    <div className="gag-calculator-page flex min-h-full w-full items-start justify-start gap-4">
       <aside className="min-w-[380px] w-[380px] shrink-0">
         <GagCombosPanel />
       </aside>
@@ -897,9 +958,10 @@ export function GagCalculator() {
         <div
           id="gag-accuracy-tooltip"
           role="tooltip"
-          className="pointer-events-none fixed z-[2147483647] w-max min-w-56 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl"
+          className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max min-w-56 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl"
           style={{ left: accuracyTooltipPosition.left, top: accuracyTooltipPosition.top }}
         >
+          <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/15 bg-[#020712]" aria-hidden="true" />
           <div className="mb-1.5 text-xs font-black text-white">
             Level {accuracyBreakdown.cogLevel} Cog ({accuracyBreakdown.cogLevel > 12 ? 'estimated ' : ''}{accuracyBreakdown.cogDefense} evasion)
           </div>

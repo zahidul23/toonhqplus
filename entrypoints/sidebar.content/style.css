@@ -2,6 +2,22 @@
 @import "tailwindcss";
 
 @font-face {
+  font-family: 'Fredoka One';
+  src: url('https://static.toontown.help/fonts/fredoka-one-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Nunito';
+  src: url('https://static.toontown.help/fonts/nunito-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Alie';
   src: url('https://static.toontown.help/fonts/Alie.ttf') format('truetype');
   font-style: normal;
@@ -29,6 +45,11 @@
 }
 
 /* Shared by the desktop ToonCalc gag calculator embedded in the Shticker Book. */
+.gag-calculator-page,
+.gag-calculator-tooltip {
+  font-family: 'Nunito', sans-serif;
+}
+
 .gag-cog-carousel {
   --cog-width: 144px;
   width: min(696px, 100%);

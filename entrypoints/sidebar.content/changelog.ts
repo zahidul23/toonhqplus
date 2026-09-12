@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.26',
+    date: 'Sep 12, 2026',
+    changes: [
+      'Add Dark Mode for ToonHQ (temporary feature until official dark theme is available)',
+      'Add right click option to open Toon images in Toontown Help styling app',
+      'Add gag accuracies to the Gag Calculator and Facilities Calculators in the Shticker Book',
+      'Improve Gag Calculator UI with better tooltips, spacing and controls'
+    ]
+  },
+  {
     version: '1.2.25',
     date: 'Aug 21, 2026',
     changes: [

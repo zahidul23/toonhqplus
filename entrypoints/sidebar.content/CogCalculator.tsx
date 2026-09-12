@@ -1,4 +1,5 @@
 import React, { useState, useMemo, memo, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
@@ -11,6 +12,21 @@ const COG_HEALTH: Record<number, number> = {
 // Keep these as canonical decimal values. Constructing 0.6 as 0.2 * 3
 // produces 0.6000000000000001 in JavaScript and changes Math.ceil outcomes.
 const DEFENSE_DOWN_MULTIPLIERS = [0, 0.2, 0.4, 0.6];
+const TRACK_BASE_ACCURACY: Record<string, readonly number[]> = {
+  trap: [100, 100, 100, 100, 100, 100, 100], lure: [60, 55, 70, 65, 80, 75, 90],
+  sound: [95, 95, 95, 95, 95, 95, 95], throw: [75, 75, 75, 75, 75, 75, 75],
+  squirt: [95, 95, 95, 95, 95, 95, 95], drop: [50, 50, 50, 50, 50, 50, 50],
+};
+const COG_DEFENSE: Record<number, number> = {
+  1: 2, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45,
+  11: 50, 12: 55, 13: 60, 14: 60, 15: 60, 16: 65, 17: 65, 18: 65, 19: 65, 20: 65,
+};
+const SUPERVISOR_EVASION: Record<string, number> = {
+  factory_scrap: 50, factory_steel: 50, mint_coin: 50, mint_bullion: 50,
+  office_junior: 55, office_senior: 55, golf_fairway: 45, golf_fringe: 45,
+};
+const MAX_TRACK_EXP_BONUS = 60;
+const MAX_TOON_ACCURACY = 95;
 
 import { browser } from 'wxt/browser';
 
@@ -112,6 +128,7 @@ const LURE_DURATIONS: Record<number, number> = {
 type GagVariant = 'base' | 'organic' | 'sos';
 type SelectedGag = { trackId: string; gagIndex: number; variant: GagVariant; target: 'single' | 'all'; targetIdx?: number } | null;
 
+
 type GagTrack = {
   id: string;
   name: string;
@@ -148,6 +165,122 @@ interface Cog {
     isHeal: boolean;
   };
 }
+
+function withoutCogSimulationState(cog: Cog): Cog {
+  const { isDead: _isDead, simMaxHp: _simMaxHp, simRemainingHp: _simRemainingHp, ...editableCog } = cog;
+  return editableCog;
+}
+
+type CogAccuracyEntry = { trackId: string; accuracy: number; baseAccuracy: number; organicBonus: number; defense: number; stunBonus: number; trapPlacementBonus: number; lureBonus: number; rawAccuracy: number; specialRule?: string };
+type RoundCogAccuracy = { cogIndex: number; cogName: string; accuracy: number; entries: CogAccuracyEntry[] };
+
+function formatAccuracy(value: number) { return Number(value.toFixed(2)).toString(); }
+function applyAccuracySoftCap(rawAccuracy: number) {
+  return rawAccuracy <= MAX_TOON_ACCURACY ? Math.max(0, rawAccuracy) : Math.min(100, MAX_TOON_ACCURACY + (rawAccuracy - MAX_TOON_ACCURACY) * 0.04);
+}
+
+function getAccuracyLureType(gagIndex: number) { return gagIndex === 6 || gagIndex % 2 === 1 ? 'group' : 'single'; }
+function getAccuracyLureTier(gagIndex: number) { return Math.min(3, Math.floor(gagIndex / 2) + 1); }
+function getAccuracyMultiLureBonus(lures: NonNullable<SelectedGag>[], baseline: NonNullable<SelectedGag>) {
+  const baselineType = getAccuracyLureType(baseline.gagIndex);
+  const baselineTier = getAccuracyLureTier(baseline.gagIndex);
+  return lures.reduce((bonus, lure) => {
+    if (lure === baseline || getAccuracyLureType(lure.gagIndex) !== baselineType) return bonus;
+    const tierDifference = baselineTier - getAccuracyLureTier(lure.gagIndex);
+    return bonus + (tierDifference <= 0 ? 20 : tierDifference === 1 ? 15 : 10);
+  }, 0);
+}
+
+function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
+  const perCog: RoundCogAccuracy[] = [];
+  const groupTargetTracks = new Set(roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.target === 'all').map((gag) => gag.trackId));
+  const mixedTrackSourceTargets = new Map<string, Set<number>>();
+  groupTargetTracks.forEach((trackId) => {
+    const targets = roundGags
+      .filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.trackId === trackId && gag.target === 'single' && typeof gag.targetIdx === 'number')
+      .map((gag) => gag.targetIdx!);
+    if (targets.length) mixedTrackSourceTargets.set(trackId, new Set(targets));
+  });
+  roundCogs.forEach((cog, cogIndex) => {
+    if (cog.isDead) return;
+    const targetedGags = roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && (gag.target === 'all' || gag.targetIdx === cogIndex));
+    if (!targetedGags.length) return;
+    const choice = COG_CHOICES.find((candidate) => candidate.id === cog.id);
+    const defense = SUPERVISOR_EVASION[cog.id] ?? COG_DEFENSE[Number(cog.id)] ?? COG_DEFENSE[20];
+    const entries: CogAccuracyEntry[] = [];
+    let stunBonus = 0;
+    let lured = !!cog.isLured;
+    for (const trackId of ['trap', 'lure', 'sound', 'throw', 'squirt', 'drop', 'special']) {
+      const trackGags = targetedGags.filter((gag) => gag.trackId === trackId);
+      if (!trackGags.length) continue;
+      const allTrackGags = roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.trackId === trackId);
+      const singleTrackGags = allTrackGags.filter((gag) => gag.target === 'single');
+      const hasGroupGag = allTrackGags.some((gag) => gag.target === 'all');
+      const baselineCandidates = hasGroupGag && singleTrackGags.length ? singleTrackGags : trackGags;
+      const baseline = baselineCandidates.reduce((highest, gag) => gag.gagIndex > highest.gagIndex ? gag : highest);
+      const baseAccuracy = TRACK_BASE_ACCURACY[trackId]?.[baseline.gagIndex] ?? 100;
+      const organicBonus = trackId === 'lure' && baseline.variant === 'organic' ? 10 : 0;
+      const targetedTraps = roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.trackId === 'trap' && (gag.target === 'all' || gag.targetIdx === cogIndex));
+      const allRoundTraps = roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.trackId === 'trap');
+      const trapBonusCount = trackId === 'lure' ? (hasGroupGag ? allRoundTraps.length : targetedTraps.length) : 0;
+      const trapPlacementBonus = trapBonusCount > 0 ? 10 + (hasGroupGag ? (trapBonusCount - 1) * 5 : 0) : 0;
+      const lureBonus = trackId === 'lure' ? getAccuracyMultiLureBonus(trackGags, baseline) : 0;
+      const rawAccuracy = Math.min(baseAccuracy + organicBonus, MAX_TOON_ACCURACY) + MAX_TRACK_EXP_BONUS - defense + (trackId === 'lure' ? trapPlacementBonus + lureBonus : stunBonus);
+      const hasSos = trackGags.some((gag) => gag.variant === 'sos');
+      let accuracy = applyAccuracySoftCap(rawAccuracy);
+      let specialRule: string | undefined;
+      if (trackId === 'drop' && lured) { accuracy = 0; specialRule = 'Drop always misses a lured Cog'; }
+      else if (trackId === 'trap' || trackId === 'special' || hasSos) { accuracy = 100; specialRule = trackId === 'trap' ? 'Trap placement always hits' : 'Special/SOS gag always hits'; }
+      else if (lured && trackId !== 'lure') { accuracy = 100; specialRule = 'Attacking a lured Cog always hits'; }
+      entries.push({ trackId, accuracy, baseAccuracy, organicBonus: specialRule ? 0 : organicBonus, defense: specialRule ? 0 : defense, stunBonus: specialRule || trackId === 'lure' ? 0 : stunBonus, trapPlacementBonus: specialRule ? 0 : trapPlacementBonus, lureBonus: specialRule ? 0 : lureBonus, rawAccuracy: specialRule ? accuracy : rawAccuracy, specialRule });
+      if (accuracy > 0 && trackId !== 'lure' && trackId !== 'special') stunBonus += trackId === 'trap' ? 50 : trackGags.length * 25;
+      if (trackId === 'lure' && accuracy > 0) lured = !(cog.isTrapped || targetedTraps.length > 0);
+      if (trackId === 'trap' || trackId === 'sound' || trackId === 'throw' || trackId === 'squirt') lured = false;
+    }
+    perCog.push({ cogIndex, cogName: choice?.label ?? `Cog ${cogIndex + 1}`, accuracy: entries.reduce((chance, entry) => chance * entry.accuracy / 100, 1) * 100, entries });
+  });
+  mixedTrackSourceTargets.forEach((sourceTargets, trackId) => {
+    const sourceAccuracy = Math.min(...perCog
+      .filter((cog) => sourceTargets.has(cog.cogIndex))
+      .flatMap((cog) => cog.entries.filter((entry) => entry.trackId === trackId).map((entry) => entry.accuracy)));
+    if (!Number.isFinite(sourceAccuracy)) return;
+    perCog.forEach((cog) => {
+      const entry = cog.entries.find((candidate) => candidate.trackId === trackId);
+      if (entry && !sourceTargets.has(cog.cogIndex)) {
+        entry.accuracy = sourceAccuracy;
+        entry.rawAccuracy = sourceAccuracy;
+        entry.specialRule = 'Shared track uses the single-target gag’s accuracy and target state';
+      }
+      cog.accuracy = cog.entries.reduce((chance, candidate) => chance * candidate.accuracy / 100, 1) * 100;
+    });
+  });
+  const sharedTrackAccuracy = new Map<string, number>();
+  const factors: Array<{ label: string; accuracy: number }> = [];
+  let totalChance = 1;
+  perCog.forEach((cog) => cog.entries.forEach((entry) => {
+    if (groupTargetTracks.has(entry.trackId)) {
+      const sourceTargets = mixedTrackSourceTargets.get(entry.trackId);
+      if (sourceTargets) {
+        if (sourceTargets.has(cog.cogIndex)) {
+          totalChance *= entry.accuracy / 100;
+          factors.push({ label: `${cog.cogName} ${entry.trackId}`, accuracy: entry.accuracy });
+        }
+      } else {
+        sharedTrackAccuracy.set(entry.trackId, Math.min(sharedTrackAccuracy.get(entry.trackId) ?? 100, entry.accuracy));
+      }
+    }
+    else {
+      totalChance *= entry.accuracy / 100;
+      factors.push({ label: `${cog.cogName} ${entry.trackId}`, accuracy: entry.accuracy });
+    }
+  }));
+  sharedTrackAccuracy.forEach((accuracy, trackId) => {
+    totalChance *= accuracy / 100;
+    factors.push({ label: `${trackId} group`, accuracy });
+  });
+  return { total: perCog.length ? totalChance * 100 : 0, perCog, factors };
+}
+
 
 const STATUS_EFFECTS = [
   { id: 'isTrapped', label: 'Trapped', icon: 'Statuseffect_trapped.png', color: 'bg-orange-500', shadow: 'rgba(249,115,22,0.4)' },
@@ -565,6 +698,7 @@ export function CogCalculator() {
   const [activeCogSlot, setActiveCogSlot] = useState<number | null>(null);
   const [presetMenuOpen, setPresetMenuOpen] = useState<boolean>(false);
   const [activePreset, setActivePreset] = useState<string | null>(localStorage.getItem('cog-calc-preset') || null);
+  const [roundAccuracyTooltip, setRoundAccuracyTooltip] = useState<{ result: ReturnType<typeof calculateRoundAccuracy>; round: number; position: { left: number; top: number }; root: Element | DocumentFragment } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('cog-calc-cogs', JSON.stringify(cogs));
@@ -1144,6 +1278,9 @@ export function CogCalculator() {
   }, [selectedGagsByRound, gagTracks, cogs]);
 
   const activeStats = roundResults[activeRound];
+  const roundAccuracyResults = useMemo(() => selectedGagsByRound.map((roundGags, roundIndex) =>
+    calculateRoundAccuracy(roundGags, roundIndex === 0 ? cogs : roundResults[roundIndex - 1].finalCogs)
+  ), [selectedGagsByRound, cogs, roundResults]);
   const startOfRoundStats = activeRound === 0 ? null : roundResults[activeRound - 1];
   const selectionCogs = startOfRoundStats?.finalCogs ?? cogs;
   const selectionDamages = startOfRoundStats?.cogDamages ?? cogs.map(() => 0);
@@ -1198,8 +1335,24 @@ export function CogCalculator() {
                   : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'
                 }`}
             >
-              <div className="w-8 flex flex-col items-center flex-shrink-0">
-                <span className="text-[9px] font-black text-white/40 uppercase">R{rIdx + 1}</span>
+              <div className="w-14 flex flex-col items-center flex-shrink-0">
+                <span className="text-[10px] font-black text-white/40 uppercase">Round {rIdx + 1}</span>
+                {roundAccuracyResults[rIdx].perCog.length > 0 && (
+                  <span
+                    className="cursor-help whitespace-nowrap text-sm font-black tabular-nums text-sky-300 underline decoration-dotted decoration-sky-300/60 underline-offset-2"
+                    onMouseEnter={(event) => {
+                      const element = event.currentTarget;
+                      const bounds = element.getBoundingClientRect();
+                      setRoundAccuracyTooltip({
+                        result: roundAccuracyResults[rIdx],
+                        round: rIdx + 1,
+                        position: { left: Math.min(window.innerWidth - 130, Math.max(130, bounds.left + bounds.width / 2)), top: bounds.bottom + 12 },
+                        root: element.getRootNode() instanceof ShadowRoot ? element.getRootNode() as ShadowRoot : document.body,
+                      });
+                    }}
+                    onMouseLeave={() => setRoundAccuracyTooltip(null)}
+                  >{formatAccuracy(roundAccuracyResults[rIdx].total)}%</span>
+                )}
               </div>
               <div className="flex-1 flex gap-1 justify-center">
                 {selectedGagsByRound[rIdx].map((gag, gIdx) => {
@@ -1397,9 +1550,9 @@ export function CogCalculator() {
                           <div
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const next = [...displayCogs];
-                                next[idx] = { ...next[idx], isV2: !next[idx].isV2 };
-                                setCogs(next);
+                                setCogs((current) => current.map((entry, entryIndex) => entryIndex === idx
+                                  ? { ...withoutCogSimulationState(entry), isV2: !entry.isV2 }
+                                  : entry));
                               }}
                             className={`flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors border ${cog.isV2 ? 'bg-fuchsia-900/40 border-fuchsia-500/50 text-fuchsia-300' : 'bg-black/20 border-white/5 text-white/40 hover:bg-black/40 hover:text-white/60'}`}
                           >
@@ -1413,7 +1566,7 @@ export function CogCalculator() {
                                   {COG_CHOICES.filter(c => c.type === 'normal').map(c => (
                                     <button
                                       key={c.id}
-                                      onClick={(e) => { e.stopPropagation(); const next = [...displayCogs]; next[idx] = { ...next[idx], id: c.id }; setCogs(next); setActiveCogSlot(null); }}
+                                      onClick={(e) => { e.stopPropagation(); setCogs((current) => current.map((entry, entryIndex) => entryIndex === idx ? { ...withoutCogSimulationState(entry), id: c.id } : entry)); setActiveCogSlot(null); }}
                                       className={`relative w-9 h-9 rounded-md border flex items-center justify-center text-xs font-black transition-all cursor-pointer overflow-hidden ${cog.id === c.id ? 'bg-emerald-500/30 border-emerald-400 text-emerald-100 shadow-[0_0_10px_rgba(52,211,153,0.3)]' : 'bg-black/30 border-white/5 text-white/60 hover:bg-black/50 hover:text-white'}`}
                                     >
                               <img src={c.img as string} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity" />
@@ -1634,6 +1787,36 @@ export function CogCalculator() {
           </div>
         </div>
       </div>
+      {roundAccuracyTooltip && createPortal(
+        <div role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltip.position.left, top: roundAccuracyTooltip.position.top }}>
+          <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/15 bg-[#020712]" aria-hidden="true" />
+          <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} accuracy</div>
+          {roundAccuracyTooltip.result.perCog.map((cog) => (
+            <div key={cog.cogIndex} className="mb-2 text-[11px] font-black text-white last:mb-0">
+              <div>{cog.cogName}: <span className="text-sky-300">{formatAccuracy(cog.accuracy)}%</span></div>
+              {cog.entries.map((entry) => {
+                const track = gagTracks.find((candidate) => candidate.id === entry.trackId);
+                return <div key={entry.trackId} className="mb-1 pl-2 text-[10px] font-bold leading-snug text-white/65 last:mb-0">
+                  <div className="font-black" style={{ color: track?.color ?? '#c4b5fd' }}>{track?.name ?? 'Special'}: {formatAccuracy(entry.accuracy)}%</div>
+                  {entry.specialRule ? (entry.trackId !== 'trap' ? <div className="pl-2">{entry.specialRule}</div> : null) : <div className="pl-2">
+                    <div>Base accuracy: {entry.baseAccuracy}%</div>
+                    {entry.organicBonus > 0 && <div>Organic bonus: +{entry.organicBonus}%{entry.baseAccuracy + entry.organicBonus > MAX_TOON_ACCURACY ? ' (base capped at 95%)' : ''}</div>}
+                    <div>Effective accuracy modifier: {MAX_TRACK_EXP_BONUS}% - {entry.defense}% = {MAX_TRACK_EXP_BONUS - entry.defense > 0 ? '+' : ''}{MAX_TRACK_EXP_BONUS - entry.defense}%</div>
+                    {entry.trapPlacementBonus > 0 && <div>Trap placement bonus to Lure: +{entry.trapPlacementBonus}%</div>}
+                    {entry.lureBonus > 0 && <div>Multi-Lure bonus: +{entry.lureBonus}%</div>}
+                    {entry.stunBonus > 0 && <div>Stun bonus: +{entry.stunBonus}%</div>}
+                    <div className="mt-0.5 text-white">{entry.rawAccuracy > MAX_TOON_ACCURACY ? `Result: ${entry.rawAccuracy}% raw → ~${formatAccuracy(entry.accuracy)}% estimated soft cap` : `Result: ${formatAccuracy(entry.accuracy)}%`}</div>
+                  </div>}
+                </div>;
+              })}
+            </div>
+          ))}
+          <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] font-bold text-white/65">
+            <div>All-target-only tracks use one roll against the strongest Cog. In mixed tracks, single-target rolls stay independent and the all-target gag inherits them.</div>
+            <div className="mt-1 tabular-nums">{roundAccuracyTooltip.result.factors.map((factor) => `${formatAccuracy(factor.accuracy)}%`).join(' × ')}</div>
+            <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(roundAccuracyTooltip.result.total)}% chance every gag hits every attacked Cog</div>
+          </div>
+        </div>, roundAccuracyTooltip.root)}
     </div>
   );
 }
