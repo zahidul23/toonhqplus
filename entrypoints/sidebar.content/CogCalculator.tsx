@@ -237,7 +237,10 @@ function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
       else if (lured && trackId !== 'lure') { accuracy = 100; specialRule = 'Attacking a lured Cog always hits'; }
       entries.push({ trackId, accuracy, baseAccuracy, organicBonus: specialRule ? 0 : organicBonus, defense: specialRule ? 0 : defense, stunBonus: specialRule || trackId === 'lure' ? 0 : stunBonus, trapPlacementBonus: specialRule ? 0 : trapPlacementBonus, lureBonus: specialRule ? 0 : lureBonus, rawAccuracy: specialRule ? accuracy : rawAccuracy, specialRule });
       if (accuracy > 0 && trackId !== 'lure' && trackId !== 'special') stunBonus += trackId === 'trap' ? 50 : trackGags.length * 25;
-      if (trackId === 'lure' && accuracy > 0) lured = !(cog.isTrapped || targetedTraps.length > 0);
+      if (trackId === 'lure' && accuracy > 0) {
+        if (cog.isTrapped) stunBonus += 50;
+        lured = !(cog.isTrapped || targetedTraps.length > 0);
+      }
       if (trackId === 'trap' || trackId === 'sound' || trackId === 'throw' || trackId === 'squirt') lured = false;
     }
     perCog.push({ cogIndex, cogName: choice?.label ?? `Cog ${cogIndex + 1}`, accuracy: entries.reduce((chance, entry) => chance * entry.accuracy / 100, 1) * 100, entries });
