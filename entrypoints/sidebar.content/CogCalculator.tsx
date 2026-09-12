@@ -193,6 +193,7 @@ function getAccuracyMultiLureBonus(lures: NonNullable<SelectedGag>[], baseline: 
 
 function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
   const perCog: RoundCogAccuracy[] = [];
+  const carriedTrapCount = roundCogs.filter((cog) => !cog.isDead && cog.isTrapped).length;
   const groupTargetTracks = new Set(roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.target === 'all').map((gag) => gag.trackId));
   const mixedTrackSourceTargets = new Map<string, Set<number>>();
   groupTargetTracks.forEach((trackId) => {
@@ -222,7 +223,9 @@ function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
       const organicBonus = trackId === 'lure' && baseline.variant === 'organic' ? 10 : 0;
       const targetedTraps = roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.trackId === 'trap' && (gag.target === 'all' || gag.targetIdx === cogIndex));
       const allRoundTraps = roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.trackId === 'trap');
-      const trapBonusCount = trackId === 'lure' ? (hasGroupGag ? allRoundTraps.length : targetedTraps.length) : 0;
+      const trapBonusCount = trackId === 'lure'
+        ? (hasGroupGag ? allRoundTraps.length + carriedTrapCount : targetedTraps.length + Number(cog.isTrapped))
+        : 0;
       const trapPlacementBonus = trapBonusCount > 0 ? 10 + (hasGroupGag ? (trapBonusCount - 1) * 5 : 0) : 0;
       const lureBonus = trackId === 'lure' ? getAccuracyMultiLureBonus(trackGags, baseline) : 0;
       const rawAccuracy = Math.min(baseAccuracy + organicBonus, MAX_TOON_ACCURACY) + MAX_TRACK_EXP_BONUS - defense + (trackId === 'lure' ? trapPlacementBonus + lureBonus : stunBonus);
