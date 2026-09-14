@@ -10,6 +10,7 @@ type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
 type District = { id: number; name: string; game: number; speedchat_only?: boolean };
 type Location = { id: number; name: string; game: number };
+type DistrictPopulationSnapshot = { populationByDistrict: Record<string, number>; fetchedAt: number };
 
 type Destination = {
   label: string;
@@ -64,6 +65,64 @@ const TTR_DISTRICTS: District[] = [
   { id: 36, name: 'Blam Canyon', game: 1, speedchat_only: false },
   { id: 93, name: 'Splatville', game: 1, speedchat_only: false },
 ].sort((a, b) => a.name.localeCompare(b.name));
+
+const DISTRICT_POPULATION_STORAGE_KEY = 'toonhqplus-district-population';
+
+function DistrictIndicators({ district, population }: { district: District; population?: number }) {
+  const level = population == null ? null : population >= 401 ? 'bg-red-600' : population >= 200 ? 'bg-[#168653]' : 'bg-blue-600';
+  const bars = population == null ? 0 : population >= 300 ? 3 : population >= 100 ? 2 : 1;
+  const populationLabel = population == null ? '' : population >= 401
+    ? `Busy District (401+ Toons)\nCurrent population: ${population}`
+    : population >= 200
+      ? `Active District (200–400 Toons)\nCurrent population: ${population}`
+      : `Quiet District (<200 Toons)\nCurrent population: ${population}`;
+
+  return (
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1 pl-1.5">
+      {district.speedchat_only && (
+        <DistrictIndicatorBadge label="SpeedChat-Only District: SpeedChat+ messages are unavailable here." colorClass="bg-red-600">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-[11px] w-[11px] fill-current"><path d="M11 5 6 9H2v6h4l5 4V5Zm8.1 7 2.45-2.45-1.4-1.4L17.7 10.6l-2.45-2.45-1.4 1.4L16.3 12l-2.45 2.45 1.4 1.4 2.45-2.45 2.45 2.45 1.4-1.4L19.1 12Z" /></svg>
+        </DistrictIndicatorBadge>
+      )}
+      {population != null && (
+        <DistrictIndicatorBadge label={populationLabel} colorClass={level || ''}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-[11px] w-[11px] fill-current">
+            <path opacity={bars >= 1 ? 1 : 0.28} d="M4 20V14h3v6H4Z" />
+            <path opacity={bars >= 2 ? 1 : 0.28} d="M10 20V9h3v11h-3Z" />
+            <path opacity={bars >= 3 ? 1 : 0.28} d="M16 20V4h3v16h-3Z" />
+          </svg>
+        </DistrictIndicatorBadge>
+      )}
+    </span>
+  );
+}
+
+function DistrictIndicatorBadge({ label, colorClass, children }: { label: string; colorClass: string; children: React.ReactNode }) {
+  const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number } | null>(null);
+  const showTooltip = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    setTooltipPosition({ left: rect.left - 7, top: rect.top + rect.height / 2 });
+  };
+  return (
+    <span
+      aria-label={label}
+      className={`inline-flex h-[17px] w-[17px] cursor-help items-center justify-center rounded-full text-white shadow ${colorClass}`}
+      onMouseEnter={event => showTooltip(event.currentTarget)}
+      onMouseLeave={() => setTooltipPosition(null)}
+    >
+      {children}
+      {tooltipPosition && (
+        <span
+          role="tooltip"
+          className="pointer-events-none fixed z-[100] w-max max-w-[250px] -translate-x-full -translate-y-1/2 whitespace-pre-line rounded-md bg-[#111827] px-[9px] py-[7px] text-left font-sans text-xs font-medium leading-[1.35] text-white shadow-2xl"
+          style={{ left: tooltipPosition.left, top: tooltipPosition.top }}
+        >
+          {label}
+        </span>
+      )}
+    </span>
+  );
+}
 
 const TTR_LOCATIONS: Location[] = [
   { id: 1, name: 'Alto Avenue', game: 1 },
@@ -233,11 +292,33 @@ export function QuickTeleport() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [infoTooltipOpen, setInfoTooltipOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [populationByDistrict, setPopulationByDistrict] = useState<Record<string, number>>({});
   const coreData = useMemo(getTtrCoreData, []);
   const districts = coreData.districts;
   const districtMenuRef = useRef<HTMLDivElement>(null);
   const selectedDistrictOptionRef = useRef<HTMLButtonElement>(null);
   const quickTeleportActiveRef = useRef(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const acceptSnapshot = (snapshot: unknown) => {
+      const candidate = snapshot as DistrictPopulationSnapshot | undefined;
+      if (mounted) setPopulationByDistrict(candidate?.populationByDistrict || {});
+    };
+    void browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY).then(result => {
+      acceptSnapshot(result[DISTRICT_POPULATION_STORAGE_KEY]);
+    });
+    const handleStorageChange = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+      if (areaName === 'local' && changes[DISTRICT_POPULATION_STORAGE_KEY]) {
+        acceptSnapshot(changes[DISTRICT_POPULATION_STORAGE_KEY].newValue);
+      }
+    };
+    browser.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      mounted = false;
+      browser.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
 
   useEffect(() => {
     quickTeleportActiveRef.current = preferencesLoaded;
@@ -576,7 +657,6 @@ export function QuickTeleport() {
       </div>
       <div className="mb-3 flex shrink-0 flex-col gap-2 rounded border border-black/50 bg-black/40 p-3 text-white shadow-sm">
       <div ref={districtMenuRef} className="relative">
-        <label id="teleport-district-label" className="mb-1 block text-[10px] font-black uppercase tracking-wider text-green-100/70">District</label>
         <button
           type="button"
           aria-labelledby="teleport-district-label teleport-district-value"
@@ -586,8 +666,8 @@ export function QuickTeleport() {
           onClick={() => setDistrictMenuOpen(open => !open)}
           className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/20 px-2.5 py-2 text-left text-xs font-bold text-white transition-colors enabled:cursor-pointer enabled:hover:bg-black/30 focus:border-emerald-500/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <span id="teleport-district-value" className={selectedDistrict ? '' : 'text-white/45'}>
-            {selectedDistrict ? `${selectedDistrict.name}${selectedDistrict.speedchat_only ? ' (SpeedChat)' : ''}` : 'Select a district'}
+          <span id="teleport-district-value" className={`flex min-w-0 flex-1 items-center ${selectedDistrict ? '' : 'text-white/45'}`}>
+            {selectedDistrict ? <><span className="truncate">{selectedDistrict.name}</span><DistrictIndicators district={selectedDistrict} population={populationByDistrict[selectedDistrict.name]} /></> : 'Select a district'}
           </span>
           <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-white/40 transition-transform ${districtMenuOpen ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
         </button>
@@ -604,9 +684,9 @@ export function QuickTeleport() {
                   role="option"
                   aria-selected={selected}
                   onClick={() => { setDistrictId(value); setDistrictMenuOpen(false); }}
-                  className={`w-full rounded-md px-2.5 py-1.5 text-left text-xs font-bold transition-colors ${selected ? 'bg-emerald-500/20 text-emerald-200' : 'text-white/85 hover:bg-white/10'}`}
+                  className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs font-bold transition-colors ${selected ? 'bg-emerald-500/20 text-emerald-200' : 'text-white/85 hover:bg-white/10'}`}
                 >
-                  {district.name}{district.speedchat_only ? ' (SpeedChat)' : ''}
+                  <span className="truncate">{district.name}</span><DistrictIndicators district={district} population={populationByDistrict[district.name]} />
                 </button>
               );
             })}

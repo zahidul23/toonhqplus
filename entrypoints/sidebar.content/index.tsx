@@ -153,6 +153,17 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
       indicators.dataset.district = districtName;
       indicators.replaceChildren();
 
+      if (SPEEDCHAT_ONLY_DISTRICTS.has(districtName)) {
+        const muted = document.createElement('span');
+        muted.className = 'toonhq-plus-indicator toonhq-plus-speedchat-only';
+        muted.dataset.tooltip = 'SpeedChat-Only District: SpeedChat+ messages are unavailable here.';
+        muted.setAttribute('aria-label', muted.dataset.tooltip);
+        muted.tabIndex = 0;
+        muted.innerHTML = MUTED_ICON_SVG;
+        enableDistrictTooltip(muted);
+        indicators.appendChild(muted);
+      }
+
       if (population != null) {
         const level = population >= 401 ? 'red' : population >= 200 ? 'green' : 'blue';
         const bars = population >= 300 ? 3 : population >= 100 ? 2 : 1;
@@ -169,17 +180,6 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
         capacity.innerHTML = CAPACITY_ICON_SVG;
         enableDistrictTooltip(capacity);
         indicators.appendChild(capacity);
-      }
-
-      if (SPEEDCHAT_ONLY_DISTRICTS.has(districtName)) {
-        const muted = document.createElement('span');
-        muted.className = 'toonhq-plus-indicator toonhq-plus-speedchat-only';
-        muted.dataset.tooltip = 'SpeedChat-Only District: SpeedChat+ messages are unavailable here.';
-        muted.setAttribute('aria-label', muted.dataset.tooltip);
-        muted.tabIndex = 0;
-        muted.innerHTML = MUTED_ICON_SVG;
-        enableDistrictTooltip(muted);
-        indicators.appendChild(muted);
       }
     }
 }
@@ -202,6 +202,25 @@ function applyGroupDistrictIndicators() {
     ]);
     const districtName = Array.from(knownDistrictNames).find(name => districtText.includes(name));
     if (districtName && districtLine) renderDistrictIndicators(districtLine, districtName);
+  });
+
+  const knownDistrictNames = new Set([
+    ...Object.keys(districtPopulation?.populationByDistrict || {}),
+    ...SPEEDCHAT_ONLY_DISTRICTS,
+  ]);
+  const districtChoices = document.querySelectorAll<HTMLElement>([
+    '.vuedal .multiselect__option',
+    '.vuedal .multiselect__single',
+    '.group-details-dialog .multiselect__option',
+    '.group-details-dialog .multiselect__single',
+    '.group-details-dialog [role="option"]',
+    '.group-details-dialog .dropdown-menu .dropdown-item',
+  ].join(','));
+  districtChoices.forEach(choice => {
+    const choiceText = choice.textContent?.trim() || '';
+    // Invasion options include a second line after the district name.
+    const districtName = Array.from(knownDistrictNames).find(name => choiceText.startsWith(name));
+    if (districtName) renderDistrictIndicators(choice, districtName);
   });
 
   if (activeDistrictTooltipAnchor && !activeDistrictTooltipAnchor.isConnected) hideDistrictTooltip();
@@ -708,9 +727,24 @@ function injectHighlightStyles() {
 
     .toonhq-plus-district-indicators {
       display: inline-flex;
+      flex-direction: row-reverse;
       align-items: center;
       gap: 5px;
       margin-left: 6px;
+    }
+
+    :is(.vuedal, .group-details-dialog) :is(.multiselect__option, .multiselect__single, [role="option"], .dropdown-item):has(> .toonhq-plus-district-indicators) {
+      position: relative;
+      padding-right: 54px !important;
+    }
+
+    :is(.vuedal, .group-details-dialog) :is(.multiselect__option, .multiselect__single, [role="option"], .dropdown-item) > .toonhq-plus-district-indicators {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      flex-direction: row;
+      margin-left: 0;
+      transform: translateY(-50%);
     }
 
     .toonhq-plus-indicator {

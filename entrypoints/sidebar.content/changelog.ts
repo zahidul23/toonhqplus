@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.32',
+    date: 'Sep 14, 2026',
+    changes: [
+      'Add district status indicators to district selection menus',
+      'Fix Coin Mint Bull Market status calculation logic',
+    ]
+  },
+  {
     version: '1.2.31',
     date: 'Sep 14, 2026',
     changes: [

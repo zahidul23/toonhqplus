@@ -942,9 +942,15 @@ export function CogCalculator() {
       // The Auditor can be defeated during the previous round, so check its
       // simulation state rather than only checking whether it remains in the
       // lineup array.
-      const hasBullionAuditor = currentCogs.some((c, i) => c.id === 'mint_bullion' && cogStates[i].layer > 0);
-      const deadNonAuditorsAtStart = currentCogs.filter((c, i) => c.id !== 'mint_bullion' && cogStates[i].layer === 0).length;
-      const isBullionVulnerable = hasBullionAuditor && (deadNonAuditorsAtStart % 2 !== 0);
+      // Bull Market is driven by the living Auditor in the lineup, independent
+      // of the selected preset. Coin grants 25%; Bullion grants 50%.
+      const isMintAuditor = (cog: Cog) => cog.id === 'mint_coin' || cog.id === 'mint_bullion';
+      const activeMintAuditor = currentCogs.find((c, i) => isMintAuditor(c) && cogStates[i].layer > 0);
+      const deadNonAuditorsAtStart = currentCogs.filter((c, i) => !isMintAuditor(c) && cogStates[i].layer === 0).length;
+      const bullMarketMultiplier = activeMintAuditor && (deadNonAuditorsAtStart % 2 !== 0)
+        ? activeMintAuditor.id === 'mint_bullion' ? 0.5 : 0.25
+        : 0;
+      const isBullMarketActive = bullMarketMultiplier > 0;
 
       const deadCogsCountAtStart = cogStates.filter(s => s.layer === 0).length;
 
@@ -969,7 +975,7 @@ export function CogCalculator() {
           const statusMultiplier = defenseDownStacks > 0
             ? DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2)
             : 0;
-          return statusMultiplier + (isBullionVulnerable ? 0.5 : 0);
+          return statusMultiplier + bullMarketMultiplier;
         });
 
         gagsInTrack.forEach(gag => {
@@ -1065,8 +1071,8 @@ export function CogCalculator() {
                 if (defenseDownStacks > 0) {
                   trapOrangeMultiplier += DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2);
                 }
-                if (isBullionVulnerable) {
-                  trapOrangeMultiplier += 0.5;
+                if (isBullMarketActive) {
+                  trapOrangeMultiplier += bullMarketMultiplier;
                 }
                 if (trapOrangeMultiplier > 0) {
                   trapDmg += Math.ceil(trapDmg * trapOrangeMultiplier);
@@ -1299,7 +1305,8 @@ export function CogCalculator() {
         })),
         cogDamages: [...cumulativeDamages],
         trackDamages,
-        isBullionVulnerable
+        isBullMarketActive,
+        bullMarketMultiplier
       });
     }
 
@@ -1717,7 +1724,7 @@ export function CogCalculator() {
                               return (c.isV2 ? maxHp * 2 : maxHp) <= cdmg;
                             }).length;
 
-                            if (activeStats.isBullionVulnerable) {
+                            if (activeStats.isBullMarketActive) {
                               activeLocal = true;
                               badgeValue = undefined;
                             } else if (isPresident && deadCogsCount > 0) {
@@ -1736,7 +1743,7 @@ export function CogCalculator() {
                           if (effect.id === 'isAttentive' && activeLocal) statusTitle = 'Attentive: Lure Reduced to 1 Round';
                           if (effect.id === 'isDefenseUp' && activeLocal) statusTitle = 'Defense Up: 25%';
                           if (effect.id === 'isDefenseDown' && activeLocal) {
-                            if (activeStats.isBullionVulnerable) statusTitle = 'Defense Down: 50%';
+                            if (activeStats.isBullMarketActive) statusTitle = `Bull Market: Defense Down ${activeStats.bullMarketMultiplier * 100}%`;
                             else statusTitle = `Defense Down: ${currentDefenseDownStacks * 20}%`;
                           }
                           if (effect.id === 'isLured' && activeLocal && finalCog.lureDuration !== undefined) statusTitle = `Lured: ${finalCog.lureDuration} Turns Remaining`;

@@ -218,7 +218,7 @@ html[data-toonhq-plus-display-mode="dark"] .card.filter-panel {
   color: var(--hq-dark-text) !important;
   border-color: var(--hq-dark-border) !important;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24) !important;
-  opacity: 0.94 !important;
+  opacity: 1 !important;
 }
 
 /* Keep Doodle filter headings readable without making the expand control look
@@ -434,6 +434,19 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .invasion-info 
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog {
   background-color: #264d36 !important;
+}
+
+/* Vue detaches the open district-change menu from the group dialog. Identify
+   the portaled surface by its injected district indicators instead of relying
+   on dialog ancestry, and recolor both the wrapper and its painting layer. */
+html[data-toonhq-plus-display-mode="dark"] :is(.multiselect__content, .multiselect__content-wrapper, [role="listbox"], .dropdown-menu):has(.toonhq-plus-district-indicators) {
+  background-color: var(--hq-dark-base) !important;
+  color: var(--hq-dark-text) !important;
+  border-color: var(--hq-dark-border-strong) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.multiselect__content, .multiselect__content-wrapper, [role="listbox"], .dropdown-menu):has(.toonhq-plus-district-indicators) :is(.multiselect__option, [role="option"], .dropdown-item) {
+  color: var(--hq-dark-text) !important;
 }
 
 /* ToonHQ supplies gag track backgrounds inline with an 0.8 alpha suffix.
@@ -753,9 +766,11 @@ html[data-toonhq-plus-display-mode="dark"] .vue-dropdown__content {
   box-shadow: 0 12px 28px #0005;
 }
 
-/* The dark-mode dimmer gives the content and footer equal stacking levels, so
-   the later footer paints over the open filter. Raise the containing context. */
-html[data-toonhq-plus-display-mode="dark"] .theme--groups > .sl__content {
+/* The dark-mode dimmer gives the page content, later cards, and footer equal
+   stacking levels. Raise the shared content context so Vue Multiselect and
+   other content dropdowns paint over siblings on Gardening, Groups, and the
+   other themed pages. Their own menu z-index still controls local ordering. */
+html[data-toonhq-plus-display-mode="dark"] .theme > .sl__content {
   z-index: 2 !important;
 }
 
