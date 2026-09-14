@@ -48,6 +48,9 @@ const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
 const GROUP_FILTERS_SETTING_KEY = 'toonhqplus-group-filters';
 const DISTRICT_POPULATION_STORAGE_KEY = 'toonhqplus-district-population';
+const DISTRICT_POPULATION_URL = 'https://www.toontownrewritten.com/api/population';
+const DISTRICT_POPULATION_REFRESH_MS = 5 * 60 * 1000;
+const DISTRICT_POPULATION_CHECK_MS = 60 * 1000;
 const SPEEDCHAT_ONLY_DISTRICTS = new Set(['Boingbury', 'Gulp Gulch', 'Whoosh Rapids']);
 
 type GroupFilters = {
@@ -62,6 +65,7 @@ type GroupFilters = {
 type DistrictPopulationSnapshot = {
   populationByDistrict: Record<string, number>;
   statusByDistrict?: Record<string, string>;
+  lastUpdated?: number | null;
   fetchedAt: number;
 };
 
@@ -707,7 +711,6 @@ function injectHighlightStyles() {
       align-items: center;
       gap: 5px;
       margin-left: 6px;
-      vertical-align: -2px;
     }
 
     .toonhq-plus-indicator {
@@ -1790,28 +1793,67 @@ export default defineContentScript({
       districtPopulation = snapshot;
       applyGroupDistrictIndicators();
     };
-    const handleRuntimeMessage = (message: any) => {
-      if (message?.type !== 'DISTRICT_POPULATION_UPDATED') return;
-      acceptDistrictPopulation(message.snapshot as DistrictPopulationSnapshot | undefined);
-    };
-    // Register before any asynchronous initialization so an update/install
-    // population broadcast cannot pass this content script while it waits.
-    browser.runtime.onMessage.addListener(handleRuntimeMessage);
-    ctx.onInvalidated(() => browser.runtime.onMessage.removeListener(handleRuntimeMessage));
     const handlePopulationStorageChange = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
       if (areaName !== 'local') return;
       acceptDistrictPopulation(
         changes[DISTRICT_POPULATION_STORAGE_KEY]?.newValue as DistrictPopulationSnapshot | undefined,
       );
     };
-    // The five-minute refresh writes storage before broadcasting. Listening to
-    // both signals guarantees open tabs refresh even if a runtime message is
-    // missed while an extension update replaces the service worker.
+    // Other ToonHQ tabs share the same cached snapshot through extension storage.
     browser.storage.onChanged.addListener(handlePopulationStorageChange);
     ctx.onInvalidated(() => browser.storage.onChanged.removeListener(handlePopulationStorageChange));
-    // This also wakes population loading when ToonHQ is opened after the
-    // background alarm intentionally skipped refreshes with no ToonHQ tabs.
-    void browser.runtime.sendMessage({ type: 'ENSURE_DISTRICT_POPULATION' }).catch(() => { });
+
+    let districtPopulationRequest: Promise<void> | null = null;
+    const refreshDistrictPopulation = () => {
+      if (districtPopulationRequest) return districtPopulationRequest;
+      districtPopulationRequest = (async () => {
+        const stored = await browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY);
+        const cached = stored[DISTRICT_POPULATION_STORAGE_KEY] as DistrictPopulationSnapshot | undefined;
+        if (cached?.fetchedAt && Date.now() - cached.fetchedAt < DISTRICT_POPULATION_REFRESH_MS) {
+          acceptDistrictPopulation(cached);
+          return;
+        }
+
+        try {
+          // The public TTR API enables CORS, so this page-principal request does
+          // not require extension access to the Toontown Rewritten origin.
+          const response = await pageFetch(DISTRICT_POPULATION_URL, {
+            cache: 'no-store',
+            credentials: 'omit',
+          });
+          if (!response.ok) throw new Error(`Population API returned ${response.status}.`);
+          const data = await response.json();
+          if (!data || data.error || typeof data.populationByDistrict !== 'object') {
+            throw new Error(data?.error || 'Population API returned an invalid response.');
+          }
+
+          const snapshot: DistrictPopulationSnapshot = {
+            populationByDistrict: Object.fromEntries(
+              Object.entries(data.populationByDistrict)
+                .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1])),
+            ),
+            statusByDistrict: typeof data.statusByDistrict === 'object' && data.statusByDistrict
+              ? data.statusByDistrict
+              : {},
+            lastUpdated: typeof data.lastUpdated === 'number' ? data.lastUpdated : null,
+            fetchedAt: Date.now(),
+          };
+          acceptDistrictPopulation(snapshot);
+          await browser.storage.local.set({ [DISTRICT_POPULATION_STORAGE_KEY]: snapshot });
+        } catch (error) {
+          console.warn('[ToonHQ+] Failed to refresh district population:', error);
+        }
+      })().finally(() => {
+        districtPopulationRequest = null;
+      });
+      return districtPopulationRequest;
+    };
+
+    const populationRefreshInterval = window.setInterval(
+      () => void refreshDistrictPopulation(),
+      DISTRICT_POPULATION_CHECK_MS,
+    );
+    ctx.onInvalidated(() => window.clearInterval(populationRefreshInterval));
 
     // Run migration from old local storage on first start
     await migrateFromLocalStorage();
@@ -1884,6 +1926,7 @@ export default defineContentScript({
     } catch (error) {
       console.warn('[ToonHQ+] Could not load cached district population:', error);
     }
+    void refreshDistrictPopulation();
 
     let districtIndicatorFrame: number | null = null;
     const scheduleDistrictIndicators = () => {

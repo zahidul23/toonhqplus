@@ -18,19 +18,7 @@ import {
 
 const VIEW_TOON_STYLE_CONTEXT_MENU_ID = 'view-toon-style';
 const TTR_RENDITION_ORIGIN = 'https://rendition.toontownrewritten.com';
-const DISTRICT_POPULATION_ALARM = 'toonhqplus-district-population';
-const DISTRICT_POPULATION_STORAGE_KEY = 'toonhqplus-district-population';
 const UPDATE_ACTIVATION_PENDING_KEY = 'toonhqplus-update-activation-pending';
-const DISTRICT_POPULATION_URL = 'https://www.toontownrewritten.com/api/population';
-const DISTRICT_POPULATION_REFRESH_MINUTES = 5;
-const DISTRICT_POPULATION_MAX_AGE_MS = DISTRICT_POPULATION_REFRESH_MINUTES * 60 * 1000;
-
-type DistrictPopulationSnapshot = {
-  populationByDistrict: Record<string, number>;
-  statusByDistrict: Record<string, string>;
-  lastUpdated: number | null;
-  fetchedAt: number;
-};
 
 function getToonStyleUrl(sourceUrl: string): string | null {
   try {
@@ -71,83 +59,12 @@ export default defineBackground(() => {
   const KEEP_ALIVE_ALARM = 'toontracker-keepalive';
   const TRACKING_POLL_MS = 5000;
   const AUTO_DISCOVER_MS = 60000;
-  let districtPopulationRequest: Promise<void> | null = null;
   let updateActivationRequest: Promise<void> | null = null;
-
-  async function broadcastDistrictPopulation(snapshot: DistrictPopulationSnapshot) {
-    const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
-    await Promise.all(tabs.map(tab => tab.id
-      ? browser.tabs.sendMessage(tab.id, { type: 'DISTRICT_POPULATION_UPDATED', snapshot }).catch(() => { })
-      : Promise.resolve()));
-  }
-
-  async function hasOpenToonHqTab(): Promise<boolean> {
-    const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
-    return tabs.length > 0;
-  }
-
-  async function refreshDistrictPopulation(force = false) {
-    if (districtPopulationRequest) return districtPopulationRequest;
-
-    districtPopulationRequest = (async () => {
-      // Population indicators are only used on ToonHQ. Avoid waking the API
-      // while no matching tab is open; a newly loaded content script requests
-      // a refresh when the user returns.
-      if (!await hasOpenToonHqTab()) return;
-
-      if (!force) {
-        const stored = await browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY);
-        const cached = stored[DISTRICT_POPULATION_STORAGE_KEY] as DistrictPopulationSnapshot | undefined;
-        if (cached?.fetchedAt && Date.now() - cached.fetchedAt < DISTRICT_POPULATION_MAX_AGE_MS) return;
-      }
-
-      try {
-        const response = await fetch(DISTRICT_POPULATION_URL, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`Population API returned ${response.status}.`);
-        const data = await response.json();
-        if (!data || data.error || typeof data.populationByDistrict !== 'object') {
-          throw new Error(data?.error || 'Population API returned an invalid response.');
-        }
-
-        const populationByDistrict = Object.fromEntries(
-          Object.entries(data.populationByDistrict)
-            .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
-        );
-        const snapshot: DistrictPopulationSnapshot = {
-          populationByDistrict,
-          statusByDistrict: typeof data.statusByDistrict === 'object' && data.statusByDistrict
-            ? data.statusByDistrict
-            : {},
-          lastUpdated: typeof data.lastUpdated === 'number' ? data.lastUpdated : null,
-          fetchedAt: Date.now(),
-        };
-        await browser.storage.local.set({ [DISTRICT_POPULATION_STORAGE_KEY]: snapshot });
-        await broadcastDistrictPopulation(snapshot);
-      } catch (error) {
-        console.warn('[ToonHQ+] Failed to refresh district population:', error);
-      }
-    })().finally(() => {
-      districtPopulationRequest = null;
-    });
-
-    return districtPopulationRequest;
-  }
-
-  function initializeDistrictPopulation() {
-    browser.alarms.create(DISTRICT_POPULATION_ALARM, { periodInMinutes: DISTRICT_POPULATION_REFRESH_MINUTES });
-    void refreshDistrictPopulation();
-  }
 
   async function activateUpdateForOpenToonHqTabs() {
     if (updateActivationRequest) return updateActivationRequest;
 
     updateActivationRequest = (async () => {
-      // A normal startup refresh may already be checking a fresh cache. Wait
-      // for it, then force the update-time request so the new build always
-      // publishes a newly fetched snapshot.
-      if (districtPopulationRequest) await districtPopulationRequest;
-      await refreshDistrictPopulation(true);
-
       const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
       await Promise.all(tabs.map(tab => tab.id
         ? browser.tabs.reload(tab.id).catch(() => { })
@@ -676,13 +593,6 @@ export default defineBackground(() => {
       sendResponse({ received: true });
     } else if (message.type === 'GET_TRACKER_PREF') {
       sendResponse({ enabled: trackerEnabled });
-    } else if (message.type === 'ENSURE_DISTRICT_POPULATION') {
-      refreshDistrictPopulation().then(() => {
-        sendResponse({ refreshed: true });
-      }).catch(error => {
-        sendResponse({ refreshed: false, error: error instanceof Error ? error.message : String(error) });
-      });
-      return true;
     } else if (message.type === 'DISPLAY_MODE_CHANGED') {
       const mode = normalizeDisplayMode(message.mode);
       browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] }).then(tabs => {
@@ -842,9 +752,6 @@ export default defineBackground(() => {
         initializeBackground().catch(console.error);
       }
     }
-    if (alarm.name === DISTRICT_POPULATION_ALARM) {
-      void refreshDistrictPopulation(true);
-    }
   });
 
   browser.runtime.onStartup.addListener(() => {
@@ -891,7 +798,6 @@ export default defineBackground(() => {
   initializeBackground().catch(error => {
     console.error('[ToonTracker BG] Failed to initialize tracker:', error);
   });
-  initializeDistrictPopulation();
   void activatePendingUpdate().catch(error => {
     console.error('[ToonHQ+] Failed to activate extension update:', error);
   });

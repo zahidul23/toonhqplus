@@ -6,7 +6,7 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '1.2.29',
+    version: '1.2.31',
     date: 'Sep 14, 2026',
     changes: [
       'Persist Group Filters across page refreshes and browser restarts',
