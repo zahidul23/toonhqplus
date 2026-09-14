@@ -857,9 +857,13 @@ function injectHighlightStyles() {
       font-variant-numeric: tabular-nums;
     }
 
-    .toonhq-plus-capacity--red { background: #dc2626; }
-    .toonhq-plus-capacity--green { background: #168653; }
-    .toonhq-plus-capacity--blue { background: #2563eb; }
+    .toonhq-plus-capacity--red { background: #a95258; }
+    .toonhq-plus-capacity--green { background: #43755c; }
+    .toonhq-plus-capacity--blue { background: #4a6998; }
+
+    html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-capacity--red { background: #dc2626; }
+    html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-capacity--green { background: #168653; }
+    html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-capacity--blue { background: #2563eb; }
     .toonhq-plus-speedchat-only { background: #dc2626; }
 
     .toony-count {
