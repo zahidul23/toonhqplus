@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.29',
+    date: 'Sep 14, 2026',
+    changes: [
+      'Persist Group Filters across page refreshes and browser restarts',
+      'Show district population and chat status indicators in Group Cards and Details'
+    ]
+  },
+  {
     version: '1.2.28',
     date: 'Sep 13, 2026',
     changes: [

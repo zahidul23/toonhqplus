@@ -95,32 +95,32 @@ html[data-toonhq-plus-display-mode="dark"] .theme--shop .navbar.navbar-default {
 /* Remove ToonHQ's bright vertical gradients in dark mode while preserving
    each section's original repeated SVG artwork. */
 html[data-toonhq-plus-display-mode="dark"] .theme--invasions {
-  background-image: url("/static/dist/img/invasions_pattern.193c4937.svg") !important;
+  background-image: url("https://toonhq.org/static/dist/img/invasions_pattern.193c4937.svg") !important;
   background-repeat: repeat !important;
   background-size: 384px 439px !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--notifications {
-  background-image: url("/static/dist/img/notifications_pattern.d7f66250.svg") !important;
+  background-image: url("https://toonhq.org/static/dist/img/notifications_pattern.d7f66250.svg") !important;
   background-repeat: repeat !important;
   background-size: 311.68px 305.75px !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening {
-  background-image: url("/static/dist/img/general_pattern_white.d4df8adf.svg") !important;
+  background-image: url("https://toonhq.org/static/dist/img/general_pattern_white.d4df8adf.svg") !important;
   background-repeat: repeat !important;
   background-size: 789.36px 761.26px !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--groups {
-  background-image: url("/static/dist/img/groups_pattern.be11c2e6.svg") !important;
+  background-image: url("https://toonhq.org/static/dist/img/groups_pattern.be11c2e6.svg") !important;
   background-repeat: repeat !important;
   background-size: 396.29px 360.88px !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--fishing {
   background-color: #537ddd !important;
-  background-image: url("/static/dist/img/fishing_pattern.ba545d6b.svg") !important;
+  background-image: url("https://toonhq.org/static/dist/img/fishing_pattern.ba545d6b.svg") !important;
   background-repeat: repeat !important;
   background-size: 438px 453.47px !important;
 }
@@ -202,7 +202,7 @@ html[data-toonhq-plus-display-mode="dark"] .navbar.navbar-default .navbar-nav > 
 
 /* Match the dark-mode header logo to the footer's unoutlined logo asset. */
 html[data-toonhq-plus-display-mode="dark"] .navbar-left__logo img[alt="ToonHQ"] {
-  content: url("/static/dist/img/logo-sm.642a444f.png") !important;
+  content: url("https://toonhq.org/static/dist/img/logo-sm.642a444f.png") !important;
   width: 160px !important;
   height: 55px !important;
 }
@@ -411,17 +411,9 @@ html[data-toonhq-plus-display-mode="dark"] .modal-content {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42) !important;
 }
 
-html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .invasion-info,
-html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toonatar__backdrop {
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .invasion-info {
   background-color: #264d36 !important;
   color: var(--hq-dark-text) !important;
-}
-
-/* ToonHQ photo renders are transparent when no photo background is supplied;
-   keep their native white backing without changing species avatars or modal
-   surfaces. */
-html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toonatar__backdrop:has(.toonatar__photo) {
-  background-color: #ffffff !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog {

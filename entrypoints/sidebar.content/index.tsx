@@ -46,6 +46,162 @@ const STORAGE_KEYS = {
 } as const;
 const ROW_CLASS_FAVORITE = 'toonhq-plus-favorite';
 const ROW_CLASS_BLOCKED = 'toonhq-plus-blocked';
+const GROUP_FILTERS_SETTING_KEY = 'toonhqplus-group-filters';
+const DISTRICT_POPULATION_STORAGE_KEY = 'toonhqplus-district-population';
+const SPEEDCHAT_ONLY_DISTRICTS = new Set(['Boingbury', 'Gulp Gulch', 'Whoosh Rapids']);
+
+type GroupFilters = {
+  groupType: number[];
+  hideGroupType: number[];
+  district: string | null;
+  area: number[];
+  sortBy: 'oldest' | 'newest' | 'most_toons' | 'least_toons';
+  showFull: boolean;
+};
+
+type DistrictPopulationSnapshot = {
+  populationByDistrict: Record<string, number>;
+  statusByDistrict?: Record<string, string>;
+  fetchedAt: number;
+};
+
+let districtPopulation: DistrictPopulationSnapshot | null = null;
+let activeDistrictTooltip: HTMLElement | null = null;
+let activeDistrictTooltipAnchor: HTMLElement | null = null;
+let districtTooltipSequence = 0;
+
+const CAPACITY_ICON_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24"><path class="bar bar--1" d="M4 20V14h3v6H4Z"/><path class="bar bar--2" d="M10 20V9h3v11h-3Z"/><path class="bar bar--3" d="M16 20V4h3v16h-3Z"/></svg>';
+const MUTED_ICON_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Zm8.1 7 2.45-2.45-1.4-1.4L17.7 10.6l-2.45-2.45-1.4 1.4L16.3 12l-2.45 2.45 1.4 1.4 2.45-2.45 2.45 2.45 1.4-1.4L19.1 12Z"/></svg>';
+
+function hideDistrictTooltip() {
+  activeDistrictTooltip?.remove();
+  activeDistrictTooltipAnchor?.removeAttribute('aria-describedby');
+  activeDistrictTooltip = null;
+  activeDistrictTooltipAnchor = null;
+}
+
+function showDistrictTooltip(anchor: HTMLElement) {
+  const text = anchor.dataset.tooltip;
+  if (!text) return;
+  hideDistrictTooltip();
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'toonhq-plus-tooltip';
+  tooltip.id = `toonhq-plus-tooltip-${++districtTooltipSequence}`;
+  tooltip.setAttribute('role', 'tooltip');
+  tooltip.textContent = text;
+  document.body.appendChild(tooltip);
+
+  const anchorRect = anchor.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const left = Math.min(
+    window.innerWidth - tooltipRect.width / 2 - 8,
+    Math.max(tooltipRect.width / 2 + 8, anchorRect.left + anchorRect.width / 2),
+  );
+  const fitsAbove = anchorRect.top >= tooltipRect.height + 12;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = fitsAbove
+    ? `${anchorRect.top - tooltipRect.height - 9}px`
+    : `${anchorRect.bottom + 9}px`;
+  tooltip.dataset.placement = fitsAbove ? 'top' : 'bottom';
+  anchor.setAttribute('aria-describedby', tooltip.id);
+  activeDistrictTooltip = tooltip;
+  activeDistrictTooltipAnchor = anchor;
+}
+
+function enableDistrictTooltip(indicator: HTMLElement) {
+  indicator.addEventListener('mouseenter', () => showDistrictTooltip(indicator));
+  indicator.addEventListener('mouseleave', hideDistrictTooltip);
+  indicator.addEventListener('focus', () => showDistrictTooltip(indicator));
+  indicator.addEventListener('blur', hideDistrictTooltip);
+}
+
+function normalizeGroupFilters(value: unknown): GroupFilters | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<GroupFilters>;
+  const validSorts = new Set(['oldest', 'newest', 'most_toons', 'least_toons']);
+  if (!Array.isArray(candidate.groupType) || !Array.isArray(candidate.hideGroupType) ||
+      !Array.isArray(candidate.area) || !validSorts.has(String(candidate.sortBy)) ||
+      typeof candidate.showFull !== 'boolean') return null;
+  if (candidate.district !== null && typeof candidate.district !== 'string') return null;
+  return {
+    groupType: candidate.groupType.filter(Number.isFinite),
+    hideGroupType: candidate.hideGroupType.filter(Number.isFinite),
+    district: candidate.district ?? null,
+    area: candidate.area.filter(Number.isFinite),
+    sortBy: candidate.sortBy as GroupFilters['sortBy'],
+    showFull: candidate.showFull,
+  };
+}
+
+function renderDistrictIndicators(districtLine: HTMLElement, districtName: string) {
+    let indicators = districtLine.querySelector<HTMLElement>(':scope > .toonhq-plus-district-indicators');
+    if (!indicators) {
+      indicators = document.createElement('span');
+      indicators.className = 'toonhq-plus-district-indicators';
+      districtLine.appendChild(indicators);
+    }
+
+    const population = districtPopulation?.populationByDistrict[districtName];
+    const populationKey = population == null ? '' : String(population);
+    if (indicators.dataset.population !== populationKey || indicators.dataset.district !== districtName) {
+      indicators.dataset.population = populationKey;
+      indicators.dataset.district = districtName;
+      indicators.replaceChildren();
+
+      if (population != null) {
+        const level = population >= 401 ? 'red' : population >= 200 ? 'green' : 'blue';
+        const bars = population >= 300 ? 3 : population >= 100 ? 2 : 1;
+        const description = population >= 401
+          ? 'Busy District (401+ Toons)'
+          : population >= 200
+            ? 'Active District (200–400 Toons)'
+            : 'Quiet District (<200 Toons)';
+        const capacity = document.createElement('span');
+        capacity.className = `toonhq-plus-indicator toonhq-plus-capacity toonhq-plus-capacity--${level} toonhq-plus-capacity--bars-${bars}`;
+        capacity.dataset.tooltip = `${description}\nCurrent population: ${population}`;
+        capacity.setAttribute('aria-label', capacity.dataset.tooltip);
+        capacity.tabIndex = 0;
+        capacity.innerHTML = CAPACITY_ICON_SVG;
+        enableDistrictTooltip(capacity);
+        indicators.appendChild(capacity);
+      }
+
+      if (SPEEDCHAT_ONLY_DISTRICTS.has(districtName)) {
+        const muted = document.createElement('span');
+        muted.className = 'toonhq-plus-indicator toonhq-plus-speedchat-only';
+        muted.dataset.tooltip = 'SpeedChat-only district: SpeedChat+ messages are unavailable here.';
+        muted.setAttribute('aria-label', muted.dataset.tooltip);
+        muted.tabIndex = 0;
+        muted.innerHTML = MUTED_ICON_SVG;
+        enableDistrictTooltip(muted);
+        indicators.appendChild(muted);
+      }
+    }
+}
+
+function applyGroupDistrictIndicators() {
+  document.querySelectorAll<HTMLElement>('.groups-list-item[district-name]').forEach(groupCard => {
+    const districtName = groupCard.getAttribute('district-name');
+    const districtLine = groupCard.querySelectorAll<HTMLElement>('.info-card__content p')[1];
+    if (districtName && districtLine) renderDistrictIndicators(districtLine, districtName);
+  });
+
+  document.querySelectorAll<HTMLElement>('.group-details-dialog').forEach(dialog => {
+    const districtColumn = Array.from(dialog.querySelectorAll<HTMLElement>('.row.text-center > div'))
+      .find(column => column.querySelector('h6')?.textContent?.trim() === 'District');
+    const districtLine = districtColumn?.querySelector<HTMLElement>('p');
+    const districtText = districtLine?.textContent || '';
+    const knownDistrictNames = new Set([
+      ...Object.keys(districtPopulation?.populationByDistrict || {}),
+      ...SPEEDCHAT_ONLY_DISTRICTS,
+    ]);
+    const districtName = Array.from(knownDistrictNames).find(name => districtText.includes(name));
+    if (districtName && districtLine) renderDistrictIndicators(districtLine, districtName);
+  });
+
+  if (activeDistrictTooltipAnchor && !activeDistrictTooltipAnchor.isConnected) hideDistrictTooltip();
+}
 
 function getExtensionResourceUrl(path: string): string {
   return browser.runtime.getURL(path.replace(/^\/+/, '') as any);
@@ -509,6 +665,86 @@ function injectHighlightStyles() {
       gap: 0.75em;
       margin-right: 0.75em !important;
     }
+
+    .toonhq-plus-district-indicators {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-left: 6px;
+      vertical-align: -2px;
+    }
+
+    .toonhq-plus-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      color: white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      cursor: help;
+      outline: none;
+    }
+
+    .toonhq-plus-indicator:focus-visible {
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9), 0 0 0 5px rgba(17, 24, 39, 0.7);
+    }
+
+    .toonhq-plus-tooltip {
+      position: fixed;
+      z-index: 2147483647;
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: 250px;
+      padding: 7px 9px;
+      border-radius: 6px;
+      background: #111827;
+      color: #fff;
+      box-shadow: 0 5px 16px rgba(0, 0, 0, 0.35);
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
+      text-align: left;
+      white-space: pre-line;
+      pointer-events: none;
+    }
+
+    .toonhq-plus-tooltip::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+    }
+
+    .toonhq-plus-tooltip[data-placement="top"]::after {
+      top: 100%;
+      border-top-color: #111827;
+    }
+
+    .toonhq-plus-tooltip[data-placement="bottom"]::after {
+      bottom: 100%;
+      border-bottom-color: #111827;
+    }
+
+    .toonhq-plus-indicator svg {
+      width: 11px;
+      height: 11px;
+      fill: currentColor;
+    }
+
+    .toonhq-plus-capacity .bar { opacity: 0.28; }
+    .toonhq-plus-capacity--bars-1 .bar--1,
+    .toonhq-plus-capacity--bars-2 .bar--1,
+    .toonhq-plus-capacity--bars-2 .bar--2,
+    .toonhq-plus-capacity--bars-3 .bar { opacity: 1; }
+
+    .toonhq-plus-capacity--red { background: #dc2626; }
+    .toonhq-plus-capacity--green { background: #168653; }
+    .toonhq-plus-capacity--blue { background: #2563eb; }
+    .toonhq-plus-speedchat-only { background: #dc2626; }
 
     .toony-count {
       display: inline-flex;
@@ -1545,16 +1781,17 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    injectHighlightStyles();
+    const cachedPopulationPromise = browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY);
+
     // Run migration from old local storage on first start
     await migrateFromLocalStorage();
 
     // Ensure all default settings are persisted if they don't exist
-    for (const [key, defaultValue] of Object.entries(DEFAULT_SETTINGS)) {
+    await Promise.all(Object.entries(DEFAULT_SETTINGS).map(async ([key, defaultValue]) => {
       const existing = await getSetting(key);
-      if (existing === undefined) {
-        await setSetting(key, defaultValue);
-      }
-    }
+      if (existing === undefined) await setSetting(key, defaultValue);
+    }));
 
     // Now load everything into local state
     const currentSettings = await getSettings(Object.keys(DEFAULT_SETTINGS));
@@ -1564,6 +1801,99 @@ export default defineContentScript({
     if (currentSettings['navbar-config']) {
       applyNavbarCustomization(currentSettings['navbar-config']);
     }
+
+    let savedGroupFiltersByGame = await getSetting<Record<string, GroupFilters>>(GROUP_FILTERS_SETTING_KEY) || {};
+    const restoredFilterGames = new Set<number>();
+
+    const restoreFiltersForGame = (gameId: number) => {
+      if (!Number.isFinite(gameId) || restoredFilterGames.has(gameId)) return;
+      restoredFilterGames.add(gameId);
+      const filters = normalizeGroupFilters(savedGroupFiltersByGame[String(gameId)]);
+      if (filters) {
+        window.dispatchEvent(new CustomEvent('toonhqplus-restore-group-filters', {
+          detail: JSON.stringify({ gameId, filters }),
+        }));
+      }
+    };
+
+    const handleGroupFilterStoreReady = ((event: CustomEvent<string>) => {
+      try {
+        restoreFiltersForGame(Number(JSON.parse(event.detail).gameId));
+      } catch { }
+    }) as EventListener;
+
+    const handleNativeGroupFiltersChanged = ((event: CustomEvent<string>) => {
+      try {
+        const payload = JSON.parse(event.detail);
+        const gameId = Number(payload.gameId);
+        if (!restoredFilterGames.has(gameId)) {
+          restoreFiltersForGame(gameId);
+          return;
+        }
+        const filters = normalizeGroupFilters(payload.filters);
+        if (!filters) return;
+        savedGroupFiltersByGame = { ...savedGroupFiltersByGame, [String(gameId)]: filters };
+        void setSetting(GROUP_FILTERS_SETTING_KEY, savedGroupFiltersByGame);
+      } catch { }
+    }) as EventListener;
+
+    window.addEventListener('toonhqplus-group-filter-store-ready', handleGroupFilterStoreReady);
+    window.addEventListener('toonhqplus-group-filters-changed', handleNativeGroupFiltersChanged);
+    ctx.onInvalidated(() => {
+      window.removeEventListener('toonhqplus-group-filter-store-ready', handleGroupFilterStoreReady);
+      window.removeEventListener('toonhqplus-group-filters-changed', handleNativeGroupFiltersChanged);
+    });
+
+    try {
+      const storedPopulation = await cachedPopulationPromise;
+      const snapshot = storedPopulation[DISTRICT_POPULATION_STORAGE_KEY] as DistrictPopulationSnapshot | undefined;
+      if (snapshot?.populationByDistrict) districtPopulation = snapshot;
+    } catch (error) {
+      console.warn('[ToonHQ+] Could not load cached district population:', error);
+    }
+
+    const handleRuntimeMessage = (message: any) => {
+      if (message?.type !== 'DISTRICT_POPULATION_UPDATED' || !message.snapshot?.populationByDistrict) return;
+      districtPopulation = message.snapshot as DistrictPopulationSnapshot;
+      applyGroupDistrictIndicators();
+    };
+    browser.runtime.onMessage.addListener(handleRuntimeMessage);
+    ctx.onInvalidated(() => browser.runtime.onMessage.removeListener(handleRuntimeMessage));
+
+    let districtIndicatorFrame: number | null = null;
+    const scheduleDistrictIndicators = () => {
+      if (districtIndicatorFrame !== null) return;
+      districtIndicatorFrame = window.requestAnimationFrame(() => {
+        districtIndicatorFrame = null;
+        applyGroupDistrictIndicators();
+      });
+    };
+    const districtIndicatorObserver = new MutationObserver(scheduleDistrictIndicators);
+    districtIndicatorObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['district-name'],
+    });
+    ctx.onInvalidated(() => {
+      districtIndicatorObserver.disconnect();
+      if (districtIndicatorFrame !== null) window.cancelAnimationFrame(districtIndicatorFrame);
+    });
+
+    // Start the page bridge and cached indicator rendering before the slower
+    // Toon/group history synchronization below.
+    injectVueLogger();
+    scheduleDistrictIndicators();
+
+    window.addEventListener('pointerdown', hideDistrictTooltip, true);
+    window.addEventListener('scroll', hideDistrictTooltip, true);
+    window.addEventListener('resize', hideDistrictTooltip);
+    ctx.onInvalidated(() => {
+      hideDistrictTooltip();
+      window.removeEventListener('pointerdown', hideDistrictTooltip, true);
+      window.removeEventListener('scroll', hideDistrictTooltip, true);
+      window.removeEventListener('resize', hideDistrictTooltip);
+    });
 
     // 1) Load owned toons from ToonHQ's authenticated page bootstrap. Only use
     // the API as a logged-in fallback when the server did not embed the list.
@@ -2147,7 +2477,6 @@ export default defineContentScript({
 
     }
 
-    injectHighlightStyles();
     // also ensure any .group-details-dialog gets forced to 980px width inline
     const fixDialog = (d: HTMLElement) => {
       if (!bossInfoEnabled) {
@@ -2351,8 +2680,6 @@ export default defineContentScript({
       script.onload = () => script.remove();
       document.documentElement.appendChild(script);
     }
-
-    injectVueLogger();
 
     try {
       const ui = await createShadowRootUi(ctx, {
