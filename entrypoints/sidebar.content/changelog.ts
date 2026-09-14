@@ -7,9 +7,9 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.2.27',
-    date: 'Sep 13, 2026',
+    date: 'Sep 12, 2026',
     changes: [
-      'Fixes to gag accuracies in Facilities Calculator',
+      'Fixes to gag accuracies in Cog and Facilities Calculator',
     ]
   },
   {
