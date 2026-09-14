@@ -20,6 +20,7 @@ const VIEW_TOON_STYLE_CONTEXT_MENU_ID = 'view-toon-style';
 const TTR_RENDITION_ORIGIN = 'https://rendition.toontownrewritten.com';
 const DISTRICT_POPULATION_ALARM = 'toonhqplus-district-population';
 const DISTRICT_POPULATION_STORAGE_KEY = 'toonhqplus-district-population';
+const UPDATE_ACTIVATION_PENDING_KEY = 'toonhqplus-update-activation-pending';
 const DISTRICT_POPULATION_URL = 'https://www.toontownrewritten.com/api/population';
 const DISTRICT_POPULATION_REFRESH_MINUTES = 5;
 const DISTRICT_POPULATION_MAX_AGE_MS = DISTRICT_POPULATION_REFRESH_MINUTES * 60 * 1000;
@@ -71,6 +72,7 @@ export default defineBackground(() => {
   const TRACKING_POLL_MS = 5000;
   const AUTO_DISCOVER_MS = 60000;
   let districtPopulationRequest: Promise<void> | null = null;
+  let updateActivationRequest: Promise<void> | null = null;
 
   async function broadcastDistrictPopulation(snapshot: DistrictPopulationSnapshot) {
     const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
@@ -79,10 +81,20 @@ export default defineBackground(() => {
       : Promise.resolve()));
   }
 
+  async function hasOpenToonHqTab(): Promise<boolean> {
+    const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
+    return tabs.length > 0;
+  }
+
   async function refreshDistrictPopulation(force = false) {
     if (districtPopulationRequest) return districtPopulationRequest;
 
     districtPopulationRequest = (async () => {
+      // Population indicators are only used on ToonHQ. Avoid waking the API
+      // while no matching tab is open; a newly loaded content script requests
+      // a refresh when the user returns.
+      if (!await hasOpenToonHqTab()) return;
+
       if (!force) {
         const stored = await browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY);
         const cached = stored[DISTRICT_POPULATION_STORAGE_KEY] as DistrictPopulationSnapshot | undefined;
@@ -124,6 +136,34 @@ export default defineBackground(() => {
   function initializeDistrictPopulation() {
     browser.alarms.create(DISTRICT_POPULATION_ALARM, { periodInMinutes: DISTRICT_POPULATION_REFRESH_MINUTES });
     void refreshDistrictPopulation();
+  }
+
+  async function activateUpdateForOpenToonHqTabs() {
+    if (updateActivationRequest) return updateActivationRequest;
+
+    updateActivationRequest = (async () => {
+      // A normal startup refresh may already be checking a fresh cache. Wait
+      // for it, then force the update-time request so the new build always
+      // publishes a newly fetched snapshot.
+      if (districtPopulationRequest) await districtPopulationRequest;
+      await refreshDistrictPopulation(true);
+
+      const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
+      await Promise.all(tabs.map(tab => tab.id
+        ? browser.tabs.reload(tab.id).catch(() => { })
+        : Promise.resolve()));
+    })().finally(() => {
+      updateActivationRequest = null;
+    });
+
+    return updateActivationRequest;
+  }
+
+  async function activatePendingUpdate() {
+    const stored = await browser.storage.local.get(UPDATE_ACTIVATION_PENDING_KEY);
+    if (stored[UPDATE_ACTIVATION_PENDING_KEY] !== true) return;
+    await browser.storage.local.remove(UPDATE_ACTIVATION_PENDING_KEY);
+    await activateUpdateForOpenToonHqTabs();
   }
 
   async function exportExtensionStorage(includeFullToonCache: boolean): Promise<ExtensionStorageSnapshot> {
@@ -636,6 +676,13 @@ export default defineBackground(() => {
       sendResponse({ received: true });
     } else if (message.type === 'GET_TRACKER_PREF') {
       sendResponse({ enabled: trackerEnabled });
+    } else if (message.type === 'ENSURE_DISTRICT_POPULATION') {
+      refreshDistrictPopulation().then(() => {
+        sendResponse({ refreshed: true });
+      }).catch(error => {
+        sendResponse({ refreshed: false, error: error instanceof Error ? error.message : String(error) });
+      });
+      return true;
     } else if (message.type === 'DISPLAY_MODE_CHANGED') {
       const mode = normalizeDisplayMode(message.mode);
       browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] }).then(tabs => {
@@ -808,11 +855,18 @@ export default defineBackground(() => {
   // tracker WebSockets. Reload immediately so users do not need to restart
   // their browser; the updated worker will restore the tracker from storage.
   browser.runtime.onUpdateAvailable.addListener(() => {
-    browser.runtime.reload();
+    // Persist the handoff because runtime.reload() destroys this worker before
+    // it can refresh tabs. The newly activated worker consumes the flag.
+    browser.storage.local.set({ [UPDATE_ACTIVATION_PENDING_KEY]: true })
+      .catch(() => { })
+      .finally(() => browser.runtime.reload());
   });
 
-  browser.runtime.onInstalled.addListener(() => {
+  browser.runtime.onInstalled.addListener((details) => {
     initializeBackground().catch(console.error);
+    if (details.reason === 'update') {
+      void activateUpdateForOpenToonHqTabs();
+    }
 
     browser.contextMenus.remove(VIEW_TOON_STYLE_CONTEXT_MENU_ID).catch(() => { }).finally(() => {
       browser.contextMenus.create({
@@ -838,21 +892,8 @@ export default defineBackground(() => {
     console.error('[ToonTracker BG] Failed to initialize tracker:', error);
   });
   initializeDistrictPopulation();
-
-  // Add installation/update listener to reload toonhq tabs
-  browser.runtime.onInstalled.addListener(async (details) => {
-    if (details.reason === 'update' || details.reason === 'install') {
-      try {
-        const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
-        tabs.forEach(tab => {
-          if (tab.id) {
-            browser.tabs.reload(tab.id).catch(() => { });
-          }
-        });
-      } catch (e) {
-        console.error('[ToonTracker BG] Error reloading tabs on update/install:', e);
-      }
-    }
+  void activatePendingUpdate().catch(error => {
+    console.error('[ToonHQ+] Failed to activate extension update:', error);
   });
 
 });

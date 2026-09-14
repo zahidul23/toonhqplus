@@ -15,35 +15,246 @@
 
   let groupStore = null;
   let stopWatchingGroupFilters = null;
+  let stopWatchingGameId = null;
+  let stopWatchingGroupState = null;
+  let groupStateAvailable = false;
+  let groupStorePathname = null;
+  let warnedIncompatibleFilterSchema = false;
+
+  const persistedFilterKeys = ['groupType', 'hideGroupType', 'district', 'area', 'sortBy', 'showFull'];
+  const validFilterSorts = ['oldest', 'newest', 'most_toons', 'least_toons'];
+
+  function hasGroupFilterModule(store) {
+    const groups = store && store.state && store.state.groups;
+    if (!groups || !groups.filters || typeof groups.filters !== 'object') return false;
+
+    // Vuex exposes registered mutations on the store. If that metadata is
+    // available, do not send a group-filter commit to a different game store
+    // that happens to expose a similarly named state object.
+    return !store._mutations || !!store._mutations.setGroupFilters;
+  }
+
+  function getGameId(store) {
+    return store && store.getters ? store.getters.gameId : undefined;
+  }
+
+  function isCompatibleFilterValue(key, value) {
+    if (key === 'groupType' || key === 'hideGroupType' || key === 'area') {
+      return Array.isArray(value) && value.every(Number.isFinite);
+    }
+    if (key === 'district') return value === null || typeof value === 'string';
+    if (key === 'sortBy') return typeof value === 'string' && validFilterSorts.includes(value);
+    if (key === 'showFull') return typeof value === 'boolean';
+    return false;
+  }
+
+  function mergeCompatibleGroupFilters(currentFilters, savedFilters) {
+    if (!currentFilters || typeof currentFilters !== 'object' || Array.isArray(currentFilters) ||
+        !savedFilters || typeof savedFilters !== 'object' || Array.isArray(savedFilters)) return null;
+
+    for (const key of persistedFilterKeys) {
+      if (!Object.prototype.hasOwnProperty.call(currentFilters, key) ||
+          !Object.prototype.hasOwnProperty.call(savedFilters, key) ||
+          !isCompatibleFilterValue(key, currentFilters[key]) ||
+          !isCompatibleFilterValue(key, savedFilters[key])) return null;
+    }
+
+    // Preserve any new native fields while restoring only the fields whose
+    // schema this extension understands.
+    const merged = Object.assign({}, currentFilters);
+    persistedFilterKeys.forEach(function (key) {
+      merged[key] = savedFilters[key];
+    });
+    return merged;
+  }
+
+  function patchGroupStoreMutations(store) {
+    const mutations = store && store._mutations;
+    if (!mutations) return;
+
+    function groupBelongsToActiveGame(group) {
+      const activeGameId = Number(getGameId(store));
+      const groupGameId = Number(group && group.game);
+      return !!group && Number.isFinite(activeGameId) && Number.isFinite(groupGameId) && groupGameId === activeGameId;
+    }
+
+    function wrapMutation(name, preparePayload) {
+      const handlers = mutations[name];
+      if (!Array.isArray(handlers)) return;
+
+      handlers.forEach(function (handler, index) {
+        if (!handler || handler.__TOONHQ_PLUS_GROUP_GUARD__) return;
+
+        const guardedHandler = function (payload) {
+          const prepared = preparePayload(payload);
+          if (!prepared.apply) return;
+          return handler.call(this, prepared.payload);
+        };
+        guardedHandler.__TOONHQ_PLUS_GROUP_GUARD__ = true;
+        handlers[index] = guardedHandler;
+      });
+    }
+
+    wrapMutation('addGroupMessageCount', function (payload) {
+      const groups = store.state && store.state.groups && store.state.groups.groups;
+      const groupId = payload && payload.id;
+      const group = groups && groupId != null ? groups[groupId] : null;
+      return {
+        apply: groupBelongsToActiveGame(group),
+        payload: payload,
+      };
+    });
+
+    wrapMutation('addOrUpdateGroup', function (payload) {
+      if (!payload || payload.id == null) return { apply: false, payload: payload };
+
+      const groups = store.state && store.state.groups && store.state.groups.groups;
+      const existingGroup = groups && groups[payload.id];
+      let safePayload = payload;
+
+      // A queued event from the previous socket room can arrive after the
+      // site's active game has changed. Never allow it to repopulate the new
+      // game's group state.
+      const eventGameId = Number(payload.game != null ? payload.game : existingGroup && existingGroup.game);
+      const activeGameId = Number(getGameId(store));
+      if (!Number.isFinite(eventGameId) || !Number.isFinite(activeGameId) || eventGameId !== activeGameId) {
+        return { apply: false, payload: payload };
+      }
+
+      // ToonHQ sends partial group updates that may omit members or omit the
+      // owner. Its native mutation reads the owner before merging with the
+      // existing group, so preserve that existing list for partial updates.
+      const payloadHasOwner = Array.isArray(safePayload.members) && safePayload.members.some(function (member) {
+        return member && member.owner;
+      });
+      const existingHasOwner = existingGroup && Array.isArray(existingGroup.members) && existingGroup.members.some(function (member) {
+        return member && member.owner;
+      });
+      if (!payloadHasOwner && existingHasOwner) {
+        safePayload = Object.assign({}, safePayload, { members: existingGroup.members });
+      }
+
+      const hasOwner = Array.isArray(safePayload.members) && safePayload.members.some(function (member) {
+        return member && member.owner;
+      });
+      return { apply: hasOwner, payload: safePayload };
+    });
+
+    // These mutations have the same check-then-commit race in ToonHQ's socket
+    // action. A game change can clear the group after the action checks it.
+    wrapMutation('removeGroupMember', function (payload) {
+      const groups = store.state && store.state.groups && store.state.groups.groups;
+      const group = payload && groups && groups[payload.group];
+      return {
+        apply: groupBelongsToActiveGame(group) && Array.isArray(group.members),
+        payload: payload,
+      };
+    });
+
+    wrapMutation('archiveGroup', function (groupId) {
+      const groups = store.state && store.state.groups && store.state.groups.groups;
+      const group = groups && groupId != null ? groups[groupId] : null;
+      return {
+        apply: groupBelongsToActiveGame(group) && Array.isArray(group.members),
+        payload: groupId,
+      };
+    });
+
+    wrapMutation('removeMessage', function (payload) {
+      const messages = store.state && store.state.groups && store.state.groups.messages;
+      return {
+        apply: !!(payload && messages && messages[payload.group]),
+        payload: payload,
+      };
+    });
+  }
+
+  function dispatchGroupFilterStoreReady(store) {
+    window.dispatchEvent(new CustomEvent('toonhqplus-group-filter-store-ready', {
+      detail: JSON.stringify({ gameId: getGameId(store) }),
+    }));
+  }
 
   function dispatchGroupFilters(filters) {
+    if (!filters || typeof filters !== 'object') return;
     window.dispatchEvent(new CustomEvent('toonhqplus-group-filters-changed', {
-      detail: JSON.stringify({ gameId: groupStore && groupStore.getters.gameId, filters: filters }),
+      detail: JSON.stringify({ gameId: getGameId(groupStore), filters: filters }),
     }));
+  }
+
+  function disconnectGroupStore() {
+    if (stopWatchingGroupFilters) stopWatchingGroupFilters();
+    if (stopWatchingGameId) stopWatchingGameId();
+    if (stopWatchingGroupState) stopWatchingGroupState();
+    stopWatchingGroupFilters = null;
+    stopWatchingGameId = null;
+    stopWatchingGroupState = null;
+    groupStateAvailable = false;
+    groupStore = null;
+    groupStorePathname = null;
   }
 
   function connectGroupStore(vue) {
     const store = vue && vue.$store;
-    if (!store || store === groupStore || !store.state || !store.state.groups) return;
+    if (!hasGroupFilterModule(store)) {
+      if (store === groupStore) disconnectGroupStore();
+      return;
+    }
+    if (store === groupStore) {
+      if (!groupStateAvailable) {
+        groupStateAvailable = true;
+        dispatchGroupFilterStoreReady(store);
+      }
+      return;
+    }
 
-    if (stopWatchingGroupFilters) stopWatchingGroupFilters();
+    disconnectGroupStore();
+    patchGroupStoreMutations(store);
     groupStore = store;
+    groupStorePathname = window.location.pathname;
+    groupStateAvailable = true;
     stopWatchingGroupFilters = store.watch(
-      function (state) { return state.groups.filters; },
+      function (state) { return state && state.groups ? state.groups.filters : undefined; },
       function (filters) { dispatchGroupFilters(filters); },
       { deep: true, immediate: true }
     );
-    window.dispatchEvent(new CustomEvent('toonhqplus-group-filter-store-ready', {
-      detail: JSON.stringify({ gameId: store.getters.gameId }),
-    }));
+    stopWatchingGroupState = store.watch(
+      function (state) { return hasGroupFilterModule({ state: state }); },
+      function (hasGroups, hadGroups) {
+        groupStateAvailable = hasGroups;
+        if (hasGroups && !hadGroups) dispatchGroupFilterStoreReady(store);
+      },
+    );
+    stopWatchingGameId = store.watch(
+      function (_state, getters) { return getters ? getters.gameId : undefined; },
+      function (gameId, previousGameId) {
+        if (String(gameId) === String(previousGameId) || !hasGroupFilterModule(store)) return;
+        dispatchGroupFilterStoreReady(store);
+      },
+    );
+    dispatchGroupFilterStoreReady(store);
   }
 
   function restoreGroupFilters(event) {
-    if (!groupStore || typeof event.detail !== 'string') return;
+    if (!hasGroupFilterModule(groupStore) || typeof event.detail !== 'string') return;
     try {
       const payload = JSON.parse(event.detail);
-      if (payload.gameId !== groupStore.getters.gameId) return;
-      groupStore.commit('setGroupFilters', payload.filters);
+      const payloadGameId = Number(payload.gameId);
+      const storeGameId = Number(getGameId(groupStore));
+      if (!Number.isFinite(payloadGameId) || payloadGameId !== storeGameId) return;
+      if (!payload.filters || typeof payload.filters !== 'object') return;
+      const currentFilters = groupStore.state.groups.filters;
+      const mergedFilters = mergeCompatibleGroupFilters(currentFilters, payload.filters);
+      if (!mergedFilters) {
+        if (!warnedIncompatibleFilterSchema) {
+          warnedIncompatibleFilterSchema = true;
+          console.warn('[ToonHQ+] Native group filters changed; persisted filters were not restored.');
+        }
+        return;
+      }
+      warnedIncompatibleFilterSchema = false;
+      if (JSON.stringify(currentFilters) === JSON.stringify(mergedFilters)) return;
+      groupStore.commit('setGroupFilters', mergedFilters);
     } catch (error) {
       console.warn('[ToonHQ+] Could not restore group filters.', error);
     }
@@ -67,6 +278,15 @@
   }
 
   function sync() {
+    const pathname = window.location.pathname.replace(/\/+$/, '');
+    if (pathname !== '/groups' && pathname !== '/cc/groups') {
+      disconnectGroupStore();
+    } else if (groupStore && groupStorePathname !== window.location.pathname) {
+      // Vue reuses the root store across the TTR/CC SPA navigation. Do not
+      // keep the previous game's watcher alive while the new page is loading.
+      disconnectGroupStore();
+    }
+
     document.querySelectorAll('.group-member-row').forEach(el => {
       // Access Vue instance data
       const vue = el.__vue__;
@@ -84,6 +304,7 @@
       }
     });
 
+    let unresolvedDistrictNames = 0;
     document.querySelectorAll('.groups-list-item').forEach(groupCard => {
       const vue = groupCard.__vue__;
       connectGroupStore(vue);
@@ -98,25 +319,51 @@
         if (district && district.name && groupCard.getAttribute('district-name') !== district.name) {
           groupCard.setAttribute('district-name', district.name);
         }
-      }
+        if (!district || !district.name) unresolvedDistrictNames += 1;
+      } else unresolvedDistrictNames += 1;
     });
 
     document.querySelectorAll('.group-details-dialog').forEach(dialog => {
       const vue = dialog.__vue__;
       connectGroupStore(vue);
-      if (!vue || !vue.group || !vue.$store || !vue.$store.state.core) return;
+      if (!vue || !vue.group || !vue.$store || !vue.$store.state.core) {
+        unresolvedDistrictNames += 1;
+        return;
+      }
       const district = vue.$store.state.core.districts &&
         vue.$store.state.core.districts[vue.group.district];
       if (district && district.name && dialog.getAttribute('district-name') !== district.name) {
         dialog.setAttribute('district-name', district.name);
       }
+      if (!district || !district.name) unresolvedDistrictNames += 1;
     });
 
     const filters = document.querySelector('.group-filters');
     if (filters) connectGroupStore(filters.__vue__);
+
+    if (unresolvedDistrictNames > 0) {
+      scheduleDistrictNameRetry();
+    } else {
+      districtNameRetryAttempts = 0;
+      if (districtNameRetryTimer !== null) clearTimeout(districtNameRetryTimer);
+      districtNameRetryTimer = null;
+    }
   }
 
   let syncScheduled = false;
+  let districtNameRetryTimer = null;
+  let districtNameRetryAttempts = 0;
+  const maxDistrictNameRetryAttempts = 40;
+
+  function scheduleDistrictNameRetry() {
+    if (districtNameRetryTimer !== null || districtNameRetryAttempts >= maxDistrictNameRetryAttempts) return;
+    districtNameRetryAttempts += 1;
+    districtNameRetryTimer = setTimeout(function () {
+      districtNameRetryTimer = null;
+      scheduleSync();
+    }, 250);
+  }
+
   function scheduleSync() {
     if (syncScheduled) return;
     syncScheduled = true;
@@ -133,10 +380,10 @@
 
   window.__TOONHQ_PLUS_VUE_LOGGER_DISCONNECT__ = function () {
     observer.disconnect();
+    if (districtNameRetryTimer !== null) clearTimeout(districtNameRetryTimer);
+    districtNameRetryTimer = null;
     window.removeEventListener('toonhqplus-restore-group-filters', restoreGroupFilters);
-    if (stopWatchingGroupFilters) stopWatchingGroupFilters();
-    stopWatchingGroupFilters = null;
-    groupStore = null;
+    disconnectGroupStore();
     window.__TOONHQ_PLUS_VUE_LOGGER__ = false;
     delete window.__TOONHQ_PLUS_VUE_LOGGER_DISCONNECT__;
   };

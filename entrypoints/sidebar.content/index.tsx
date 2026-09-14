@@ -170,7 +170,7 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
       if (SPEEDCHAT_ONLY_DISTRICTS.has(districtName)) {
         const muted = document.createElement('span');
         muted.className = 'toonhq-plus-indicator toonhq-plus-speedchat-only';
-        muted.dataset.tooltip = 'SpeedChat-only district: SpeedChat+ messages are unavailable here.';
+        muted.dataset.tooltip = 'SpeedChat-Only District: SpeedChat+ messages are unavailable here.';
         muted.setAttribute('aria-label', muted.dataset.tooltip);
         muted.tabIndex = 0;
         muted.innerHTML = MUTED_ICON_SVG;
@@ -234,6 +234,42 @@ function injectHighlightStyles() {
 
     .toonhq-plus-buttons {
       padding-left: 1em;
+    }
+
+    /* Keep Vue-owned navbar nodes in their original parents. Navbar
+       customization changes visibility through classes instead of moving or
+       removing nodes from the native virtual-DOM tree. */
+    .navbar.navbar-default .navbar-nav > li.toonhq-plus-nav-hidden,
+    .navbar.navbar-default .navbar-nav > li.toonhq-plus-more-hidden,
+    .navbar.navbar-default .dropdown-menu > li.toonhq-plus-nav-hidden {
+      display: none !important;
+    }
+
+    .navbar.navbar-default .navbar-nav > li.toonhq-plus-nav-pinned,
+    .navbar.navbar-default .navbar-nav > li.toonhq-plus-nav-mobile-dropdown,
+    .navbar.navbar-default .dropdown-menu > li.toonhq-plus-nav-dropdown {
+      display: list-item !important;
+    }
+
+    @media (min-width: 992px) {
+      .navbar.navbar-default .navbar-nav > li.toonhq-plus-nav-mobile-dropdown {
+        display: none !important;
+      }
+    }
+
+    @media (max-width: 991.98px) {
+      .navbar.navbar-default .navbar-nav > li.toonhq-plus-more:not(.toonhq-plus-more-hidden) {
+        display: none !important;
+      }
+    }
+
+    /* Reorder the native nodes visually without reparenting them. Bootstrap
+       normally displays an open dropdown as a block, so make only the custom
+       More menu a column flexbox while it is open for item ordering. */
+    .navbar.navbar-default .dropdown-menu.toonhq-plus-nav-ordering.show {
+      display: flex !important;
+      flex-direction: column;
+      align-items: stretch;
     }
 
     div.group-details-dialog {
@@ -1393,171 +1429,136 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
   const navbarUl = document.querySelector('ul.navbar-nav.ml-auto');
   if (!navbarUl) return;
 
-  const signInButton = Array.from(navbarUl.querySelectorAll('li')).find(li => li.textContent?.includes('Sign In'));
-  const signUpButton = Array.from(navbarUl.querySelectorAll('li')).find(li => li.textContent?.includes('Sign Up'));
-
-  // Force synchronize active state in case Vue Router detached elements
-  navbarUl.querySelectorAll('a').forEach(a => {
-    const href = a.getAttribute('href');
-    // Ensure we don't accidentally match empty string or root on everything
-    if (href && href.length > 1 && window.location.pathname.endsWith(href)) {
-      a.classList.add('router-link-exact-active', 'active');
-      a.setAttribute('aria-current', 'page');
-    } else {
-      a.classList.remove('router-link-exact-active', 'active');
-      a.removeAttribute('aria-current');
-    }
-  });
-
-  // Avoid infinite loops & redundant updates
-  const currentConfigStr = JSON.stringify(config);
-  if (navbarUl.getAttribute('data-toonhq-customized') === currentConfigStr) return;
-  navbarUl.setAttribute('data-toonhq-customized', currentConfigStr);
-
-  // 1. Identify "More" dropdown and its components
+  // Identify the native More dropdown without changing the DOM structure.
   const moreLi = navbarUl.querySelector('.nav-item.b-nav-dropdown.dropdown.red') as HTMLElement | null;
   const moreDropdownUl = moreLi?.querySelector('.dropdown-menu') as HTMLElement | null;
-  if (!moreLi || !moreDropdownUl) return;
 
-  // 2. Map all configurable nodes (both main and dropdown versions)
-  // We want to keep the original nodes to preserve Vue/Bootstrap listeners
-  const nodesMap: Record<string, { mobile?: HTMLElement, desktop?: HTMLElement }> = {};
+  const pinned = new Set(config.pinned);
+  const dropdown = new Set(config.dropdown);
+  const pinnedOrder = new Map(config.pinned.map((id, index) => [id, index]));
+  const dropdownOrder = new Map(config.dropdown.map((id, index) => [id, index]));
+  const getItemId = (node: HTMLElement) => {
+    const href = node.querySelector<HTMLAnchorElement>(':scope > a')?.getAttribute('href');
+    if (!href) return null;
+    return Object.entries(CONFIGURABLE_NAV_ITEMS).find(([, item]) => href.includes(item.href))?.[0] ?? null;
+  };
 
-  // Scrape everything currently in the DOM
-  const allLis = navbarUl.querySelectorAll('li');
-  allLis.forEach(li => {
-    if (li === moreLi) return;
-    const a = li.querySelector('a');
-    if (!a) return;
-    const href = a.getAttribute('href');
-    if (!href) return;
-
-    for (const [id, item] of Object.entries(CONFIGURABLE_NAV_ITEMS)) {
-      if (href.includes(item.href)) {
-        if (!nodesMap[id]) nodesMap[id] = {};
-
-        const isDropdownItem = a.classList.contains('dropdown-item');
-        const isMobileOnly = li.classList.contains('d-lg-none');
-
-        if (isDropdownItem) {
-          nodesMap[id].desktop = li as HTMLElement;
-        } else if (isMobileOnly) {
-          nodesMap[id].mobile = li as HTMLElement;
-        } else {
-          // It's a standard pinned item
-          nodesMap[id].mobile = li as HTMLElement;
-        }
-      }
-    }
-  });
-
-  // 3. Clear the containers temporarily
-  // We don't use innerHTML = '' to avoid losing event listeners on the "More" toggle
-  const fragment = document.createDocumentFragment();
-  moreDropdownUl.innerHTML = '';
-
-  // 4. Re-append items based on config
-
-  // Process Pinned
-  config.pinned.forEach(id => {
+  const ensureDropdownProxy = (id: string) => {
+    if (!moreDropdownUl) return null;
     const item = CONFIGURABLE_NAV_ITEMS[id];
-    let node = nodesMap[id]?.mobile || nodesMap[id]?.desktop;
+    if (!item) return null;
 
-    if (node) {
-      // Ensure it has pinned styling
-      node.className = item.colorClass;
-      node.removeAttribute('role');
-      const a = node.querySelector('a');
-      if (a) {
-        a.className = ''; // Remove dropdown-item
-        const href = a.getAttribute('href');
-        if (href && window.location.pathname.endsWith(href)) {
-          a.classList.add('router-link-exact-active', 'active');
-          a.setAttribute('aria-current', 'page');
-        } else {
-          a.removeAttribute('aria-current');
-        }
-        a.removeAttribute('role');
-      }
-      fragment.appendChild(node);
+    let node = moreDropdownUl.querySelector<HTMLElement>(`:scope > li[data-toonhq-plus-nav-proxy="${id}"]`);
+    if (!node) {
+      node = document.createElement('li');
+      node.dataset.toonhqPlusNavProxy = id;
+      node.setAttribute('role', 'presentation');
+
+      const anchor = document.createElement('a');
+      anchor.className = 'dropdown-item';
+      anchor.setAttribute('role', 'menuitem');
+      node.appendChild(anchor);
+      moreDropdownUl.appendChild(node);
+    }
+
+    node.classList.add(item.colorClass);
+    const anchor = node.querySelector<HTMLAnchorElement>(':scope > a');
+    if (anchor) {
+      const gamePrefix = window.location.pathname.startsWith('/cc/') ? '/cc' : '';
+      const href = `${gamePrefix}${item.href}`;
+      if (anchor.getAttribute('href') !== href) anchor.setAttribute('href', href);
+      if (anchor.textContent !== item.label) anchor.textContent = item.label;
+    }
+    return node;
+  };
+
+  const resetNodeClasses = (node: HTMLElement) => {
+    node.classList.remove('toonhq-plus-nav-hidden', 'toonhq-plus-nav-pinned', 'toonhq-plus-nav-mobile-dropdown', 'toonhq-plus-nav-dropdown', 'toonhq-plus-nav-trailing');
+    node.style.removeProperty('order');
+  };
+
+  // The top-level and More-menu copies stay where Vue rendered them. We only
+  // toggle custom classes and use flex-item order for the configured sequence.
+  const navbarChildren = Array.from(navbarUl.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement && child.tagName === 'LI',
+  );
+  let trailingOrder = config.pinned.length + config.dropdown.length + 1;
+  navbarChildren.forEach(child => {
+    const node = child as HTMLElement;
+    resetNodeClasses(node);
+    if (node === moreLi) return;
+    const id = getItemId(node);
+    if (!id) {
+      node.classList.add('toonhq-plus-nav-trailing');
+      node.style.order = String(++trailingOrder);
+      return;
+    }
+    if (pinned.has(id)) {
+      node.classList.add('toonhq-plus-nav-pinned');
+      node.style.order = String(pinnedOrder.get(id));
+    } else if (dropdown.has(id)) {
+      // ToonHQ renders a top-level mobile copy for links that live in More on
+      // desktop. Keep that copy in the configured dropdown order on mobile.
+      node.classList.add('toonhq-plus-nav-mobile-dropdown');
+      node.style.order = String(config.pinned.length + (dropdownOrder.get(id) ?? 0));
+    } else {
+      node.classList.add('toonhq-plus-nav-hidden');
     }
   });
 
-  // Process Dropdown
-  config.dropdown.forEach(id => {
-    const item = CONFIGURABLE_NAV_ITEMS[id];
+  if (moreDropdownUl) {
+    moreDropdownUl.classList.add('toonhq-plus-nav-ordering');
+    // Use extension-owned links for every configured dropdown item. Mixing
+    // native and proxy nodes made their visual order browser-dependent.
+    const orderedProxies = config.dropdown
+      .map(ensureDropdownProxy)
+      .filter((node): node is HTMLElement => node !== null);
+    moreDropdownUl.querySelectorAll<HTMLElement>(':scope > li[data-toonhq-plus-nav-proxy]').forEach(node => {
+      const id = node.dataset.toonhqPlusNavProxy;
+      if (!id || !dropdown.has(id)) node.remove();
+    });
 
-    // We need two versions: Mobile-only in main UL, and Dropdown-item in More menu
-    let mobileNode = nodesMap[id]?.mobile;
-    let desktopNode = nodesMap[id]?.desktop;
-
-    // Ensure we have a mobile version (pinned style + hidden on desktop)
-    if (!mobileNode && desktopNode) {
-      mobileNode = desktopNode.cloneNode(true) as HTMLElement;
+    const currentProxyOrder = Array.from(
+      moreDropdownUl.querySelectorAll<HTMLElement>(':scope > li[data-toonhq-plus-nav-proxy]'),
+    );
+    if (currentProxyOrder.some((node, index) => node !== orderedProxies[index]) ||
+        currentProxyOrder.length !== orderedProxies.length) {
+      orderedProxies.forEach(node => moreDropdownUl.appendChild(node));
     }
-    if (mobileNode) {
-      mobileNode.className = `${item.colorClass} d-block d-lg-none`;
-      mobileNode.removeAttribute('role');
-      const a = mobileNode.querySelector('a');
-      if (a) {
-        a.className = '';
-        const href = a.getAttribute('href');
-        if (href && window.location.pathname.endsWith(href)) {
-          a.classList.add('router-link-exact-active', 'active');
-          a.setAttribute('aria-current', 'page');
-        } else {
-          a.classList.remove('router-link-exact-active', 'active');
-          a.removeAttribute('aria-current');
-        }
-        a.removeAttribute('role');
+
+    let dropdownTrailingOrder = config.dropdown.length;
+    Array.from(moreDropdownUl.children).forEach(child => {
+      const node = child as HTMLElement;
+      if (node.tagName !== 'LI') return;
+      resetNodeClasses(node);
+      const id = getItemId(node);
+      if (!id) {
+        node.style.order = String(++dropdownTrailingOrder);
+        return;
       }
-      fragment.appendChild(mobileNode);
-    }
-
-    // Ensure we have a desktop version (inside the dropdown)
-    if (!desktopNode && mobileNode) {
-      desktopNode = mobileNode.cloneNode(true) as HTMLElement;
-    }
-    if (desktopNode) {
-      desktopNode.className = item.colorClass;
-      desktopNode.setAttribute('role', 'presentation');
-      const a = desktopNode.querySelector('a');
-      if (a) {
-        a.className = 'dropdown-item';
-        const href = a.getAttribute('href');
-        if (href && window.location.pathname.endsWith(href)) {
-          a.classList.add('router-link-exact-active', 'active');
-          a.setAttribute('aria-current', 'page');
+      if (dropdown.has(id)) {
+        if (node.dataset.toonhqPlusNavProxy) {
+          node.classList.add('toonhq-plus-nav-dropdown');
+          node.style.order = String(dropdownOrder.get(id));
         } else {
-          a.classList.remove('router-link-exact-active', 'active');
-          a.removeAttribute('aria-current');
+          // Keep Vue's copy in place for its virtual DOM, but render the
+          // ordered extension-owned copy instead.
+          node.classList.add('toonhq-plus-nav-hidden');
         }
-        a.setAttribute('role', 'menuitem');
+      } else {
+        node.classList.add('toonhq-plus-nav-hidden');
       }
-      moreDropdownUl.appendChild(desktopNode);
-    }
-  });
-
-  // 5. Finalize the navbar
-  // Keep the "More" button visible only if needed
-  if (config.dropdown.length > 0) {
-    moreLi.classList.remove('d-none');
-    moreLi.classList.add('d-lg-block');
-  } else {
-    moreLi.classList.add('d-none');
-    moreLi.classList.remove('d-lg-block');
-  }
-  fragment.appendChild(moreLi);
-
-  if (signInButton) {
-    fragment.appendChild(signInButton);
-  }
-  if (signUpButton) {
-    fragment.appendChild(signUpButton);
+    });
   }
 
-  navbarUl.innerHTML = '';
-  navbarUl.appendChild(fragment);
+  if (moreLi) {
+    // Keep More immediately after the ordered pinned pages. Giving all
+    // top-level siblings an explicit order prevents its open/closed class
+    // changes from affecting its position.
+    moreLi.classList.add('toonhq-plus-more');
+    moreLi.style.order = String(config.pinned.length + config.dropdown.length);
+    moreLi.classList.toggle('toonhq-plus-more-hidden', config.dropdown.length === 0);
+  }
 }
 
 const groupsState: Record<number, any> = {};
@@ -1783,6 +1784,34 @@ export default defineContentScript({
   async main(ctx) {
     injectHighlightStyles();
     const cachedPopulationPromise = browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY);
+    const acceptDistrictPopulation = (snapshot: DistrictPopulationSnapshot | undefined) => {
+      if (!snapshot?.populationByDistrict) return;
+      if (districtPopulation && (snapshot.fetchedAt || 0) < (districtPopulation.fetchedAt || 0)) return;
+      districtPopulation = snapshot;
+      applyGroupDistrictIndicators();
+    };
+    const handleRuntimeMessage = (message: any) => {
+      if (message?.type !== 'DISTRICT_POPULATION_UPDATED') return;
+      acceptDistrictPopulation(message.snapshot as DistrictPopulationSnapshot | undefined);
+    };
+    // Register before any asynchronous initialization so an update/install
+    // population broadcast cannot pass this content script while it waits.
+    browser.runtime.onMessage.addListener(handleRuntimeMessage);
+    ctx.onInvalidated(() => browser.runtime.onMessage.removeListener(handleRuntimeMessage));
+    const handlePopulationStorageChange = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+      if (areaName !== 'local') return;
+      acceptDistrictPopulation(
+        changes[DISTRICT_POPULATION_STORAGE_KEY]?.newValue as DistrictPopulationSnapshot | undefined,
+      );
+    };
+    // The five-minute refresh writes storage before broadcasting. Listening to
+    // both signals guarantees open tabs refresh even if a runtime message is
+    // missed while an extension update replaces the service worker.
+    browser.storage.onChanged.addListener(handlePopulationStorageChange);
+    ctx.onInvalidated(() => browser.storage.onChanged.removeListener(handlePopulationStorageChange));
+    // This also wakes population loading when ToonHQ is opened after the
+    // background alarm intentionally skipped refreshes with no ToonHQ tabs.
+    void browser.runtime.sendMessage({ type: 'ENSURE_DISTRICT_POPULATION' }).catch(() => { });
 
     // Run migration from old local storage on first start
     await migrateFromLocalStorage();
@@ -1803,11 +1832,12 @@ export default defineContentScript({
     }
 
     let savedGroupFiltersByGame = await getSetting<Record<string, GroupFilters>>(GROUP_FILTERS_SETTING_KEY) || {};
-    const restoredFilterGames = new Set<number>();
+    let restoredFilterGameId: number | null = null;
+    let groupFiltersWrite = Promise.resolve();
 
     const restoreFiltersForGame = (gameId: number) => {
-      if (!Number.isFinite(gameId) || restoredFilterGames.has(gameId)) return;
-      restoredFilterGames.add(gameId);
+      if (!Number.isFinite(gameId) || restoredFilterGameId === gameId) return;
+      restoredFilterGameId = gameId;
       const filters = normalizeGroupFilters(savedGroupFiltersByGame[String(gameId)]);
       if (filters) {
         window.dispatchEvent(new CustomEvent('toonhqplus-restore-group-filters', {
@@ -1826,14 +1856,17 @@ export default defineContentScript({
       try {
         const payload = JSON.parse(event.detail);
         const gameId = Number(payload.gameId);
-        if (!restoredFilterGames.has(gameId)) {
+        if (restoredFilterGameId !== gameId) {
           restoreFiltersForGame(gameId);
           return;
         }
         const filters = normalizeGroupFilters(payload.filters);
         if (!filters) return;
         savedGroupFiltersByGame = { ...savedGroupFiltersByGame, [String(gameId)]: filters };
-        void setSetting(GROUP_FILTERS_SETTING_KEY, savedGroupFiltersByGame);
+        const snapshot = savedGroupFiltersByGame;
+        groupFiltersWrite = groupFiltersWrite
+          .catch(() => undefined)
+          .then(() => setSetting(GROUP_FILTERS_SETTING_KEY, snapshot));
       } catch { }
     }) as EventListener;
 
@@ -1847,18 +1880,10 @@ export default defineContentScript({
     try {
       const storedPopulation = await cachedPopulationPromise;
       const snapshot = storedPopulation[DISTRICT_POPULATION_STORAGE_KEY] as DistrictPopulationSnapshot | undefined;
-      if (snapshot?.populationByDistrict) districtPopulation = snapshot;
+      acceptDistrictPopulation(snapshot);
     } catch (error) {
       console.warn('[ToonHQ+] Could not load cached district population:', error);
     }
-
-    const handleRuntimeMessage = (message: any) => {
-      if (message?.type !== 'DISTRICT_POPULATION_UPDATED' || !message.snapshot?.populationByDistrict) return;
-      districtPopulation = message.snapshot as DistrictPopulationSnapshot;
-      applyGroupDistrictIndicators();
-    };
-    browser.runtime.onMessage.addListener(handleRuntimeMessage);
-    ctx.onInvalidated(() => browser.runtime.onMessage.removeListener(handleRuntimeMessage));
 
     let districtIndicatorFrame: number | null = null;
     const scheduleDistrictIndicators = () => {

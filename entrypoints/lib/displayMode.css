@@ -385,6 +385,22 @@ html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .dropdo
   background-color: rgba(255, 255, 255, 0.16) !important;
 }
 
+/* The game switcher marks the selected game with href="#". Its other option
+   contains the real route, so the route-based nav colors above would otherwise
+   highlight the inactive game. */
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .game-toggle + .dropdown-menu a {
+  color: var(--hq-dark-muted) !important;
+  background-color: transparent !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .game-toggle + .dropdown-menu a[href="#"] {
+  color: #9cdbaf !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default .game-toggle + .dropdown-menu a[href="#"]:hover {
+  background-color: rgba(156, 219, 175, 0.24) !important;
+}
+
 html[data-toonhq-plus-display-mode="dark"] .form-control,
 html[data-toonhq-plus-display-mode="dark"] select,
 html[data-toonhq-plus-display-mode="dark"] textarea {
