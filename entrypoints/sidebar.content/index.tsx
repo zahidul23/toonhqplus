@@ -74,7 +74,6 @@ let activeDistrictTooltip: HTMLElement | null = null;
 let activeDistrictTooltipAnchor: HTMLElement | null = null;
 let districtTooltipSequence = 0;
 
-const CAPACITY_ICON_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24"><path class="bar bar--1" d="M4 20V14h3v6H4Z"/><path class="bar bar--2" d="M10 20V9h3v11h-3Z"/><path class="bar bar--3" d="M16 20V4h3v16h-3Z"/></svg>';
 const MUTED_ICON_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Zm8.1 7 2.45-2.45-1.4-1.4L17.7 10.6l-2.45-2.45-1.4 1.4L16.3 12l-2.45 2.45 1.4 1.4 2.45-2.45 2.45 2.45 1.4-1.4L19.1 12Z"/></svg>';
 
 function hideDistrictTooltip() {
@@ -165,19 +164,18 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
       }
 
       if (population != null) {
-        const level = population >= 401 ? 'red' : population >= 200 ? 'green' : 'blue';
-        const bars = population >= 300 ? 3 : population >= 100 ? 2 : 1;
-        const description = population >= 401
-          ? 'Busy District (401+ Toons)'
-          : population >= 200
-            ? 'Active District (200–400 Toons)'
-            : 'Quiet District (<200 Toons)';
+        const level = population >= 500 ? 'red' : population >= 301 ? 'green' : 'blue';
+        const description = population >= 500
+          ? 'Full District (500+ Toons)'
+          : population >= 301
+            ? 'Ideal District (301–499 Toons)'
+            : 'Quiet District (0–300 Toons)';
         const capacity = document.createElement('span');
-        capacity.className = `toonhq-plus-indicator toonhq-plus-capacity toonhq-plus-capacity--${level} toonhq-plus-capacity--bars-${bars}`;
+        capacity.className = `toonhq-plus-indicator toonhq-plus-capacity toonhq-plus-capacity--${level}`;
         capacity.dataset.tooltip = `${description}\nCurrent population: ${population}`;
         capacity.setAttribute('aria-label', capacity.dataset.tooltip);
         capacity.tabIndex = 0;
-        capacity.innerHTML = CAPACITY_ICON_SVG;
+        capacity.textContent = String(population);
         enableDistrictTooltip(capacity);
         indicators.appendChild(capacity);
       }
@@ -764,6 +762,13 @@ function injectHighlightStyles() {
       align-items: center;
       gap: 5px;
       margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .group-details-dialog .row.text-center > div p:has(> .toonhq-plus-district-indicators) {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     :is(.vuedal, .group-details-dialog) :is(.multiselect__option, .multiselect__single, [role="option"], .dropdown-item):has(> .toonhq-plus-district-indicators) {
@@ -841,11 +846,16 @@ function injectHighlightStyles() {
       fill: currentColor;
     }
 
-    .toonhq-plus-capacity .bar { opacity: 0.28; }
-    .toonhq-plus-capacity--bars-1 .bar--1,
-    .toonhq-plus-capacity--bars-2 .bar--1,
-    .toonhq-plus-capacity--bars-2 .bar--2,
-    .toonhq-plus-capacity--bars-3 .bar { opacity: 1; }
+    .toonhq-plus-capacity {
+      width: auto;
+      min-width: 17px;
+      padding: 0 4px;
+      box-sizing: border-box;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
 
     .toonhq-plus-capacity--red { background: #dc2626; }
     .toonhq-plus-capacity--green { background: #168653; }

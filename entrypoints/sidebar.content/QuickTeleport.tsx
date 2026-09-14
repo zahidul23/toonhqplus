@@ -69,13 +69,12 @@ const TTR_DISTRICTS: District[] = [
 const DISTRICT_POPULATION_STORAGE_KEY = 'toonhqplus-district-population';
 
 function DistrictIndicators({ district, population }: { district: District; population?: number }) {
-  const level = population == null ? null : population >= 401 ? 'bg-red-600' : population >= 200 ? 'bg-[#168653]' : 'bg-blue-600';
-  const bars = population == null ? 0 : population >= 300 ? 3 : population >= 100 ? 2 : 1;
-  const populationLabel = population == null ? '' : population >= 401
-    ? `Busy District (401+ Toons)\nCurrent population: ${population}`
-    : population >= 200
-      ? `Active District (200–400 Toons)\nCurrent population: ${population}`
-      : `Quiet District (<200 Toons)\nCurrent population: ${population}`;
+  const level = population == null ? null : population >= 500 ? 'bg-red-600' : population >= 301 ? 'bg-[#168653]' : 'bg-blue-600';
+  const populationLabel = population == null ? '' : population >= 500
+    ? `Full District (500+ Toons)\nCurrent population: ${population}`
+    : population >= 301
+      ? `Ideal District (301–499 Toons)\nCurrent population: ${population}`
+      : `Quiet District (0–300 Toons)\nCurrent population: ${population}`;
 
   return (
     <span className="ml-auto inline-flex shrink-0 items-center gap-1 pl-1.5">
@@ -85,19 +84,15 @@ function DistrictIndicators({ district, population }: { district: District; popu
         </DistrictIndicatorBadge>
       )}
       {population != null && (
-        <DistrictIndicatorBadge label={populationLabel} colorClass={level || ''}>
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-[11px] w-[11px] fill-current">
-            <path opacity={bars >= 1 ? 1 : 0.28} d="M4 20V14h3v6H4Z" />
-            <path opacity={bars >= 2 ? 1 : 0.28} d="M10 20V9h3v11h-3Z" />
-            <path opacity={bars >= 3 ? 1 : 0.28} d="M16 20V4h3v16h-3Z" />
-          </svg>
+        <DistrictIndicatorBadge label={populationLabel} colorClass={level || ''} widthClass="min-w-[17px] w-auto px-1 text-[9px] font-bold leading-none tabular-nums">
+          {population}
         </DistrictIndicatorBadge>
       )}
     </span>
   );
 }
 
-function DistrictIndicatorBadge({ label, colorClass, children }: { label: string; colorClass: string; children: React.ReactNode }) {
+function DistrictIndicatorBadge({ label, colorClass, widthClass = 'w-[17px]', children }: { label: string; colorClass: string; widthClass?: string; children?: React.ReactNode }) {
   const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number } | null>(null);
   const showTooltip = (element: HTMLElement) => {
     const rect = element.getBoundingClientRect();
@@ -106,7 +101,7 @@ function DistrictIndicatorBadge({ label, colorClass, children }: { label: string
   return (
     <span
       aria-label={label}
-      className={`inline-flex h-[17px] w-[17px] cursor-help items-center justify-center rounded-full text-white shadow ${colorClass}`}
+      className={`inline-flex h-[17px] ${widthClass} cursor-help items-center justify-center rounded-full text-white shadow ${colorClass}`}
       onMouseEnter={event => showTooltip(event.currentTarget)}
       onMouseLeave={() => setTooltipPosition(null)}
     >
