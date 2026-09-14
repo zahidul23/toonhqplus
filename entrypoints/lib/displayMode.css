@@ -412,8 +412,78 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toonatar__back
   color: var(--hq-dark-text) !important;
 }
 
+/* ToonHQ photo renders are transparent when no photo background is supplied;
+   keep their native white backing without changing species avatars or modal
+   surfaces. */
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toonatar__backdrop:has(.toonatar__photo) {
+  background-color: #ffffff !important;
+}
+
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog {
   background-color: #264d36 !important;
+}
+
+/* ToonHQ supplies gag track backgrounds inline with an 0.8 alpha suffix.
+   Normalize only those known track colors in the group modal to full opacity. */
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="198, 89, 232"] {
+  background-color: rgb(198, 89, 232) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="232, 230, 90"] {
+  background-color: rgb(232, 230, 90) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="49, 190, 53"] {
+  background-color: rgb(49, 190, 53) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="62, 92, 235"] {
+  background-color: rgb(62, 92, 235) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="237, 160, 50"] {
+  background-color: rgb(237, 160, 50) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="245, 91, 214"] {
+  background-color: rgb(245, 91, 214) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="53, 234, 237"] {
+  background-color: rgb(53, 234, 237) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="198, 135, 240"] {
+  background-color: rgb(198, 135, 240) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="240, 74, 70"] {
+  background-color: rgb(240, 74, 70) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="70, 178, 64"] {
+  background-color: rgb(70, 178, 64) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="87, 97, 227"] {
+  background-color: rgb(87, 97, 227) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="241, 52, 188"] {
+  background-color: rgb(241, 52, 188) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="240, 136, 51"] {
+  background-color: rgb(240, 136, 51) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="50, 227, 240"] {
+  background-color: rgb(50, 227, 240) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track.toon__track--missing {
+  background: #b0b0b0 !important;
+  opacity: 0.25 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .speedchat__messages-hidden,
@@ -642,6 +712,11 @@ html[data-toonhq-plus-display-mode="dark"] .info-card__score {
 
 html[data-toonhq-plus-display-mode="dark"] .attr-filter__option {
   background-color: #bbb6b0 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--shop .attr-filter__option--active {
+  background-color: #78d99a !important;
+  filter: saturate(1.2) brightness(1.08);
 }
 
 /* Trait colors are inserted inline by ToonHQ. Match only those known colors. */

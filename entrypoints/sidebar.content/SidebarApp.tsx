@@ -2210,7 +2210,7 @@ export function SidebarApp() {
         {open && (
           <aside className="relative w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0">
             {showDarkModeNotice && (
-              <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pb-4 pt-12">
+              <div className="absolute inset-0 z-[1000] flex items-start justify-center bg-black/60 px-4 pb-4 pt-12">
                 <section role="dialog" aria-modal="true" aria-labelledby="toonhq-plus-theme-notice-title" className="w-full rounded-xl border border-emerald-300/20 bg-[#103d29] p-4 text-white shadow-2xl">
                   
                   <h2 id="toonhq-plus-theme-notice-title" className="mt-1 text-lg font-bold">Dark theme applied</h2>
