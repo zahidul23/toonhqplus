@@ -339,7 +339,12 @@ html[data-toonhq-plus-display-mode="dark"] .theme--home .navbar.navbar-default .
 
 html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default .dropdown-menu,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default .dropdown-menu {
-  background-color: #376447 !important;
+  background-color: #284a35 !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .theme--groups .navbar.navbar-default .user-dropdown .dropdown-menu,
+html[data-toonhq-plus-display-mode="dark"] .theme--gardening .navbar.navbar-default .user-dropdown .dropdown-menu {
+  background-color: #284a35 !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--invasions .navbar.navbar-default .dropdown-menu {
