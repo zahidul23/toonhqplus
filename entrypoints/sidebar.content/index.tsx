@@ -259,6 +259,39 @@ function injectHighlightStyles() {
       padding-left: 1em;
     }
 
+    .toonhq-plus-quick-filter-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .toonhq-plus-quick-filter {
+      margin: 0;
+    }
+
+    .toonhq-plus-quick-filter.active,
+    .toonhq-plus-quick-filter.active:hover,
+    .toonhq-plus-quick-filter.active:focus {
+      color: #fff;
+      background-color: #41b883;
+      border-color: #41b883;
+      box-shadow: none;
+    }
+
+    .toonhq-plus-quick-filter.active:hover,
+    .toonhq-plus-quick-filter.active:focus {
+      background-color: #369a6e;
+      border-color: #369a6e;
+    }
+
+    html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-quick-filter.active,
+    html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-quick-filter.active:hover,
+    html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-quick-filter.active:focus {
+      color: #fff;
+      background-color: #376447;
+      border-color: var(--hq-dark-border-strong);
+    }
+
     /* Keep Vue-owned navbar nodes in their original parents. Navbar
        customization changes visibility through classes instead of moving or
        removing nodes from the native virtual-DOM tree. */

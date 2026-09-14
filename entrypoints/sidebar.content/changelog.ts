@@ -10,7 +10,7 @@ export const changelog: ChangelogEntry[] = [
     date: 'Sep 14, 2026',
     changes: [
       'Add district status indicators to district selection menus',
-      'Fix Coin Mint Bull Market status calculation logic',
+      'Fix Bull Market status calculation for Coin Mints in the Facilities Calculator',
     ]
   },
   {

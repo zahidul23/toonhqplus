@@ -23,6 +23,10 @@
 
   const persistedFilterKeys = ['groupType', 'hideGroupType', 'district', 'area', 'sortBy', 'showFull'];
   const validFilterSorts = ['oldest', 'newest', 'most_toons', 'least_toons'];
+  const quickGroupFilters = [
+    { label: 'All Bosses', gameId: 1, groupTypes: [3, 5, 7, 9] },
+    { label: 'All Facilities', gameId: 1, groupTypes: [2, 4, 6, 8] },
+  ];
 
   function hasGroupFilterModule(store) {
     const groups = store && store.state && store.state.groups;
@@ -182,6 +186,72 @@
     }));
   }
 
+  function toggleQuickGroupTypes(groupTypeIds) {
+    if (!hasGroupFilterModule(groupStore)) return;
+    const currentFilters = groupStore.state.groups.filters;
+    const currentGroupTypes = Array.isArray(currentFilters.groupType) ? currentFilters.groupType : [];
+    const allSelected = groupTypeIds.every(function (id) { return currentGroupTypes.includes(id); });
+    const nextGroupTypes = allSelected
+      ? currentGroupTypes.filter(function (id) { return !groupTypeIds.includes(id); })
+      : Array.from(new Set(currentGroupTypes.concat(groupTypeIds)));
+    groupStore.commit('setGroupFilters', Object.assign({}, currentFilters, { groupType: nextGroupTypes }));
+  }
+
+  function syncQuickGroupFilters(filtersElement) {
+    if (!filtersElement || !hasGroupFilterModule(groupStore)) return;
+
+    const gameId = Number(getGameId(groupStore));
+    const availableQuickFilters = quickGroupFilters.filter(function (quickFilter) {
+      return quickFilter.gameId === gameId;
+    });
+    let container = filtersElement.querySelector('.toonhq-plus-quick-filters');
+
+    if (availableQuickFilters.length === 0) {
+      if (container) container.remove();
+      return;
+    }
+
+    if (!container) {
+      container = document.createElement('div');
+      container.className = 'group-filters__filter toonhq-plus-quick-filters';
+
+      const heading = document.createElement('h6');
+      heading.textContent = 'Quick Filters';
+      container.appendChild(heading);
+
+      const buttons = document.createElement('div');
+      buttons.className = 'toonhq-plus-quick-filter-buttons';
+      availableQuickFilters.forEach(function (quickFilter) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-default btn-sm toonhq-plus-quick-filter';
+        button.textContent = quickFilter.label;
+        button.addEventListener('click', function () {
+          toggleQuickGroupTypes(quickFilter.groupTypes);
+        });
+        buttons.appendChild(button);
+      });
+      container.appendChild(buttons);
+
+      const groupTypeFilter = filtersElement.querySelector('.group-filters__filter');
+      if (groupTypeFilter) {
+        filtersElement.insertBefore(container, groupTypeFilter);
+      } else {
+        filtersElement.appendChild(container);
+      }
+    }
+
+    const selectedGroupTypes = groupStore.state.groups.filters.groupType;
+    container.querySelectorAll('.toonhq-plus-quick-filter').forEach(function (button, index) {
+      const quickFilter = availableQuickFilters[index];
+      const isActive = Array.isArray(selectedGroupTypes) && quickFilter.groupTypes.every(function (id) {
+        return selectedGroupTypes.includes(id);
+      });
+      button.classList.toggle('active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
   function disconnectGroupStore() {
     if (stopWatchingGroupFilters) stopWatchingGroupFilters();
     if (stopWatchingGameId) stopWatchingGameId();
@@ -339,7 +409,10 @@
     });
 
     const filters = document.querySelector('.group-filters');
-    if (filters) connectGroupStore(filters.__vue__);
+    if (filters) {
+      connectGroupStore(filters.__vue__);
+      syncQuickGroupFilters(filters);
+    }
 
     if (unresolvedDistrictNames > 0) {
       scheduleDistrictNameRetry();
