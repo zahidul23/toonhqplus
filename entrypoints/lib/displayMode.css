@@ -125,8 +125,8 @@ html[data-toonhq-plus-display-mode="dark"] .theme--fishing {
   background-size: 438px 453.47px !important;
 }
 
-/* The background dimmer creates a stacking context for each page shell. Keep
-   the navbar above the page banners so its overflowing menus remain visible. */
+/* Keep the navbar above the page banners so its overflowing menus remain
+   visible. */
 html[data-toonhq-plus-display-mode="dark"] .theme .navbar.navbar-default {
   position: relative;
   z-index: 20 !important;
@@ -154,17 +154,6 @@ html[data-toonhq-plus-display-mode="dark"] .theme--groups,
 html[data-toonhq-plus-display-mode="dark"] .theme--gardening,
 html[data-toonhq-plus-display-mode="dark"] .theme--shop {
   position: relative;
-  isolation: isolate;
-}
-
-/* The isolated dark-theme shell would otherwise trap ToonHQ's vuedal below
-   Playwire's fixed bottom rail (z-index 2147483643), even though the vuedal
-   itself uses the browser's maximum z-index. Temporarily release that
-   stacking context instead of lifting the whole page above Playwire, so the
-   banner remains visible while the modal and backdrop retain their native
-   ordering over it. */
-html[data-toonhq-plus-display-mode="dark"] body.vuedal-open > .theme {
-  isolation: auto;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--generic::before,
