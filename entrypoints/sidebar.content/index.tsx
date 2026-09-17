@@ -145,6 +145,15 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
       districtLine.appendChild(indicators);
     }
 
+    // Keep the indicators inside the clickable district label, but place them
+    // before ToonHQ's dropdown affordance instead of after the caret.
+    if (districtLine.closest('.group-details-dialog')) {
+      const caretDown = districtLine.querySelector<HTMLElement>(':scope > i.fa-caret-down');
+      if (caretDown && indicators.nextElementSibling !== caretDown) {
+        districtLine.insertBefore(indicators, caretDown);
+      }
+    }
+
     const population = districtPopulation?.populationByDistrict[districtName];
     const populationKey = population == null ? '' : String(population);
     if (indicators.dataset.population !== populationKey || indicators.dataset.district !== districtName) {

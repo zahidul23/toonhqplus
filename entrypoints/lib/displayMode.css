@@ -6,7 +6,7 @@ html[data-toonhq-plus-display-mode="dark"] {
   --hq-dark-surface: #1b2925;
   --hq-dark-raised: #263a32;
   --hq-dark-text: #e7eee9;
-  --hq-dark-muted: #adbbb4;
+  --hq-dark-muted: #adb5bd;
   --hq-dark-border: #3a5046;
   --hq-dark-border-strong: #688578;
   --hq-dark-link: #8ccdf5;
@@ -155,6 +155,16 @@ html[data-toonhq-plus-display-mode="dark"] .theme--gardening,
 html[data-toonhq-plus-display-mode="dark"] .theme--shop {
   position: relative;
   isolation: isolate;
+}
+
+/* The isolated dark-theme shell would otherwise trap ToonHQ's vuedal below
+   Playwire's fixed bottom rail (z-index 2147483643), even though the vuedal
+   itself uses the browser's maximum z-index. Temporarily release that
+   stacking context instead of lifting the whole page above Playwire, so the
+   banner remains visible while the modal and backdrop retain their native
+   ordering over it. */
+html[data-toonhq-plus-display-mode="dark"] body.vuedal-open > .theme {
+  isolation: auto;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .theme--generic::before,
@@ -561,6 +571,16 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.toonh
   background-color: rgba(239, 68, 68, 0.24) !important;
 }
 
+/* Bootstrap paints table state colors on both the row and its cells. The
+   dialog reset above gives every cell an opaque background, so restoring the
+   row alone leaves the active-toon highlight hidden underneath the cells. */
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.table-info,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.table-info > td,
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .table tr.table-info > th {
+  background-color: #214f6b !important;
+  color: var(--hq-dark-text) !important;
+}
+
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .modal-image-close {
   background-color: var(--hq-dark-raised) !important;
   color: var(--hq-dark-text) !important;
@@ -603,6 +623,8 @@ html[data-toonhq-plus-display-mode="dark"] .info-card .group-synced {
 }
 
 html[data-toonhq-plus-display-mode="dark"] :is(.tt-card, .vuedal, .filter-panel, .filters) :is(.text-muted, .form-text, .splash__content),
+html[data-toonhq-plus-display-mode="dark"] .vuedal p.text-muted,
+html[data-toonhq-plus-display-mode="dark"] .modal-content p.text-muted,
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog :is(.message__name, .message__time, .speedchat__footer) {
   color: var(--hq-dark-muted) !important;
 }
@@ -824,8 +846,12 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog :is(.sc-alert, 
   color: var(--hq-dark-muted) !important;
 }
 
-html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__boarding {
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__boarding:not(.text-muted) {
   color: #c5bbed !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .gdetails__boarding.text-muted {
+  color: var(--hq-dark-muted) !important;
 }
 
 /* Keep leader notes recognizably pink without the light-theme alert glare. */
