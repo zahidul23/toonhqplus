@@ -28,6 +28,36 @@ test('standalone activated Trap supplies stun and lets later Drop hit', () => {
   assert.notEqual(entry(result, 'drop').accuracy, 0);
 });
 
+test('Clerk Will and Lil Oldman give Foghorn four activated Trap stuns', () => {
+  const result = calculateGagAccuracy(
+    [gag('trap', 3, 'sos'), gag('lure', 5, 'sos'), gag('sound', 5)],
+    false,
+    20,
+  );
+  assert.equal(entry(result, 'sound').stunBonus, 200);
+  assert.equal(entry(result, 'sound').accuracy, 100);
+});
+
+test('an all-target Trap with single-target Lure activates only one Trap stun', () => {
+  const result = calculateGagAccuracy(
+    [gag('trap', 3, 'sos'), gag('lure', 4), gag('sound', 5)],
+    false,
+    20,
+  );
+  assert.equal(entry(result, 'sound').stunBonus, 50);
+});
+
+test('an all-target Trap gives group Lure four placement bonuses', () => {
+  const result = calculateGagAccuracy(
+    [gag('trap', 3, 'sos'), gag('lure', 6), gag('sound', 5)],
+    false,
+    20,
+  );
+  assert.equal(entry(result, 'lure').trapPlacementCount, 4);
+  assert.equal(entry(result, 'lure').trapPlacementBonus, 25);
+  assert.equal(entry(result, 'sound').stunBonus, 200);
+});
+
 test('standalone Drop misses when Lure remains active', () => {
   const result = calculateGagAccuracy([gag('lure', 4), gag('drop', 5)], false, 20);
   assert.equal(entry(result, 'drop').accuracy, 0);

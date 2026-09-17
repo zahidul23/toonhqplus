@@ -59,6 +59,10 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
   let lured = preLured;
   const hasSelectedLure = gags.some((gag) => gag?.trackId === 'lure');
   const selectedTrapCount = gags.filter((gag) => gag?.trackId === 'trap').length;
+  const hasGroupTrap = gags.some((gag) => gag?.trackId === 'trap' && (gag.variant === 'sos' || gag.gagIndex === 6));
+  const hasGroupLure = gags.some((gag) => gag?.trackId === 'lure'
+    && (gag.variant === 'sos' || getLureType(gag.gagIndex) === 'group'));
+  const activatedTrapCount = hasGroupTrap && hasGroupLure ? 4 : Math.min(selectedTrapCount, 1);
 
   for (const trackId of TRACK_IDS) {
     const trackGags = gags.filter((gag): gag is GagAccuracySelection => gag?.trackId === trackId);
@@ -69,11 +73,12 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
     const baseAccuracy = TRACK_BASE_ACCURACY[trackId][gagLevel];
     const adjustedBaseAccuracy = Math.min(baseAccuracy + organicBonus, MAX_TOON_ACCURACY);
     const lureBonus = trackId === 'lure' ? getMultiLureBonus(trackGags, baselineGag) : 0;
-    const trapPlacementBonus = trackId === 'lure' && selectedTrapCount > 0
-      ? 10 + (getLureType(baselineGag.gagIndex) === 'group' ? (selectedTrapCount - 1) * 5 : 0)
-      : 0;
+    const lureAffectsGroup = baselineGag.variant === 'sos' || getLureType(baselineGag.gagIndex) === 'group';
     const trapPlacementCount = trackId === 'lure'
-      ? getLureType(baselineGag.gagIndex) === 'group' ? selectedTrapCount : Math.min(selectedTrapCount, 1)
+      ? lureAffectsGroup && hasGroupTrap ? 4 : lureAffectsGroup ? selectedTrapCount : Math.min(selectedTrapCount, 1)
+      : 0;
+    const trapPlacementBonus = trackId === 'lure' && trapPlacementCount > 0
+      ? 10 + (lureAffectsGroup ? (trapPlacementCount - 1) * 5 : 0)
       : 0;
     const appliedStunBonus = trackId === 'lure' ? trapPlacementBonus : stunBonus;
     const uncappedAccuracy = adjustedBaseAccuracy + MAX_TRACK_EXP_BONUS - cogDefense + appliedStunBonus + lureBonus;
@@ -96,7 +101,7 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
       uncappedAccuracy: specialRule ? accuracy : uncappedAccuracy, accuracy, specialRule,
     });
     if (accuracy > 0 && trackId !== 'lure' && (trackId !== 'trap' || hasSelectedLure)) {
-      const amount = trackId === 'trap' ? 50 : trackGags.length * 25;
+      const amount = trackId === 'trap' ? activatedTrapCount * 50 : trackGags.length * 25;
       stunBonus += amount;
       stunSources.push({ trackId, gagCount: trackGags.length, amount });
     }
@@ -106,4 +111,3 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
   const total = breakdown.length ? breakdown.reduce((chance, item) => chance * item.accuracy / 100, 1) * 100 : 0;
   return { total, breakdown, cogLevel, cogDefense };
 }
-
