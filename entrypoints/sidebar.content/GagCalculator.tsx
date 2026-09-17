@@ -5,6 +5,7 @@ import { gags as gagsConfig } from './gags';
 import { SOS_GAGS } from './CogCalculator';
 import { browser } from 'wxt/browser';
 import { GagCombosPanel } from './GagCombosPanel';
+import { calculateGagAccuracy } from './gagAccuracy';
 
 const TRACK_IDS = ['trap', 'lure', 'sound', 'throw', 'squirt', 'drop'] as const;
 type TrackId = (typeof TRACK_IDS)[number];
@@ -169,7 +170,7 @@ function getMultiLureBonus(lures: SelectedGag[], baseline: SelectedGag) {
   }, 0);
 }
 
-function calculateAccuracy(gags: Array<SelectedGag | null>, preLured: boolean, cogLevel: number) {
+function calculateAccuracyLegacy(gags: Array<SelectedGag | null>, preLured: boolean, cogLevel: number) {
   const cogDefense = COG_DEFENSE[cogLevel] ?? COG_DEFENSE[20];
   const breakdown: AccuracyTrackBreakdown[] = [];
   let stunBonus = 0;
@@ -248,6 +249,10 @@ function calculateAccuracy(gags: Array<SelectedGag | null>, preLured: boolean, c
     ? breakdown.reduce((chance, entry) => chance * (entry.accuracy / 100), 1) * 100
     : 0;
   return { total, breakdown, cogLevel, cogDefense };
+}
+
+function calculateAccuracy(gags: Array<SelectedGag | null>, preLured: boolean, cogLevel: number) {
+  return calculateGagAccuracy(gags, preLured, cogLevel);
 }
 
 function formatAccuracy(value: number) {

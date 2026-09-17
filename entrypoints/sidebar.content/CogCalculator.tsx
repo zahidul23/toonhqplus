@@ -1,6 +1,8 @@
 import React, { useState, useMemo, memo, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
+import { calculateRoundAccuracy as calculateRoundAccuracyCore } from './cogAccuracy';
+import { wakeRemoteControlledCog } from './remoteRules';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
 
@@ -191,7 +193,7 @@ function getAccuracyMultiLureBonus(lures: NonNullable<SelectedGag>[], baseline: 
   }, 0);
 }
 
-function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
+function calculateRoundAccuracyLegacy(roundGags: SelectedGag[], roundCogs: Cog[]) {
   const perCog: RoundCogAccuracy[] = [];
   const carriedTrapCount = roundCogs.filter((cog) => !cog.isDead && cog.isTrapped).length;
   const groupTargetTracks = new Set(roundGags.filter((gag): gag is NonNullable<SelectedGag> => !!gag && gag.target === 'all').map((gag) => gag.trackId));
@@ -285,6 +287,14 @@ function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
     factors.push({ label: `${trackId} group`, accuracy });
   });
   return { total: perCog.length ? totalChance * 100 : 0, perCog, factors };
+}
+
+function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
+  return calculateRoundAccuracyCore(
+    roundGags,
+    roundCogs,
+    (cog, cogIndex) => COG_CHOICES.find((candidate) => candidate.id === cog.id)?.label ?? `Cog ${cogIndex + 1}`,
+  );
 }
 
 
@@ -1279,6 +1289,10 @@ export function CogCalculator() {
           cog.isRemoteDmg = false;
           cog.isRemoteHeal = false;
         }
+
+        // A remote-controlled Cog acts at the end of the round, waking it
+        // from Lure even when no Toon attack did so earlier in the round.
+        wakeRemoteControlledCog(cog);
       }
 
       finalizeOfficeClerkImmunity();
@@ -1840,6 +1854,7 @@ export function CogCalculator() {
                     <div>Estimated effective evasion: {MAX_TRACK_EXP_BONUS - entry.defense > 0 ? '+' : ''}{MAX_TRACK_EXP_BONUS - entry.defense}%</div>
                     {entry.trapPlacementBonus > 0 && <div>Trap Bonus: +{entry.trapPlacementBonus}%</div>}
                     {entry.lureBonus > 0 && <div>Multi-Lure Bonus: +{entry.lureBonus}%</div>}
+                    {entry.luredRatio > 0 && <div>Lured Ratio Bonus: +{formatAccuracy(entry.luredRatio)}%</div>}
                     {entry.stunBonus > 0 && <div>Stun bonus: +{entry.stunBonus}%</div>}
                     <div className="mt-0.5 text-white">{entry.rawAccuracy > MAX_TOON_ACCURACY ? `Result: ${entry.rawAccuracy}% raw → ~${formatAccuracy(entry.accuracy)}% estimated soft cap` : `Result: ${formatAccuracy(entry.accuracy)}%`}</div>
                   </div>}

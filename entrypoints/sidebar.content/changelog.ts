@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.33',
+    date: 'Sep 16, 2026',
+    changes: [
+      'Fix accuracy calculations for Cog and Facilities Calculators',
+      'Fix highlighting and overlaying in the Dark Mode theme'
+    ]
+  },
+  {
     version: '1.2.32',
     date: 'Sep 14, 2026',
     changes: [
