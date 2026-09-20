@@ -130,9 +130,15 @@ function ensureStyles() {
     .toonhq-plus-cavalcade[data-status="active"] { background: #28523d; }
     .toonhq-plus-cavalcade__message { display: block; line-height: 1.25; transform: translateY(1px); }
     .toonhq-plus-cavalcade__icon { width: 31px; height: 31px; flex: 0 0 31px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+    .toonhq-plus-cavalcade__loading {
+      width: 25px; height: 25px; flex: 0 0 25px; box-sizing: border-box; border: 3px solid rgba(255,255,255,.28);
+      border-top-color: #92dcff; border-radius: 50%; animation: toonhq-plus-cavalcade-spin .8s linear infinite;
+    }
     .toonhq-plus-cavalcade__street { color: #ffe36a; font-weight: 900; }
     .toonhq-plus-cavalcade__playground { color: #c5f078; font-weight: 900; }
     .toonhq-plus-cavalcade__timer { color: #92dcff; font-weight: 900; font-variant-numeric: tabular-nums; }
+    @keyframes toonhq-plus-cavalcade-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .toonhq-plus-cavalcade__loading { animation: none; } }
     @media (max-width: 560px) { .toonhq-plus-cavalcade { padding-inline: 8px; font-size: 12px; } }
   `;
   (document.head || document.documentElement).appendChild(style);
@@ -151,10 +157,17 @@ export function startCavalcadeBanner() {
   let endedCycle = '';
   let fallbackAttemptedCycle = '';
 
-  const announcementStartedAt = (time: ReturnType<typeof getPacificTime>) =>
-    Date.now() - (time.millisecondsIntoHour - (25 * 60_000));
+  const announcementStartedAt = (time: ReturnType<typeof getPacificTime>) => Date.now() - (
+    time.minute < 25
+      ? time.millisecondsIntoHour + (35 * 60_000)
+      : time.millisecondsIntoHour - (25 * 60_000)
+  );
 
-  const isCurrentCycleLocation = (value: SavedCavalcade | null, cycle: string, announcedAt: number) =>
+  const isCurrentCycleLocation = (
+    value: SavedCavalcade | null,
+    cycle: string,
+    announcedAt: number,
+  ): value is SavedCavalcade =>
     value?.cycle === cycle && typeof value.sourceUpdatedAt === 'number' && value.sourceUpdatedAt >= announcedAt;
 
   const banner = document.createElement('div');
@@ -241,8 +254,8 @@ export function startCavalcadeBanner() {
     }
   };
 
-  const fetchFallback = async (cycle: string) => {
-    if (fallbackAttemptedCycle === cycle || readLast()?.cycle === cycle) return;
+  const fetchFallback = async (cycle: string, announcedAt: number) => {
+    if (fallbackAttemptedCycle === cycle || isCurrentCycleLocation(readLast(), cycle, announcedAt)) return;
     fallbackAttemptedCycle = cycle;
     try {
       const response = await fetchWithTimeout(fetch, FALLBACK_API_URL, { cache: 'no-store' });
@@ -273,11 +286,6 @@ export function startCavalcadeBanner() {
     const now = getPacificTime(new Date());
     const cycle = getCycleKey(now);
     const announcedAt = announcementStartedAt(now);
-    const sharedLast = readLast();
-    if (sharedLast?.cycle !== last?.cycle || sharedLast?.locationId !== last?.locationId) {
-      last = sharedLast;
-      knownLocation = sharedLast;
-    }
     const currentApi = apiDataCycle === cycle ? apiData : null;
     const currentCycleLast = isCurrentCycleLocation(last, cycle, announcedAt) ? last : null;
     const upcoming = now.minute >= 25 && now.minute < 30;
@@ -287,7 +295,9 @@ export function startCavalcadeBanner() {
       ? (currentApi && STREETS[currentApi.paradeLocation] ? knownLocation : currentCycleLast)
       : currentCycleLast;
 
-    const icon = location ? `<img class="toonhq-plus-cavalcade__icon" src="${location.icon}" alt="">` : '';
+    const icon = location
+      ? `<img class="toonhq-plus-cavalcade__icon" src="${location.icon}" alt="">`
+      : '<span class="toonhq-plus-cavalcade__loading" role="img" aria-label="Checking location"></span>';
     const hasLocation = Boolean(location);
     const place = location
       ? `<span class="toonhq-plus-cavalcade__street">${location.name}</span> in <span class="toonhq-plus-cavalcade__playground">${location.playground}</span>`
@@ -295,24 +305,35 @@ export function startCavalcadeBanner() {
 
     banner.dataset.status = upcoming ? 'upcoming' : active ? 'active' : 'ended';
     let markup: string;
+    let timerText: string;
     if (upcoming) {
       const countdown = duration((30 * 60_000) - now.millisecondsIntoHour);
+      timerText = countdown;
       markup = hasLocation
         ? `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is about to take place on ${place} · Starts in <span class="toonhq-plus-cavalcade__timer">${countdown}</span>.</span>`
-        : `<span class="toonhq-plus-cavalcade__message">The Cavalcade location is being announced (checking location...) · Starts in <span class="toonhq-plus-cavalcade__timer">${countdown}</span>.</span>`;
+        : `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade location is being announced · Starts in <span class="toonhq-plus-cavalcade__timer">${countdown}</span>.</span>`;
     } else if (active) {
       const elapsed = duration(now.millisecondsIntoHour - (30 * 60_000), true);
+      timerText = elapsed;
       markup = hasLocation
         ? `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is currently on ${place} · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed.</span>`
-        : `<span class="toonhq-plus-cavalcade__message">The Cavalcade has started (checking location...) · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed</span>`;
+        : `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade has started · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed.</span>`;
     } else {
       const next = now.minute < 25
         ? (25 * 60_000) - now.millisecondsIntoHour
         : (85 * 60_000) - now.millisecondsIntoHour;
       const previous = currentCycleLast ? `Last location: ${place} · ` : '';
-      markup = `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is recharging · ${previous}Next location announcement in <span class="toonhq-plus-cavalcade__timer">${duration(next)}</span>.</span>`;
+      timerText = duration(next);
+      markup = `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is recharging · ${previous}Next location announcement in <span class="toonhq-plus-cavalcade__timer">${timerText}</span>.</span>`;
     }
-    if (banner.innerHTML !== markup) banner.innerHTML = markup;
+    const layoutKey = `${banner.dataset.status}:${location?.locationId ?? 'loading'}:${location?.name ?? ''}`;
+    if (banner.dataset.layoutKey === layoutKey) {
+      const timer = banner.querySelector<HTMLElement>('.toonhq-plus-cavalcade__timer');
+      if (timer && timer.textContent !== timerText) timer.textContent = timerText;
+    } else {
+      banner.innerHTML = markup;
+      banner.dataset.layoutKey = layoutKey;
+    }
 
     const isRecharging = isRechargeWindow(now.minute);
     const hasConfirmedAnnouncementLocation = now.minute >= 25 && now.minute < 38 && Boolean(currentCycleLast);
@@ -337,16 +358,28 @@ export function startCavalcadeBanner() {
         void fetchStatus(cycle, now.minute, announcedAt);
       }
     }
-    if (isRecharging && !currentCycleLast) void fetchFallback(cycle);
+    if (isRecharging && !currentCycleLast) void fetchFallback(cycle, announcedAt);
   };
 
   render();
   const timer = window.setInterval(render, 250);
+  const storageTimer = window.setInterval(() => {
+    const now = getPacificTime(new Date());
+    const cycle = getCycleKey(now);
+    const sharedLast = readLast();
+    if (!isCurrentCycleLocation(sharedLast, cycle, announcementStartedAt(now))) return;
+    if (sharedLast.cycle === last?.cycle
+      && sharedLast.locationId === last.locationId
+      && sharedLast.sourceUpdatedAt === last.sourceUpdatedAt) return;
+    last = sharedLast;
+    knownLocation = sharedLast;
+  }, 3_000);
   const observer = new MutationObserver(attach);
   observer.observe(document.body, { childList: true, subtree: true });
 
   return () => {
     window.clearInterval(timer);
+    window.clearInterval(storageTimer);
     observer.disconnect();
     banner.remove();
     document.querySelector('style[data-toonhq-plus-cavalcade]')?.remove();
