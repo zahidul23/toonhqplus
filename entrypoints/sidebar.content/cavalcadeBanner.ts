@@ -9,8 +9,8 @@ const STORAGE_KEY = 'toonhqplus-last-cavalcade';
 
 type Street = { name: string; playground: string; icon: string };
 type ApiResponse = { paradeStatus: string; paradeLocation: number; paradeLocationString: string };
-type SavedCavalcade = Street & { locationId: number; cycle: string; endedAt: number };
-type CachedApiResponse = { data: ApiResponse; fetchedAt: number; cycle: string };
+type SavedCavalcade = Street & { locationId: number; cycle: string; endedAt: number; sourceUpdatedAt?: number };
+type CachedApiResponse = { data: ApiResponse; fetchedAt: number; cycle: string; sourceUpdatedAt?: number };
 type FallbackResponse = { data: { cycleKey: string; fetchedAt: string; paradeStatus: string; locationId: number; locationName: string } | null };
 
 const ICON_ROOT = 'https://toondle.town/pg_images';
@@ -96,21 +96,21 @@ function saveLast(value: SavedCavalcade) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(value)); } catch { }
 }
 
-function readApiCache(cycle: string, minute: number): ApiResponse | null {
+function readApiCache(cycle: string, minute: number): CachedApiResponse | null {
   try {
     const cached = JSON.parse(localStorage.getItem(API_CACHE_KEY) || 'null') as Partial<CachedApiResponse>;
     const age = Date.now() - Number(cached.fetchedAt);
     if (!cached.data || typeof cached.data.paradeStatus !== 'string' || !Number.isInteger(cached.data.paradeLocation)
       || age < 0 || age >= API_CACHE_TTL || (minute >= 25 && cached.cycle !== cycle)) return null;
-    return cached.data;
+    return cached as CachedApiResponse;
   } catch {
     return null;
   }
 }
 
-function saveApiCache(data: ApiResponse, cycle: string) {
+function saveApiCache(data: ApiResponse, cycle: string, sourceUpdatedAt?: number) {
   try {
-    const cached: CachedApiResponse = { data, fetchedAt: Date.now(), cycle };
+    const cached: CachedApiResponse = { data, fetchedAt: Date.now(), cycle, sourceUpdatedAt };
     localStorage.setItem(API_CACHE_KEY, JSON.stringify(cached));
   } catch { }
 }
@@ -151,6 +151,12 @@ export function startCavalcadeBanner() {
   let endedCycle = '';
   let fallbackAttemptedCycle = '';
 
+  const announcementStartedAt = (time: ReturnType<typeof getPacificTime>) =>
+    Date.now() - (time.millisecondsIntoHour - (25 * 60_000));
+
+  const isCurrentCycleLocation = (value: SavedCavalcade | null, cycle: string, announcedAt: number) =>
+    value?.cycle === cycle && typeof value.sourceUpdatedAt === 'number' && value.sourceUpdatedAt >= announcedAt;
+
   const banner = document.createElement('div');
   banner.className = 'toonhq-plus-cavalcade';
   banner.setAttribute('role', 'status');
@@ -168,31 +174,48 @@ export function startCavalcadeBanner() {
 
   const saveEnded = (cycle: string) => {
     if (!knownLocation) return;
-    last = { ...knownLocation, cycle, endedAt: Date.now() };
+    last = {
+      ...knownLocation,
+      cycle,
+      endedAt: Date.now(),
+      sourceUpdatedAt: last?.cycle === cycle ? last.sourceUpdatedAt : undefined,
+    };
     saveLast(last);
   };
 
-  const fetchStatus = async (cycle: string, minute: number) => {
+  const fetchStatus = async (cycle: string, minute: number, announcedAt: number) => {
     if (requestInFlight) return;
     const sharedLast = readLast();
-    if (minute >= 25 && minute < 38 && sharedLast?.cycle === cycle) {
+    if (minute >= 25 && minute < 38 && isCurrentCycleLocation(sharedLast, cycle, announcedAt)) {
       last = sharedLast;
       knownLocation = sharedLast;
       return;
     }
 
-    const cached = readApiCache(cycle, minute);
+    // Announcement/end polling must reach the origin/CDN every 15 seconds. Reusing
+    // our own 15-second cache here caused every other polling bucket to be skipped.
+    const polling = minute >= 25 && minute < 45;
+    const cached = polling ? null : readApiCache(cycle, minute);
 
     requestInFlight = true;
     try {
-      let data = cached;
-      if (!data) {
+      let data = cached?.data;
+      let sourceUpdatedAt = cached?.sourceUpdatedAt;
+      if (!cached) {
         const response = await fetchWithTimeout(pageFetch, API_URL, { cache: 'no-store', credentials: 'omit' });
         if (!response.ok) return;
         data = await response.json() as ApiResponse;
-        saveApiCache(data, cycle);
+        const lastModified = Date.parse(response.headers.get('last-modified') || '');
+        sourceUpdatedAt = Number.isFinite(lastModified) ? lastModified : undefined;
+        saveApiCache(data, cycle, sourceUpdatedAt);
       }
-      if (typeof data.paradeStatus !== 'string') return;
+      if (!data || typeof data.paradeStatus !== 'string') return;
+
+      // Cloudflare can briefly return the preceding event at :25. Do not label
+      // that payload as this cycle or let it suppress subsequent polling.
+      if (minute >= 25 && minute < 38
+        && (typeof sourceUpdatedAt !== 'number' || sourceUpdatedAt < announcedAt)) return;
+
       apiData = data;
       apiDataCycle = cycle;
       const mapped = STREETS[data.paradeLocation];
@@ -203,7 +226,7 @@ export function startCavalcadeBanner() {
           name: data.paradeLocationString || mapped.name,
         };
         if (minute >= 25 && minute < 45) {
-          last = { ...knownLocation, cycle, endedAt: Date.now() };
+          last = { ...knownLocation, cycle, endedAt: Date.now(), sourceUpdatedAt };
           saveLast(last);
         }
       }
@@ -236,6 +259,7 @@ export function startCavalcadeBanner() {
         name: remote.locationName || mapped.name,
         cycle,
         endedAt: Date.parse(remote.fetchedAt) || Date.now(),
+        sourceUpdatedAt: Date.parse(remote.fetchedAt) || Date.now(),
       };
       knownLocation = last;
       saveLast(last);
@@ -248,13 +272,14 @@ export function startCavalcadeBanner() {
     attach();
     const now = getPacificTime(new Date());
     const cycle = getCycleKey(now);
+    const announcedAt = announcementStartedAt(now);
     const sharedLast = readLast();
     if (sharedLast?.cycle !== last?.cycle || sharedLast?.locationId !== last?.locationId) {
       last = sharedLast;
       knownLocation = sharedLast;
     }
     const currentApi = apiDataCycle === cycle ? apiData : null;
-    const currentCycleLast = last?.cycle === cycle ? last : null;
+    const currentCycleLast = isCurrentCycleLocation(last, cycle, announcedAt) ? last : null;
     const upcoming = now.minute >= 25 && now.minute < 30;
     const active = (now.minute >= 30 && now.minute < 38)
       || (now.minute >= 38 && now.minute < 45 && endedCycle !== cycle);
@@ -293,7 +318,7 @@ export function startCavalcadeBanner() {
     const hasConfirmedAnnouncementLocation = now.minute >= 25 && now.minute < 38 && Boolean(currentCycleLast);
     if (!isRecharging && initialFetchCycle !== cycle && !hasConfirmedAnnouncementLocation) {
       initialFetchCycle = cycle;
-      void fetchStatus(cycle, now.minute);
+      void fetchStatus(cycle, now.minute, announcedAt);
     }
     const waitingForLocation = now.minute >= 25 && now.minute < 38
       && !STREETS[currentApi?.paradeLocation ?? 0]
@@ -302,14 +327,14 @@ export function startCavalcadeBanner() {
       const announcementBucket = `${cycle}:${Math.floor((now.millisecondsIntoHour - (25 * 60_000)) / 15_000)}`;
       if (lastAnnouncementFetch !== announcementBucket) {
         lastAnnouncementFetch = announcementBucket;
-        void fetchStatus(cycle, now.minute);
+        void fetchStatus(cycle, now.minute, announcedAt);
       }
     }
     if (now.minute >= 38 && now.minute < 45 && endedCycle !== cycle) {
       const bucket = `${cycle}:${Math.floor((now.millisecondsIntoHour - (38 * 60_000)) / 15_000)}`;
       if (lastPollingFetch !== bucket) {
         lastPollingFetch = bucket;
-        void fetchStatus(cycle, now.minute);
+        void fetchStatus(cycle, now.minute, announcedAt);
       }
     }
     if (isRecharging && !currentCycleLast) void fetchFallback(cycle);
