@@ -358,7 +358,7 @@ export function startCavalcadeBanner() {
         void fetchStatus(cycle, now.minute, announcedAt);
       }
     }
-    if (isRecharging && !currentCycleLast) void fetchFallback(cycle, announcedAt);
+    if (!upcoming && !active && !currentCycleLast) void fetchFallback(cycle, announcedAt);
   };
 
   render();
