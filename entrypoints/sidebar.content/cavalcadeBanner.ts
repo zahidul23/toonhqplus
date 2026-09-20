@@ -5,7 +5,7 @@ const STORAGE_KEY = 'toonhqplus-last-cavalcade';
 
 type Street = { name: string; playground: string; icon: string };
 type ApiResponse = { paradeStatus: string; paradeLocation: number; paradeLocationString: string };
-type SavedCavalcade = Street & { locationId: number; endedAt: number };
+type SavedCavalcade = Street & { locationId: number; cycle: string; endedAt: number };
 
 const ICON_ROOT = 'https://toondle.town/pg_images';
 const STREETS: Record<number, Street> = {
@@ -38,10 +38,14 @@ function getPacificTime(now: Date) {
   const parts = Object.fromEntries(pacificClock.formatToParts(now).map(({ type, value }) => [type, value]));
   const minute = Number(parts.minute);
   const second = Number(parts.second);
+  const cycleStart = new Date(Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), 30,
+  ));
+  if (minute < 30) cycleStart.setUTCHours(cycleStart.getUTCHours() - 1);
   return {
     minute,
     millisecondsIntoHour: ((minute * 60) + second) * 1000 + now.getMilliseconds(),
-    cycle: `${parts.year}-${parts.month}-${parts.day}T${parts.hour}`,
+    cycle: `${cycleStart.getUTCFullYear()}-${String(cycleStart.getUTCMonth() + 1).padStart(2, '0')}-${String(cycleStart.getUTCDate()).padStart(2, '0')}T${String(cycleStart.getUTCHours()).padStart(2, '0')}:30`,
   };
 }
 
@@ -110,7 +114,7 @@ export function startCavalcadeBanner() {
 
   const saveEnded = () => {
     if (!knownLocation) return;
-    last = { ...knownLocation, endedAt: Date.now() };
+    last = { ...knownLocation, cycle: getPacificTime(new Date()).cycle, endedAt: Date.now() };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(last)); } catch { }
   };
 
@@ -141,9 +145,10 @@ export function startCavalcadeBanner() {
     const now = getPacificTime(new Date());
     const upcoming = now.minute >= 25 && now.minute < 30;
     const active = (now.minute >= 30 && now.minute < 38) || (now.minute >= 38 && apiData?.paradeStatus === 'active');
+    const currentCycleLast = last?.cycle === now.cycle ? last : null;
     const location = upcoming || active
       ? (apiData && STREETS[apiData.paradeLocation] ? knownLocation : null)
-      : last;
+      : currentCycleLast;
 
     const icon = location ? `<img class="toonhq-plus-cavalcade__icon" src="${location.icon}" alt="">` : '';
     const hasLocation = Boolean(location);
@@ -157,18 +162,18 @@ export function startCavalcadeBanner() {
       const countdown = duration((30 * 60_000) - now.millisecondsIntoHour);
       markup = hasLocation
         ? `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is about to take place on ${place} · Starts in <span class="toonhq-plus-cavalcade__timer">${countdown}</span>.</span>`
-        : `<span class="toonhq-plus-cavalcade__message">The Cavalcade location is being announced · Starts in <span class="toonhq-plus-cavalcade__timer">${countdown}</span>.</span>`;
+        : `<span class="toonhq-plus-cavalcade__message">The Cavalcade location is being announced (checking location...) · Starts in <span class="toonhq-plus-cavalcade__timer">${countdown}</span>.</span>`;
     } else if (active) {
       const elapsed = duration(now.millisecondsIntoHour - (30 * 60_000), true);
       markup = hasLocation
-        ? `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade has started on ${place} · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed.</span>`
-        : `<span class="toonhq-plus-cavalcade__message">The Cavalcade has started · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed (retrying location…)</span>`;
+        ? `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is currently on ${place} · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed.</span>`
+        : `<span class="toonhq-plus-cavalcade__message">The Cavalcade has started (checking location...) · <span class="toonhq-plus-cavalcade__timer">${elapsed}</span> elapsed</span>`;
     } else {
       const next = now.minute < 25
         ? (25 * 60_000) - now.millisecondsIntoHour
         : (85 * 60_000) - now.millisecondsIntoHour;
-      const previous = last ? `Last location: ${place} · ` : '';
-      markup = `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade has ended · ${previous}Next announcement in <span class="toonhq-plus-cavalcade__timer">${duration(next)}</span>.</span>`;
+      const previous = currentCycleLast ? `Last location: ${place} · ` : '';
+      markup = `${icon}<span class="toonhq-plus-cavalcade__message">The Cavalcade is recharging · ${previous}Next location announcement in <span class="toonhq-plus-cavalcade__timer">${duration(next)}</span>.</span>`;
     }
     if (banner.innerHTML !== markup) banner.innerHTML = markup;
 
