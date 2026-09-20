@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.34',
+    date: 'Sep 20, 2026',
+    changes: [
+      'Add Cartoonival Cavalcade tracker banner',
+    ]
+  },
+  {
     version: '1.2.33',
     date: 'Sep 16, 2026',
     changes: [

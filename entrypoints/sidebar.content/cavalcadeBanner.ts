@@ -1,11 +1,17 @@
 import { pageFetch } from './pageFetch';
 
 const API_URL = 'https://www.toontownrewritten.com/api/cavalcade';
+const FALLBACK_API_URL = 'https://api.toontown.help/cavalcade';
+const API_CACHE_KEY = 'toonhqplus-cavalcade-api';
+const API_CACHE_TTL = 15_000;
+const API_TIMEOUT_MS = 5_000;
 const STORAGE_KEY = 'toonhqplus-last-cavalcade';
 
 type Street = { name: string; playground: string; icon: string };
 type ApiResponse = { paradeStatus: string; paradeLocation: number; paradeLocationString: string };
 type SavedCavalcade = Street & { locationId: number; cycle: string; endedAt: number };
+type CachedApiResponse = { data: ApiResponse; fetchedAt: number; cycle: string };
+type FallbackResponse = { data: { cycleKey: string; fetchedAt: string; paradeStatus: string; locationId: number; locationName: string } | null };
 
 const ICON_ROOT = 'https://toondle.town/pg_images';
 const STREETS: Record<number, Street> = {
@@ -54,6 +60,29 @@ function duration(milliseconds: number, floor = false) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+function isRechargeWindow(minute: number) {
+  return minute >= 45 || minute < 25;
+}
+
+function getCycleKey(time: ReturnType<typeof getPacificTime>) {
+  if (time.minute < 25 || time.minute >= 30) return time.cycle;
+  const nextCycle = new Date(`${time.cycle}:00Z`);
+  nextCycle.setUTCHours(nextCycle.getUTCHours() + 1);
+  return nextCycle.toISOString().slice(0, 16);
+}
+
+type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+async function fetchWithTimeout(fetcher: Fetcher, input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    return await fetcher(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function readLast(): SavedCavalcade | null {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') as SavedCavalcade | null;
@@ -61,6 +90,29 @@ function readLast(): SavedCavalcade | null {
   } catch {
     return null;
   }
+}
+
+function saveLast(value: SavedCavalcade) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(value)); } catch { }
+}
+
+function readApiCache(cycle: string, minute: number): ApiResponse | null {
+  try {
+    const cached = JSON.parse(localStorage.getItem(API_CACHE_KEY) || 'null') as Partial<CachedApiResponse>;
+    const age = Date.now() - Number(cached.fetchedAt);
+    if (!cached.data || typeof cached.data.paradeStatus !== 'string' || !Number.isInteger(cached.data.paradeLocation)
+      || age < 0 || age >= API_CACHE_TTL || (minute >= 25 && cached.cycle !== cycle)) return null;
+    return cached.data;
+  } catch {
+    return null;
+  }
+}
+
+function saveApiCache(data: ApiResponse, cycle: string) {
+  try {
+    const cached: CachedApiResponse = { data, fetchedAt: Date.now(), cycle };
+    localStorage.setItem(API_CACHE_KEY, JSON.stringify(cached));
+  } catch { }
 }
 
 function ensureStyles() {
@@ -89,13 +141,15 @@ function ensureStyles() {
 export function startCavalcadeBanner() {
   ensureStyles();
   let apiData: ApiResponse | null = null;
+  let apiDataCycle = '';
   let last = readLast();
   let knownLocation: (Street & { locationId: number }) | null = last;
   let requestInFlight = false;
-  let initialFetchStarted = false;
+  let initialFetchCycle = '';
   let lastAnnouncementFetch = '';
   let lastPollingFetch = '';
   let endedCycle = '';
+  let fallbackAttemptedCycle = '';
 
   const banner = document.createElement('div');
   banner.className = 'toonhq-plus-cavalcade';
@@ -112,26 +166,50 @@ export function startCavalcadeBanner() {
     if (banner.previousElementSibling !== anchor) anchor.insertAdjacentElement('afterend', banner);
   };
 
-  const saveEnded = () => {
+  const saveEnded = (cycle: string) => {
     if (!knownLocation) return;
-    last = { ...knownLocation, cycle: getPacificTime(new Date()).cycle, endedAt: Date.now() };
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(last)); } catch { }
+    last = { ...knownLocation, cycle, endedAt: Date.now() };
+    saveLast(last);
   };
 
   const fetchStatus = async (cycle: string, minute: number) => {
     if (requestInFlight) return;
+    const sharedLast = readLast();
+    if (minute >= 25 && minute < 38 && sharedLast?.cycle === cycle) {
+      last = sharedLast;
+      knownLocation = sharedLast;
+      return;
+    }
+
+    const cached = readApiCache(cycle, minute);
+
     requestInFlight = true;
     try {
-      const response = await pageFetch(API_URL, { cache: 'no-store', credentials: 'omit' });
-      if (!response.ok) return;
-      const data = await response.json() as ApiResponse;
+      let data = cached;
+      if (!data) {
+        const response = await fetchWithTimeout(pageFetch, API_URL, { cache: 'no-store', credentials: 'omit' });
+        if (!response.ok) return;
+        data = await response.json() as ApiResponse;
+        saveApiCache(data, cycle);
+      }
       if (typeof data.paradeStatus !== 'string') return;
       apiData = data;
+      apiDataCycle = cycle;
       const mapped = STREETS[data.paradeLocation];
-      if (mapped) knownLocation = { ...mapped, locationId: data.paradeLocation };
-      if (minute >= 38 && data.paradeStatus !== 'active') {
+      if (mapped) {
+        knownLocation = {
+          ...mapped,
+          locationId: data.paradeLocation,
+          name: data.paradeLocationString || mapped.name,
+        };
+        if (minute >= 25 && minute < 45) {
+          last = { ...knownLocation, cycle, endedAt: Date.now() };
+          saveLast(last);
+        }
+      }
+      if (minute >= 38 && minute < 45 && data.paradeStatus !== 'active') {
         endedCycle = cycle;
-        saveEnded();
+        saveEnded(cycle);
       }
     } catch (error) {
       console.warn('[ToonHQ+] Failed to refresh Cavalcade status:', error);
@@ -140,14 +218,48 @@ export function startCavalcadeBanner() {
     }
   };
 
+  const fetchFallback = async (cycle: string) => {
+    if (fallbackAttemptedCycle === cycle || readLast()?.cycle === cycle) return;
+    fallbackAttemptedCycle = cycle;
+    try {
+      const response = await fetchWithTimeout(fetch, FALLBACK_API_URL, { cache: 'no-store' });
+      if (!response.ok) return;
+      const result = await response.json() as FallbackResponse;
+      const remote = result.data;
+      if (!remote || getPacificTime(new Date(remote.cycleKey)).cycle !== cycle) return;
+      const mapped = STREETS[remote.locationId];
+      if (!mapped) return;
+
+      last = {
+        ...mapped,
+        locationId: remote.locationId,
+        name: remote.locationName || mapped.name,
+        cycle,
+        endedAt: Date.parse(remote.fetchedAt) || Date.now(),
+      };
+      knownLocation = last;
+      saveLast(last);
+    } catch (error) {
+      console.warn('[ToonHQ+] Failed to load cached Cavalcade status:', error);
+    }
+  };
+
   const render = () => {
     attach();
     const now = getPacificTime(new Date());
+    const cycle = getCycleKey(now);
+    const sharedLast = readLast();
+    if (sharedLast?.cycle !== last?.cycle || sharedLast?.locationId !== last?.locationId) {
+      last = sharedLast;
+      knownLocation = sharedLast;
+    }
+    const currentApi = apiDataCycle === cycle ? apiData : null;
+    const currentCycleLast = last?.cycle === cycle ? last : null;
     const upcoming = now.minute >= 25 && now.minute < 30;
-    const active = (now.minute >= 30 && now.minute < 38) || (now.minute >= 38 && apiData?.paradeStatus === 'active');
-    const currentCycleLast = last?.cycle === now.cycle ? last : null;
+    const active = (now.minute >= 30 && now.minute < 38)
+      || (now.minute >= 38 && now.minute < 45 && endedCycle !== cycle);
     const location = upcoming || active
-      ? (apiData && STREETS[apiData.paradeLocation] ? knownLocation : null)
+      ? (currentApi && STREETS[currentApi.paradeLocation] ? knownLocation : currentCycleLast)
       : currentCycleLast;
 
     const icon = location ? `<img class="toonhq-plus-cavalcade__icon" src="${location.icon}" alt="">` : '';
@@ -177,26 +289,30 @@ export function startCavalcadeBanner() {
     }
     if (banner.innerHTML !== markup) banner.innerHTML = markup;
 
-    if (!initialFetchStarted) {
-      initialFetchStarted = true;
-      void fetchStatus(now.cycle, now.minute);
+    const isRecharging = isRechargeWindow(now.minute);
+    const hasConfirmedAnnouncementLocation = now.minute >= 25 && now.minute < 38 && Boolean(currentCycleLast);
+    if (!isRecharging && initialFetchCycle !== cycle && !hasConfirmedAnnouncementLocation) {
+      initialFetchCycle = cycle;
+      void fetchStatus(cycle, now.minute);
     }
     const waitingForLocation = now.minute >= 25 && now.minute < 38
-      && !STREETS[apiData?.paradeLocation ?? 0];
+      && !STREETS[currentApi?.paradeLocation ?? 0]
+      && !currentCycleLast;
     if (waitingForLocation) {
-      const announcementBucket = `${now.cycle}:${Math.floor((now.millisecondsIntoHour - (25 * 60_000)) / 15_000)}`;
+      const announcementBucket = `${cycle}:${Math.floor((now.millisecondsIntoHour - (25 * 60_000)) / 15_000)}`;
       if (lastAnnouncementFetch !== announcementBucket) {
         lastAnnouncementFetch = announcementBucket;
-        void fetchStatus(now.cycle, now.minute);
+        void fetchStatus(cycle, now.minute);
       }
     }
-    if (now.minute >= 38 && endedCycle !== now.cycle) {
-      const bucket = `${now.cycle}:${Math.floor((now.millisecondsIntoHour - (38 * 60_000)) / 15_000)}`;
+    if (now.minute >= 38 && now.minute < 45 && endedCycle !== cycle) {
+      const bucket = `${cycle}:${Math.floor((now.millisecondsIntoHour - (38 * 60_000)) / 15_000)}`;
       if (lastPollingFetch !== bucket) {
         lastPollingFetch = bucket;
-        void fetchStatus(now.cycle, now.minute);
+        void fetchStatus(cycle, now.minute);
       }
     }
+    if (isRecharging && !currentCycleLast) void fetchFallback(cycle);
   };
 
   render();
