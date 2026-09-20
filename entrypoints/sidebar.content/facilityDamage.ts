@@ -1,0 +1,11 @@
+/** Apply the Factory Foreman's Defense Up status to gag base damage. */
+export function applyDefenseUp(
+  damage: number,
+  hasDefenseUp: boolean,
+  isDefenseUpSource: boolean,
+  trackId: string,
+): number {
+  // Lure deals no damage. The Foreman does not grant Defense Up to itself.
+  if (!hasDefenseUp || isDefenseUpSource || trackId === 'lure') return damage;
+  return Math.floor(damage * 0.75);
+}

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
 import { calculateRoundAccuracy as calculateRoundAccuracyCore } from './cogAccuracy';
 import { wakeRemoteControlledCog } from './remoteRules';
+import { applyDefenseUp } from './facilityDamage';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
 
@@ -1044,9 +1045,7 @@ export function CogCalculator() {
             }
 
             const isForeman = cog.id === 'factory_scrap' || cog.id === 'factory_steel';
-            if (hasForeman && !isForeman && !['trap', 'lure'].includes(trackId)) {
-              currentDmg = Math.floor(currentDmg * 0.75);
-            }
+            currentDmg = applyDefenseUp(currentDmg, hasForeman, isForeman, trackId);
 
             // Negative facility modifiers apply before knockback and same-gag bonus.
             if (!['trap', 'lure', 'special'].includes(trackId) && !isPinkSlip) {
