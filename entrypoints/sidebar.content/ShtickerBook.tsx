@@ -2271,16 +2271,19 @@ function getDepartmentColorConfig(dept: string) {
 
 function BossImages({
   boss,
-  heightClass,
 }: {
   boss: any;
-  heightClass: string;
 }) {
-  const widthClass = heightClass.replace('h-', 'w-');
+  const isCJ = boss.id === 'cj';
+
   return (
-    <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
-      <img src={boss.image} alt={boss.title} className={`${heightClass} w-full rounded-md border border-white/20 object-cover`} />
-      <img src={boss.bossImage} alt={boss.title} className={`${heightClass} ${widthClass} rounded-md border border-white/20 bg-black/30 object-cover`} />
+    <div className={`mb-2 grid items-start gap-2 ${isCJ ? 'grid-cols-[minmax(0,3.05fr)_minmax(0,1fr)]' : 'grid-cols-[minmax(0,2.3fr)_minmax(0,1fr)]'}`}>
+      <img
+        src={boss.image}
+        alt={boss.title}
+        className={`w-full rounded-md border border-white/20 object-cover ${isCJ ? 'aspect-[61/20] object-bottom' : 'aspect-[23/10]'}`}
+      />
+      <img src={boss.bossImage} alt={boss.title} className="aspect-square w-full rounded-md border border-white/20 bg-black/30 object-cover" />
     </div>
   );
 }
@@ -2393,17 +2396,14 @@ function BossesTabContent({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
-          {/* 1. Images & Panels (Top-Left on desktop) */}
-          <div className="lg:col-span-3 space-y-6">
-            <BossImages boss={boss} heightClass="h-[200px]" />
-            <BossTierTable boss={boss} />
+        <div className="space-y-6">
+          {/* Keep the wide banner at a comfortable size without constraining the data below it. */}
+          <div className="mx-auto w-full max-w-4xl">
+            <BossImages boss={boss} />
           </div>
 
-          {/* 2. Right Column (Space for other panels) */}
-          <div className="lg:col-span-1 lg:row-span-2 space-y-6">
-            {/* No panels to add here right now */}
-          </div>
+          {/* Tier data benefits from the full page width, especially on the CEO table. */}
+          <BossTierTable boss={boss} />
         </div>
       </section>
     );
