@@ -151,11 +151,11 @@ export function startCavalcadeBanner() {
   let last = readLast();
   let knownLocation: (Street & { locationId: number }) | null = last;
   let requestInFlight = false;
-  let initialFetchCycle = '';
   let lastAnnouncementFetch = '';
   let lastPollingFetch = '';
   let endedCycle = '';
   let fallbackAttemptedCycle = '';
+  const pollingOffsetMs = 2_000 + Math.floor(Math.random() * 4_001);
 
   const announcementStartedAt = (time: ReturnType<typeof getPacificTime>) => Date.now() - (
     time.minute < 25
@@ -215,7 +215,10 @@ export function startCavalcadeBanner() {
       let data = cached?.data;
       let sourceUpdatedAt = cached?.sourceUpdatedAt;
       if (!cached) {
-        const response = await fetchWithTimeout(pageFetch, API_URL, { cache: 'no-store', credentials: 'omit' });
+        const response = await fetchWithTimeout(pageFetch, API_URL, {
+          cache: 'no-cache',
+          credentials: 'omit',
+        });
         if (!response.ok) return;
         data = await response.json() as ApiResponse;
         const lastModified = Date.parse(response.headers.get('last-modified') || '');
@@ -335,25 +338,21 @@ export function startCavalcadeBanner() {
       banner.dataset.layoutKey = layoutKey;
     }
 
-    const isRecharging = isRechargeWindow(now.minute);
-    const hasConfirmedAnnouncementLocation = now.minute >= 25 && now.minute < 38 && Boolean(currentCycleLast);
-    if (!isRecharging && initialFetchCycle !== cycle && !hasConfirmedAnnouncementLocation) {
-      initialFetchCycle = cycle;
-      void fetchStatus(cycle, now.minute, announcedAt);
-    }
     const waitingForLocation = now.minute >= 25 && now.minute < 38
       && !STREETS[currentApi?.paradeLocation ?? 0]
       && !currentCycleLast;
     if (waitingForLocation) {
-      const announcementBucket = `${cycle}:${Math.floor((now.millisecondsIntoHour - (25 * 60_000)) / 15_000)}`;
-      if (lastAnnouncementFetch !== announcementBucket) {
+      const pollingElapsed = now.millisecondsIntoHour - (25 * 60_000) - pollingOffsetMs;
+      const announcementBucket = `${cycle}:${Math.floor(pollingElapsed / 15_000)}`;
+      if (pollingElapsed >= 0 && lastAnnouncementFetch !== announcementBucket) {
         lastAnnouncementFetch = announcementBucket;
         void fetchStatus(cycle, now.minute, announcedAt);
       }
     }
     if (now.minute >= 38 && now.minute < 45 && endedCycle !== cycle) {
-      const bucket = `${cycle}:${Math.floor((now.millisecondsIntoHour - (38 * 60_000)) / 15_000)}`;
-      if (lastPollingFetch !== bucket) {
+      const pollingElapsed = now.millisecondsIntoHour - (38 * 60_000) - pollingOffsetMs;
+      const bucket = `${cycle}:${Math.floor(pollingElapsed / 15_000)}`;
+      if (pollingElapsed >= 0 && lastPollingFetch !== bucket) {
         lastPollingFetch = bucket;
         void fetchStatus(cycle, now.minute, announcedAt);
       }

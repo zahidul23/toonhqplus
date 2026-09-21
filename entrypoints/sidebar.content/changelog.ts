@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.36',
+    date: 'Sep 21, 2026',
+    changes: [
+      'Add custom ordering of Synced Toons in the Toon Tracker Toons page',
+    ]
+  },
+  {
     version: '1.2.35',
     date: 'Sep 20, 2026',
     changes: [

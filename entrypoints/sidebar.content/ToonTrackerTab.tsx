@@ -1278,7 +1278,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
                 title="Delete saved toon"
                 onClick={(event) => removeSavedToon(event, String(toon.id), toon.name)}
                 onDragStart={(event) => event.stopPropagation()}
-                className="absolute right-0 top-0 z-10 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent text-white/30 opacity-0 transition-all duration-200 hover:border-red-400/30 hover:bg-[#0c3622] hover:text-red-400 hover:shadow-[0_3px_10px_rgba(0,0,0,0.55)] group-hover:opacity-100"
+                className="absolute right-2 top-1 z-10 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-red-300/25 bg-[#0c3622] text-red-300 opacity-0 shadow-[0_3px_10px_rgba(0,0,0,0.45)] transition-all duration-200 hover:border-red-300/50 hover:bg-[#145837] hover:text-red-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.65)] group-hover:opacity-100"
               >
                 <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="m19 6-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></svg>
               </button>}
