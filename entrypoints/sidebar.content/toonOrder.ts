@@ -4,6 +4,29 @@ export type OrderableToon = {
   laff: number;
 };
 
+export type ToonOrderSetting = {
+  version: 1;
+  toonIds: string[];
+};
+
+export function normalizeToonOrderSetting(value: unknown): ToonOrderSetting | null {
+  const ids = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && (value as { version?: unknown }).version === 1 && Array.isArray((value as { toonIds?: unknown }).toonIds)
+      ? (value as { toonIds: unknown[] }).toonIds
+      : null;
+  if (!ids) return null;
+  return { version: 1, toonIds: [...new Set(ids.map(String))] };
+}
+
+export function reconcileToonOrder(setting: ToonOrderSetting, toonIds: Iterable<string | number>): ToonOrderSetting {
+  const availableIds = [...new Set(Array.from(toonIds, String))];
+  const available = new Set(availableIds);
+  const retained = setting.toonIds.filter(id => available.has(id));
+  const retainedSet = new Set(retained);
+  return { version: 1, toonIds: [...retained, ...availableIds.filter(id => !retainedSet.has(id))] };
+}
+
 export function compareToonsByLaffThenName(a: OrderableToon, b: OrderableToon): number {
   if (b.laff !== a.laff) return b.laff - a.laff;
   return a.name.localeCompare(b.name);

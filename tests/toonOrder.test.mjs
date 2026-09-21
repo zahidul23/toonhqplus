@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { moveToon, orderTrackerToons } from '../entrypoints/sidebar.content/toonOrder.ts';
+import { moveToon, normalizeToonOrderSetting, orderTrackerToons, reconcileToonOrder } from '../entrypoints/sidebar.content/toonOrder.ts';
 
 const toons = [
   { id: 'low', name: 'Zippy', laff: 50 },
@@ -24,4 +24,15 @@ test('custom order is persisted within the active and offline partitions', () =>
 test('drag reorder moves the dragged toon before its target', () => {
   assert.deepEqual(moveToon(['alpha', 'beta', 'low'], 'low', 'alpha'), ['low', 'alpha', 'beta']);
   assert.deepEqual(moveToon(['alpha', 'beta', 'low'], 'alpha', 'low', true), ['beta', 'low', 'alpha']);
+});
+
+test('legacy arrays migrate to a normalized versioned setting', () => {
+  assert.deepEqual(normalizeToonOrderSetting([1, '2', 1]), { version: 1, toonIds: ['1', '2'] });
+});
+
+test('reconciliation removes deleted IDs and appends newly synced IDs', () => {
+  assert.deepEqual(
+    reconcileToonOrder({ version: 1, toonIds: ['gone', 'beta', 'alpha'] }, ['alpha', 'beta', 'new']),
+    { version: 1, toonIds: ['beta', 'alpha', 'new'] },
+  );
 });

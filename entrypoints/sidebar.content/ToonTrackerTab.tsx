@@ -12,7 +12,7 @@ import {
   isDeepEqual
 } from './trackerUtils';
 import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerUtils';
-import { orderTrackerToons } from './toonOrder';
+import { normalizeToonOrderSetting, orderTrackerToons } from './toonOrder';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -240,6 +240,7 @@ interface ToonHeaderProps {
   toonTrackerData: ToonTrackerData | null;
   activeInstances: any[];
   savedToons: any[];
+  customOrder: string[] | null;
   selectedToonId: string | null;
   isDropdownOpen: boolean;
   dropdownRef: React.Ref<HTMLDivElement>;
@@ -255,6 +256,7 @@ const ToonHeader = React.memo(({
   toonTrackerData,
   activeInstances,
   savedToons,
+  customOrder,
   selectedToonId,
   isDropdownOpen,
   dropdownRef,
@@ -263,7 +265,24 @@ const ToonHeader = React.memo(({
   removeSavedToon,
   startSync,
   trackerEnabled
-}: ToonHeaderProps) => (
+}: ToonHeaderProps) => {
+  const activeToonIds = activeInstances.map(instance => String(instance.toonId));
+  const canonicallyOrderedToons = orderTrackerToons(savedToons, activeToonIds, customOrder);
+  const canonicalPositions = new Map(canonicallyOrderedToons.map((toon, index) => [String(toon.id), index]));
+  const orderedActiveInstances = [...activeInstances].sort((a, b) => {
+    const aPosition = canonicalPositions.get(String(a.toonId));
+    const bPosition = canonicalPositions.get(String(b.toonId));
+    if (aPosition !== undefined || bPosition !== undefined) {
+      if (aPosition === undefined) return 1;
+      if (bPosition === undefined) return -1;
+      if (aPosition !== bPosition) return aPosition - bPosition;
+    }
+    return parseInt(a.port) - parseInt(b.port);
+  });
+  const orderedOfflineToons = canonicallyOrderedToons
+    .filter(toon => !activeToonIds.includes(String(toon.id)));
+
+  return (
   <div className={`z-[300] py-2 flex items-center gap-3 relative border-b border-white/5 ${isExpanded ? 'px-1' : 'px-3'}`}>
     {trackerEnabled !== true ? (
       <div className="flex-1 flex items-center min-w-0 gap-3">
@@ -315,7 +334,7 @@ const ToonHeader = React.memo(({
                   <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
                     Active Games
                   </div>
-                  {activeInstances.sort((a, b) => parseInt(a.port) - parseInt(b.port)).map((inst) => {
+                  {orderedActiveInstances.map((inst) => {
                     const gameNum = parseInt(inst.port) - 1546;
                     return (
                       <div
@@ -362,12 +381,12 @@ const ToonHeader = React.memo(({
                 </div>
               )}
 
-              {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).length > 0 && (
+              {orderedOfflineToons.length > 0 && (
                 <div>
                   <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-white/30 border-b border-white/5 mb-1 bg-black/20">
                     Saved Toons
                   </div>
-                  {savedToons.filter(t => !activeInstances.some(inst => inst.toonId === t.id)).map(t => (
+                  {orderedOfflineToons.map(t => (
                     <div key={t.id} onMouseDown={(e) => { e.stopPropagation(); selectToon(t.id); }} className={`flex items-center gap-3 p-2 mx-1 mt-1 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group/item ${selectedToonId === t.id ? 'bg-emerald-500/10 border border-emerald-500/10' : 'border border-transparent'}`}>
                       <div className="w-8 h-8 rounded-full border border-white/5 bg-black/40 overflow-hidden shrink-0 flex items-center justify-center">
                         <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
@@ -386,7 +405,8 @@ const ToonHeader = React.memo(({
       </>
     )}
   </div>
-));
+  );
+});
 
 type SOSTableSort = 'default' | 'count';
 
@@ -1059,8 +1079,8 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
 
   useEffect(() => {
     const refreshCustomOrder = () => {
-      getSetting<string[] | null>('tracker-toon-order').then(order => {
-        setCustomOrder(Array.isArray(order) ? order.map(String) : null);
+      getSetting<unknown>('tracker-toon-order').then(order => {
+        setCustomOrder(normalizeToonOrderSetting(order)?.toonIds ?? null);
       }).catch(console.error);
     };
     refreshCustomOrder();
@@ -1096,7 +1116,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
     nextOrder.splice(Math.max(0, Math.min(adjustedIndex, nextOrder.length)), 0, draggedId);
     if (nextOrder.every((id, index) => id === visibleOrder[index])) return;
     setCustomOrder(nextOrder);
-    setSetting('tracker-toon-order', nextOrder).catch(console.error);
+    setSetting('tracker-toon-order', { version: 1, toonIds: nextOrder }).catch(console.error);
   }, [orderedToons]);
 
   const renderDropZone = (index: number) => {
@@ -1252,7 +1272,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
             </button>
 
             <div className="relative flex min-w-0 flex-col gap-3 pr-4">
-              <button
+              {!isActive && <button
                 type="button"
                 aria-label={`Delete ${toon.name}`}
                 title="Delete saved toon"
@@ -1261,7 +1281,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
                 className="absolute right-0 top-0 z-10 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent text-white/30 opacity-0 transition-all duration-200 hover:border-red-400/30 hover:bg-[#0c3622] hover:text-red-400 hover:shadow-[0_3px_10px_rgba(0,0,0,0.55)] group-hover:opacity-100"
               >
                 <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="m19 6-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></svg>
-              </button>
+              </button>}
               <div className="flex items-center gap-2 w-full pr-8">
                 <span className={`flex rounded-full shrink-0 ${isActive ? 'w-2.5 h-2.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' : 'w-2 h-2 bg-white/10'}`} title={isActive ? 'Active' : 'Offline'}></span>
                 <span className={`text-[13px] font-bold truncate transition-colors ${isActive ? 'text-emerald-400' : 'text-white/80 group-hover:text-white'}`}>{toon.name} <span className={isActive ? getLaffColorClass(currentLaff, maxLaff) : 'text-white/40'}>({currentLaff}/{maxLaff})</span></span>
@@ -1381,6 +1401,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   }, [selectedToonId]);
   const [expandedSuitId, setExpandedSuitId] = useState<string | null>(null);
   const [savedToons, setSavedToons] = useState<{ id: string; name: string; style: string; laff: number }[]>([]);
+  const [pickerToonOrder, setPickerToonOrder] = useState<string[] | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [subView, setSubView] = useState<'main' | 'rewards_detail' | 'toons'>(initialSubView);
   const [activeCategory, setActiveCategory] = useState<RewardCategory>(propCategory || 'analytics');
@@ -1403,6 +1424,30 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const refreshOrder = () => {
+      getSetting<unknown>('tracker-toon-order')
+        .then(value => {
+          const normalized = normalizeToonOrderSetting(value);
+          setPickerToonOrder(normalized?.toonIds ?? null);
+          if (Array.isArray(value) && normalized) setSetting('tracker-toon-order', normalized).catch(console.error);
+        })
+        .catch(console.error);
+    };
+    refreshOrder();
+    const handleDbChange = (event: Event) => {
+      const { store, key } = (event as CustomEvent).detail || {};
+      if (store === 'settings' && key === 'tracker-toon-order') refreshOrder();
+    };
+    const handleReset = () => setPickerToonOrder(null);
+    window.addEventListener('toonhqplus-db-changed', handleDbChange);
+    window.addEventListener('toonhqplus-toon-order-reset', handleReset);
+    return () => {
+      window.removeEventListener('toonhqplus-db-changed', handleDbChange);
+      window.removeEventListener('toonhqplus-toon-order-reset', handleReset);
+    };
+  }, []);
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
@@ -1699,7 +1744,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     if (!window.confirm(`Delete ${toonName} from your synced toons?\n\nIts locally synced tracker data will no longer appear here.`)) return;
 
     // Update local state immediately for snappy UI
-    setSavedToons(prev => prev.filter(t => t.id !== id));
+    setSavedToons(prev => prev.filter(t => String(t.id) !== String(id)));
 
     // Explicitly update via background to avoid race conditions with status broadcasts
     browser.runtime.sendMessage({ type: 'REMOVE_TOON', toonId: id }).then(res => {
@@ -1762,6 +1807,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               toonTrackerData={toonTrackerData}
               activeInstances={activeInstances}
               savedToons={savedToons}
+              customOrder={pickerToonOrder}
               selectedToonId={selectedToonId}
               isDropdownOpen={isDropdownOpen}
               dropdownRef={dropdownRef}
@@ -2002,6 +2048,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         toonTrackerData={toonTrackerData}
         activeInstances={activeInstances}
         savedToons={savedToons}
+        customOrder={pickerToonOrder}
         selectedToonId={selectedToonId}
         isDropdownOpen={isDropdownOpen}
         dropdownRef={dropdownRef}

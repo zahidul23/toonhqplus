@@ -6,6 +6,7 @@ import { GagCalculator } from './GagCalculator';
 import { AboutTabContent } from './AboutTab';
 import { ToonTrackerTab } from './ToonTrackerTab';
 import { getSetting, getSettings, setSetting } from './db';
+import { normalizeToonOrderSetting } from './toonOrder';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2442,8 +2443,8 @@ function BookHeader({ activeTab }: { activeTab: InfoBookTab }) {
 
   useEffect(() => {
     const refreshCustomOrder = () => {
-      getSetting<string[] | null>('tracker-toon-order')
-        .then(order => setHasCustomToonOrder(Array.isArray(order)))
+      getSetting<unknown>('tracker-toon-order')
+        .then(order => setHasCustomToonOrder(normalizeToonOrderSetting(order) !== null))
         .catch(console.error);
     };
     refreshCustomOrder();

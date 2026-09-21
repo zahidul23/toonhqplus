@@ -5,6 +5,7 @@ import type { ToonTrackerData } from './sidebar.content/tracker';
 import type { RewardChange, RewardHistoryEntry } from './sidebar.content/trackerUtils';
 import { createRewardNotificationIcon } from './lib/rewardNotificationIcon';
 import { formatSosReward } from './sidebar.content/sosData';
+import { normalizeToonOrderSetting, reconcileToonOrder } from './sidebar.content/toonOrder';
 import {
   analyzeExtensionStorageMerge,
   mergeIndexedDatabases,
@@ -19,6 +20,13 @@ import {
 const VIEW_TOON_STYLE_CONTEXT_MENU_ID = 'view-toon-style';
 const TTR_RENDITION_ORIGIN = 'https://rendition.toontownrewritten.com';
 const UPDATE_ACTIVATION_PENDING_KEY = 'toonhqplus-update-activation-pending';
+
+async function reconcileStoredToonOrder(toonIds: Iterable<string | number>): Promise<void> {
+  const stored = await getSetting<unknown>('tracker-toon-order');
+  const normalized = normalizeToonOrderSetting(stored);
+  if (!normalized) return;
+  await setSetting('tracker-toon-order', reconcileToonOrder(normalized, toonIds));
+}
 
 function getToonStyleUrl(sourceUrl: string): string | null {
   try {
@@ -437,7 +445,9 @@ export default defineBackground(() => {
             } else {
               updated = [...list, updatedToon];
             }
-            setSetting('tracker-toon-list', updated).catch(console.error);
+            setSetting('tracker-toon-list', updated)
+              .then(() => reconcileStoredToonOrder(updated.map(toon => toon.id)))
+              .catch(console.error);
           });
 
           if (!primaryPort) {
@@ -710,13 +720,14 @@ export default defineBackground(() => {
       setSetting('last-tracker-toon-id', message.toonId).catch(console.error);
       sendResponse({ success: true });
     } else if (message.type === 'REMOVE_TOON') {
-      getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(list => {
-        const updated = (list || []).filter(t => t.id !== message.toonId);
-        setSetting('tracker-toon-list', updated).then(() => {
-          broadcastStatus();
-          sendResponse({ success: true });
-        });
-      });
+      getSetting<{ id: string; name: string; style: string; laff: number }[]>('tracker-toon-list').then(async list => {
+        const removedToonId = String(message.toonId);
+        const updated = (list || []).filter(t => String(t.id) !== removedToonId);
+        await setSetting('tracker-toon-list', updated);
+        await reconcileStoredToonOrder(updated.map(toon => toon.id));
+        broadcastStatus();
+        sendResponse({ success: true });
+      }).catch(error => sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }));
       return true;
     } else if (message.type === 'EXPORT_EXTENSION_STORAGE') {
       exportExtensionStorage(message.includeFullToonCache === true).then((snapshot) => {
