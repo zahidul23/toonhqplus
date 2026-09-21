@@ -5,7 +5,7 @@ import { GagCalculator } from './GagCalculator';
 
 import { AboutTabContent } from './AboutTab';
 import { ToonTrackerTab } from './ToonTrackerTab';
-import { getSetting, getSettings } from './db';
+import { getSetting, getSettings, setSetting } from './db';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2438,6 +2438,23 @@ function OpenBookButton({ onClick, sidebarOnLeft }: { onClick: () => void; sideb
 
 function BookHeader({ activeTab }: { activeTab: InfoBookTab }) {
   const isCalculatorTab = activeTab === 'gag_calc' || activeTab === 'cog_calc' || activeTab === 'boiler_calc';
+  const [hasCustomToonOrder, setHasCustomToonOrder] = useState(false);
+
+  useEffect(() => {
+    const refreshCustomOrder = () => {
+      getSetting<string[] | null>('tracker-toon-order')
+        .then(order => setHasCustomToonOrder(Array.isArray(order)))
+        .catch(console.error);
+    };
+    refreshCustomOrder();
+
+    const handleDbChange = (event: Event) => {
+      const { store, key } = (event as CustomEvent).detail || {};
+      if (store === 'settings' && key === 'tracker-toon-order') refreshCustomOrder();
+    };
+    window.addEventListener('toonhqplus-db-changed', handleDbChange);
+    return () => window.removeEventListener('toonhqplus-db-changed', handleDbChange);
+  }, []);
 
   return (
     <div className="flex items-center gap-4 border-b border-[#0a2e1d]/80 bg-[#10462d] px-4 py-3">
@@ -2445,6 +2462,27 @@ function BookHeader({ activeTab }: { activeTab: InfoBookTab }) {
         <BookIcon className="text-emerald-300" isOpen={null} />
         <h3 className="text-base font-bold">Shticker Book</h3>
       </div>
+      {activeTab === 'toons' && hasCustomToonOrder && (
+        <div className="ml-8 flex items-center gap-2">
+          <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">
+            Custom order
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setHasCustomToonOrder(false);
+              window.dispatchEvent(new CustomEvent('toonhqplus-toon-order-reset'));
+              setSetting('tracker-toon-order', null).catch(error => {
+                console.error(error);
+                setHasCustomToonOrder(true);
+              });
+            }}
+            className="cursor-pointer rounded-lg border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-bold text-emerald-100/80 transition-colors hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-white"
+          >
+            Reset order
+          </button>
+        </div>
+      )}
       {isCalculatorTab && (
         <span className="text-sm font-semibold text-emerald-100 ml-4">
           Visit{' '}
@@ -2795,7 +2833,7 @@ export function ShtickerBook({
                 onClose={closeBook}
               />
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+              <div className={`flex-1 overflow-y-auto custom-scrollbar ${activeTab === 'toons' ? 'py-2' : 'p-4'}`}>
                 {activeTab === 'facilities' && (
                   <FacilitiesTabContent activeFacility={activeFacility} setActiveFacility={setActiveFacility} />
                 )}

@@ -12,6 +12,7 @@ import {
   isDeepEqual
 } from './trackerUtils';
 import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerUtils';
+import { orderTrackerToons } from './toonOrder';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -244,7 +245,7 @@ interface ToonHeaderProps {
   dropdownRef: React.Ref<HTMLDivElement>;
   toggleDropdown: (e: React.MouseEvent) => void;
   selectToon: (id: string | number) => void;
-  removeSavedToon: (e: React.MouseEvent, id: string) => void;
+  removeSavedToon: (e: React.MouseEvent, id: string, name?: string) => void;
   startSync: (port?: string) => void;
   trackerEnabled: boolean | undefined;
 }
@@ -372,7 +373,7 @@ const ToonHeader = React.memo(({
                         <img src={`https://rendition.toontownrewritten.com/render/${t.style}/portrait/256x256.webp`} alt={t.name} className="w-full h-full object-contain scale-[1.3] grayscale opacity-50" />
                       </div>
                       <span className={`flex-1 text-[11.5px] font-bold truncate ${selectedToonId === t.id ? 'text-emerald-400' : 'text-white/60'}`}>{t.name}</span>
-                      <button onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id); }} className="p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
+                      <button aria-label={`Delete ${t.name}`} title="Delete saved toon" onMouseDown={(e) => { e.stopPropagation(); removeSavedToon(e as any, t.id, t.name); }} className="cursor-pointer p-1.5 opacity-0 group-hover/item:opacity-100 hover:text-red-400 transition-all text-white/30 hover:bg-red-500/10 rounded pointer-events-auto">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                       </button>
                     </div>
@@ -946,20 +947,20 @@ const ToonSuitsView = React.memo(({
   expandedSuitId?: string | null;
   setExpandedSuitId?: (id: string | null) => void;
 }) => {
-  if (!cogsuits) return null;
+  if (!cogsuits && !condensed) return null;
 
-  const suits = Object.entries(cogsuits).filter(([_, suit]) => suit.hasDisguise);
+  const suits = Object.entries(cogsuits || {}).filter(([_, suit]) => suit.hasDisguise);
 
   if (suits.length === 0) {
     return (
-      <div className={`font-black text-white/20 uppercase tracking-widest ${condensed ? 'text-[11px] col-span-2' : 'text-xs py-4'}`}>
+      <div className={`font-black text-white/20 uppercase tracking-widest ${condensed ? 'flex min-w-0 items-center border-l border-white/10 px-4 text-[11px]' : 'text-xs py-4'}`}>
         No Disguises
       </div>
     );
   }
 
   return (
-    <div className={condensed ? "grid grid-cols-2 gap-2 flex-1 min-w-[280px] px-4 border-l border-white/10" : `animate-in fade-in slide-in-from-top-1 duration-200 ${isExpanded ? 'grid grid-cols-2 gap-3' : 'space-y-3'}`}>
+    <div className={condensed ? "grid w-full min-w-0 content-start items-start grid-cols-2 gap-2 border-l border-white/10 px-4" : `animate-in fade-in slide-in-from-top-1 duration-200 ${isExpanded ? 'grid grid-cols-2 gap-3' : 'space-y-3'}`}>
       {suits.map(([id, suit]) => {
         const dept = (suit.department.toLowerCase().endsWith('bot') ? suit.department.toLowerCase().slice(0, -3) : suit.department.toLowerCase()) as keyof typeof DEPT_COLORS;
         const colors = DEPT_COLORS[dept] || DEFAULT_COLORS;
@@ -1049,9 +1050,88 @@ const ToonSuitsView = React.memo(({
   );
 });
 
-const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: { savedToons: any[], activeInstances: any[], selectToon: (id: string) => void }) => {
+const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, removeSavedToon }: { savedToons: any[], activeInstances: any[], selectToon: (id: string) => void, removeSavedToon: (event: React.MouseEvent, id: string, name?: string) => void }) => {
   const [toonsData, setToonsData] = useState<Record<string, { data: ToonTrackerData, history: RewardHistoryEntry[] }>>({});
   const [liveLaff, setLiveLaff] = useState<Record<string, ToonTrackerData['data']['laff']>>({});
+  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
+  const [draggedToonId, setDraggedToonId] = useState<string | null>(null);
+  const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    const refreshCustomOrder = () => {
+      getSetting<string[] | null>('tracker-toon-order').then(order => {
+        setCustomOrder(Array.isArray(order) ? order.map(String) : null);
+      }).catch(console.error);
+    };
+    refreshCustomOrder();
+
+    const handleDbChange = (event: Event) => {
+      const { store, key } = (event as CustomEvent).detail || {};
+      if (store === 'settings' && key === 'tracker-toon-order') refreshCustomOrder();
+    };
+    const handleOrderReset = () => setCustomOrder(null);
+    window.addEventListener('toonhqplus-db-changed', handleDbChange);
+    window.addEventListener('toonhqplus-toon-order-reset', handleOrderReset);
+    return () => {
+      window.removeEventListener('toonhqplus-db-changed', handleDbChange);
+      window.removeEventListener('toonhqplus-toon-order-reset', handleOrderReset);
+    };
+  }, []);
+
+  const orderedToons = useMemo(() => orderTrackerToons(
+    savedToons,
+    activeInstances.map(instance => String(instance.toonId)),
+    customOrder,
+  ), [savedToons, activeInstances, customOrder]);
+  const firstOfflineToonIndex = orderedToons.findIndex(toon =>
+    !activeInstances.some(instance => String(instance.toonId) === String(toon.id))
+  );
+
+  const persistReorderAtIndex = useCallback((draggedId: string, targetIndex: number) => {
+    const visibleOrder = orderedToons.map(toon => String(toon.id));
+    const sourceIndex = visibleOrder.indexOf(draggedId);
+    if (sourceIndex < 0) return;
+    const nextOrder = visibleOrder.filter(id => id !== draggedId);
+    const adjustedIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+    nextOrder.splice(Math.max(0, Math.min(adjustedIndex, nextOrder.length)), 0, draggedId);
+    if (nextOrder.every((id, index) => id === visibleOrder[index])) return;
+    setCustomOrder(nextOrder);
+    setSetting('tracker-toon-order', nextOrder).catch(console.error);
+  }, [orderedToons]);
+
+  const renderDropZone = (index: number) => {
+    if (draggedToonId) {
+      const sourceIndex = orderedToons.findIndex(toon => String(toon.id) === draggedToonId);
+      if (index === sourceIndex || index === sourceIndex + 1) return <div className="h-1" />;
+    }
+    const isActive = draggedToonId !== null && dragTargetIndex === index;
+    return (
+      <div
+        onDragEnter={(event) => {
+          if (!draggedToonId) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setDragTargetIndex(index);
+        }}
+        onDragOver={(event) => {
+          if (!draggedToonId) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = 'move';
+          setDragTargetIndex(index);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const toonId = event.dataTransfer.getData('text/plain') || draggedToonId;
+          if (toonId) persistReorderAtIndex(toonId, index);
+          setDraggedToonId(null);
+          setDragTargetIndex(null);
+        }}
+        className={`ml-1.5 shrink-0 rounded-lg transition-all duration-200 ${isActive ? 'my-1 h-10 border-2 border-dashed border-emerald-400/50 bg-emerald-500/20 shadow-[inset_0_0_18px_rgba(16,185,129,0.08)]' : 'h-1'}`}
+      />
+    );
+  };
 
   useEffect(() => {
     savedToons.forEach(toon => {
@@ -1080,11 +1160,20 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar px-4 h-full animate-in fade-in slide-in-from-right-4 duration-300">
-      {savedToons.length > 0 ? [...savedToons].sort((a, b) => {
-        if (b.laff !== a.laff) return b.laff - a.laff;
-        return a.name.localeCompare(b.name);
-      }).map(toon => {
+    <div
+      className="flex-1 flex flex-col overflow-y-auto custom-scrollbar px-2 h-full animate-in fade-in slide-in-from-right-4 duration-300"
+      onDragOver={(event) => {
+        if (event.target === event.currentTarget) setDragTargetIndex(null);
+      }}
+      onDragLeave={(event) => {
+        const nextTarget = event.relatedTarget as Node | null;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const cursorOutside = event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
+        if (cursorOutside || (nextTarget && !event.currentTarget.contains(nextTarget))) setDragTargetIndex(null);
+      }}
+    >
+      {savedToons.length > 0 ? <>
+        {orderedToons.map((toon, toonIndex) => {
         const toonRes = toonsData[toon.id];
         const data = toonRes?.data;
         const isActive = activeInstances.some(inst => String(inst.toonId) === String(toon.id));
@@ -1110,13 +1199,70 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
         ];
 
         return (
-          <div key={toon.id} onClick={() => {
+          <React.Fragment key={toon.id}>
+          {toonIndex === firstOfflineToonIndex && firstOfflineToonIndex > 0 && (
+            <div className="my-2 ml-1.5 h-px bg-emerald-300/15" aria-hidden="true" />
+          )}
+          {renderDropZone(toonIndex)}
+          <div
+            draggable
+            onDragStart={(event) => {
+              const toonId = String(toon.id);
+              setDraggedToonId(toonId);
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', toonId);
+            }}
+            onDragOver={(event) => {
+              if (!draggedToonId || draggedToonId === String(toon.id)) return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = 'move';
+              const bounds = event.currentTarget.getBoundingClientRect();
+              setDragTargetIndex(event.clientY < bounds.top + bounds.height / 2 ? toonIndex : toonIndex + 1);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const toonId = event.dataTransfer.getData('text/plain') || draggedToonId;
+              if (toonId) {
+                const bounds = event.currentTarget.getBoundingClientRect();
+                persistReorderAtIndex(toonId, event.clientY < bounds.top + bounds.height / 2 ? toonIndex : toonIndex + 1);
+              }
+              setDraggedToonId(null);
+              setDragTargetIndex(null);
+            }}
+            onDragEnd={() => { setDraggedToonId(null); setDragTargetIndex(null); }}
+            onClick={() => {
             selectToon(toon.id);
             window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', { detail: { tab: 'toon_tracker' } }));
-          }} className="relative flex items-center gap-4 bg-slate-950/40 rounded-xl border border-white/5 p-4 hover:bg-white/5 cursor-pointer transition-colors shadow-lg group">
+          }} className={`relative ml-1.5 grid grid-cols-[minmax(0,3fr)_minmax(280px,4fr)_minmax(0,3fr)_auto] items-stretch gap-0 bg-slate-950/40 rounded-xl border px-3 py-4 hover:bg-white/5 cursor-grab active:cursor-grabbing transition-all duration-200 shadow-lg group ${draggedToonId === String(toon.id) ? 'scale-[0.97] border-emerald-400/30 opacity-20 shadow-none' : 'border-white/5 opacity-100'}`}>
 
-            <div className="flex flex-col min-w-[300px] max-w-[320px] shrink-0 gap-3">
-              <div className="flex items-center gap-2 w-full">
+            <button
+              type="button"
+              aria-label={`Reorder ${toon.name}`}
+              title="Drag to reorder"
+              onClick={(event) => event.stopPropagation()}
+              className="absolute -left-3 top-1/2 z-10 flex h-9 w-6 -translate-y-1/2 cursor-grab items-center justify-center rounded-md border border-emerald-300/30 bg-[#0c3622] text-emerald-100 opacity-0 shadow-[0_4px_12px_rgba(0,0,0,0.65)] transition-all duration-200 hover:bg-[#145837] group-hover:opacity-100 active:cursor-grabbing"
+            >
+              <svg aria-hidden="true" width="10" height="16" viewBox="0 0 14 22" fill="currentColor">
+                <circle cx="3" cy="4" r="1.5" /><circle cx="11" cy="4" r="1.5" />
+                <circle cx="3" cy="11" r="1.5" /><circle cx="11" cy="11" r="1.5" />
+                <circle cx="3" cy="18" r="1.5" /><circle cx="11" cy="18" r="1.5" />
+              </svg>
+            </button>
+
+            <div className="relative flex min-w-0 flex-col gap-3 pr-4">
+              <button
+                type="button"
+                aria-label={`Delete ${toon.name}`}
+                title="Delete saved toon"
+                onClick={(event) => removeSavedToon(event, String(toon.id), toon.name)}
+                onDragStart={(event) => event.stopPropagation()}
+                className="absolute right-0 top-0 z-10 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent text-white/30 opacity-0 transition-all duration-200 hover:border-red-400/30 hover:bg-[#0c3622] hover:text-red-400 hover:shadow-[0_3px_10px_rgba(0,0,0,0.55)] group-hover:opacity-100"
+              >
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="m19 6-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></svg>
+              </button>
+              <div className="flex items-center gap-2 w-full pr-8">
                 <span className={`flex rounded-full shrink-0 ${isActive ? 'w-2.5 h-2.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' : 'w-2 h-2 bg-white/10'}`} title={isActive ? 'Active' : 'Offline'}></span>
                 <span className={`text-[13px] font-bold truncate transition-colors ${isActive ? 'text-emerald-400' : 'text-white/80 group-hover:text-white'}`}>{toon.name} <span className={isActive ? getLaffColorClass(currentLaff, maxLaff) : 'text-white/40'}>({currentLaff}/{maxLaff})</span></span>
               </div>
@@ -1153,7 +1299,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
 
             <ToonSuitsView cogsuits={data?.data?.cogsuits} condensed />
 
-            <div className="flex flex-col gap-1.5 w-[250px] shrink-0 border-l border-white/10 pl-4 h-full min-h-[90px] justify-center">
+            <div className="flex min-w-0 flex-col gap-1.5 border-l border-white/10 pl-4 h-full min-h-[90px] justify-center">
               {data?.data?.tasks && data.data.tasks.length > 0 ? (
                 <>
                   {data.data.tasks.slice(0, 4).map((task: any, i: number) => {
@@ -1179,12 +1325,15 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon }: {
               )}
             </div>
 
-            <div className="shrink-0 pl-3">
+            <div className="flex shrink-0 items-center pl-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white/20 group-hover:text-white/60 transition-colors group-hover:translate-x-1"><path d="m9 18 6-6-6-6" /></svg>
             </div>
           </div>
+          </React.Fragment>
         );
-      }) : (
+      })}
+      {renderDropZone(orderedToons.length)}
+      </> : (
         <div className="flex-1 flex flex-col items-center justify-center opacity-40 gap-4">
           <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -1542,8 +1691,12 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     }
   }, [isDropdownOpen]);
 
-  const removeSavedToon = useCallback((e: React.MouseEvent, id: string) => {
+  const removeSavedToon = useCallback((e: React.MouseEvent, id: string, name?: string) => {
     e.stopPropagation();
+    e.preventDefault();
+
+    const toonName = name || savedToons.find(toon => String(toon.id) === String(id))?.name || 'this toon';
+    if (!window.confirm(`Delete ${toonName} from your synced toons?\n\nIts locally synced tracker data will no longer appear here.`)) return;
 
     // Update local state immediately for snappy UI
     setSavedToons(prev => prev.filter(t => t.id !== id));
@@ -1555,7 +1708,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         setToonTrackerData(null);
       }
     });
-  }, [selectedToonId]);
+  }, [selectedToonId, savedToons]);
 
   const selectToon = useCallback((id: string | number) => {
     const stringId = String(id);
@@ -1834,7 +1987,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   if (subView === 'toons') {
     return (
       <section key="toons-list" className="flex-1 flex flex-col overflow-hidden h-full">
-        <ToonsListView savedToons={savedToons} activeInstances={activeInstances} selectToon={(id) => {
+        <ToonsListView savedToons={savedToons} activeInstances={activeInstances} removeSavedToon={removeSavedToon} selectToon={(id) => {
           selectToon(id);
           window.dispatchEvent(new CustomEvent('toonhqplus-open-shtickerbook', { detail: { tab: 'toon_tracker' } }));
         }} />
