@@ -6,6 +6,9 @@ const API_CACHE_KEY = 'toonhqplus-cavalcade-api';
 const API_CACHE_TTL = 15_000;
 const API_TIMEOUT_MS = 5_000;
 const STORAGE_KEY = 'toonhqplus-last-cavalcade';
+// Final start and existing end-check limit, in Pacific daylight time.
+const FINAL_START = Date.parse('2026-10-20T23:30:00-07:00');
+const FINAL_CUTOFF = Date.parse('2026-10-20T23:45:00-07:00');
 
 type Street = { name: string; playground: string; icon: string };
 type ApiResponse = { paradeStatus: string; paradeLocation: number; paradeLocationString: string };
@@ -75,11 +78,15 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 
 async function fetchWithTimeout(fetcher: Fetcher, input: RequestInfo | URL, init?: RequestInit) {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  init?.signal?.addEventListener('abort', abort, { once: true });
+  if (init?.signal?.aborted) controller.abort();
   const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
     return await fetcher(input, { ...init, signal: controller.signal });
   } finally {
     window.clearTimeout(timeout);
+    init?.signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -145,6 +152,12 @@ function ensureStyles() {
 }
 
 export function startCavalcadeBanner() {
+  if (Date.now() >= FINAL_CUTOFF) return () => {};
+  let stopped = false;
+  const requests = new AbortController();
+  let timer: number | undefined;
+  let storageTimer: number | undefined;
+  let observer: MutationObserver | undefined;
   ensureStyles();
   let apiData: ApiResponse | null = null;
   let apiDataCycle = '';
@@ -175,7 +188,20 @@ export function startCavalcadeBanner() {
   banner.setAttribute('role', 'status');
   banner.setAttribute('aria-live', 'polite');
 
+  const stop = () => {
+    stopped = true;
+    requests.abort();
+    window.clearInterval(timer);
+    window.clearInterval(storageTimer);
+    observer?.disconnect();
+    banner.remove();
+    document.querySelector('style[data-toonhq-plus-cavalcade]')?.remove();
+  };
+  const expired = () => stopped || Date.now() >= FINAL_CUTOFF
+    || (Date.now() >= FINAL_START && endedCycle === '2026-10-20T23:30');
+
   const attach = () => {
+    if (expired()) { stop(); return; }
     const subnav = document.querySelector<HTMLElement>('.subnav-wrapper, .subnav');
     const anchor = subnav?.closest<HTMLElement>('.subnav-wrapper') || subnav;
     if (!anchor) return;
@@ -197,7 +223,7 @@ export function startCavalcadeBanner() {
   };
 
   const fetchStatus = async (cycle: string, minute: number, announcedAt: number) => {
-    if (requestInFlight) return;
+    if (expired() || requestInFlight) return;
     const sharedLast = readLast();
     if (minute >= 25 && minute < 38 && isCurrentCycleLocation(sharedLast, cycle, announcedAt)) {
       last = sharedLast;
@@ -218,9 +244,11 @@ export function startCavalcadeBanner() {
         const response = await fetchWithTimeout(pageFetch, API_URL, {
           cache: 'no-cache',
           credentials: 'omit',
+          signal: requests.signal,
         });
         if (!response.ok) return;
         data = await response.json() as ApiResponse;
+        if (expired()) return;
         const lastModified = Date.parse(response.headers.get('last-modified') || '');
         sourceUpdatedAt = Number.isFinite(lastModified) ? lastModified : undefined;
         saveApiCache(data, cycle, sourceUpdatedAt);
@@ -249,6 +277,7 @@ export function startCavalcadeBanner() {
       if (minute >= 38 && minute < 45 && data.paradeStatus !== 'active') {
         endedCycle = cycle;
         saveEnded(cycle);
+        if (expired()) stop();
       }
     } catch (error) {
       console.warn('[ToonHQ+] Failed to refresh Cavalcade status:', error);
@@ -258,12 +287,13 @@ export function startCavalcadeBanner() {
   };
 
   const fetchFallback = async (cycle: string, announcedAt: number) => {
-    if (fallbackAttemptedCycle === cycle || isCurrentCycleLocation(readLast(), cycle, announcedAt)) return;
+    if (expired() || fallbackAttemptedCycle === cycle || isCurrentCycleLocation(readLast(), cycle, announcedAt)) return;
     fallbackAttemptedCycle = cycle;
     try {
-      const response = await fetchWithTimeout(fetch, FALLBACK_API_URL, { cache: 'no-store' });
+      const response = await fetchWithTimeout(fetch, FALLBACK_API_URL, { cache: 'no-store', signal: requests.signal });
       if (!response.ok) return;
       const result = await response.json() as FallbackResponse;
+      if (expired()) return;
       const remote = result.data;
       if (!remote || getPacificTime(new Date(remote.cycleKey)).cycle !== cycle) return;
       const mapped = STREETS[remote.locationId];
@@ -285,6 +315,7 @@ export function startCavalcadeBanner() {
   };
 
   const render = () => {
+    if (expired()) { stop(); return; }
     attach();
     const now = getPacificTime(new Date());
     const cycle = getCycleKey(now);
@@ -361,8 +392,10 @@ export function startCavalcadeBanner() {
   };
 
   render();
-  const timer = window.setInterval(render, 250);
-  const storageTimer = window.setInterval(() => {
+  if (stopped) return stop;
+  timer = window.setInterval(render, 250);
+  storageTimer = window.setInterval(() => {
+    if (expired()) { stop(); return; }
     const now = getPacificTime(new Date());
     const cycle = getCycleKey(now);
     const sharedLast = readLast();
@@ -373,14 +406,8 @@ export function startCavalcadeBanner() {
     last = sharedLast;
     knownLocation = sharedLast;
   }, 3_000);
-  const observer = new MutationObserver(attach);
+  observer = new MutationObserver(attach);
   observer.observe(document.body, { childList: true, subtree: true });
 
-  return () => {
-    window.clearInterval(timer);
-    window.clearInterval(storageTimer);
-    observer.disconnect();
-    banner.remove();
-    document.querySelector('style[data-toonhq-plus-cavalcade]')?.remove();
-  };
+  return stop;
 }
