@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
 import { calculateRoundAccuracy as calculateRoundAccuracyCore } from './cogAccuracy';
 import { wakeRemoteControlledCog } from './remoteRules';
-import { applyDefenseUp } from './facilityDamage';
+import { applyDefenseUp, getFacilityDefenseDownStacks } from './facilityDamage';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
 
@@ -963,12 +963,13 @@ export function CogCalculator() {
         : 0;
       const isBullMarketActive = bullMarketMultiplier > 0;
 
-      const deadCogsCountAtStart = cogStates.filter(s => s.layer === 0).length;
-
       const getDefenseDownStacks = (cog: Cog) => {
-        const isPresident = cog.id === 'golf_fairway' || cog.id === 'golf_fringe';
-        if (isPresident && deadCogsCountAtStart > 0) return deadCogsCountAtStart;
-        return cog.isDefenseDown ? 3 : 0;
+        // Earlier tracks can defeat Cogs and buff later tracks in this round.
+        return getFacilityDefenseDownStacks(
+          cog.id,
+          cogStates.map(state => state.layer),
+          !!cog.isDefenseDown,
+        );
       };
 
       const trackOrder = ['special', 'trap', 'lure', 'sound', 'throw', 'squirt', 'drop'];
@@ -976,6 +977,9 @@ export function CogCalculator() {
       trackOrder.forEach(trackId => {
         const gagsInTrack = selectedGags.filter(g => g?.trackId === trackId);
         if (gagsInTrack.length === 0) return;
+        const hasRailroadConflict = trackId === 'trap'
+          && gagsInTrack.length > 1
+          && gagsInTrack.some(gag => gag?.gagIndex === 6);
 
         const hitCounts = Array(currentCogCount).fill(0);
         const trackBaseDamages = Array(currentCogCount).fill(0);
@@ -1058,7 +1062,7 @@ export function CogCalculator() {
 
             if (trackId === 'trap') {
               const isRailroad = gag.gagIndex === 6;
-              if (hitCounts[cogIdx] > 1) {
+              if (hasRailroadConflict || hitCounts[cogIdx] > 1) {
                 // More than 1 trap on the same turn cancels everything out (including previous traps)
                 cog.isTrapped = false;
                 trapDamageOnCog[cogIdx] = 0;

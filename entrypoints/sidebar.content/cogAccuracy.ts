@@ -92,6 +92,36 @@ function isRemoteControlled(roundGags: AccuracyGag[], cog: AccuracyCog, cogIndex
     && (gag.target === 'all' || gag.targetIdx === cogIndex));
 }
 
+function getTrapPhaseState(roundGags: AccuracyGag[], cog: AccuracyCog, cogIndex: number) {
+  const allSelectedTraps = roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag
+    && gag.trackId === 'trap');
+  const targetedTraps = roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag
+    && gag.trackId === 'trap'
+    && (gag.target === 'all' || gag.targetIdx === cogIndex));
+
+  if (targetedTraps.length === 0) return { trapped: cog.isTrapped, lured: cog.isLured };
+  // Railroad is one indivisible group placement. If any other Trap is used
+  // with it, the entire Railroad combination cancels rather than leaving
+  // Railroad active on the non-overlapping Cogs.
+  if (allSelectedTraps.length > 1 && allSelectedTraps.some((trap) => trap.gagIndex === 6)) {
+    return { trapped: false, lured: cog.isLured };
+  }
+  // Multiple Trap gags aimed at the same Cog cancel one another without
+  // waking a Cog that was already lured. Unlike Railroad, an all-target Trap
+  // SOS still applies normally to its non-overlapping Cogs.
+  if (targetedTraps.length > 1) return { trapped: false, lured: cog.isLured };
+
+  const trap = targetedTraps[0];
+  if (trap.gagIndex === 6) {
+    // Railroad overrides both carried Traps and carried Lure.
+    return { trapped: true, lured: false };
+  }
+  // Trap SOS cards (and ordinary single-target Traps) only place on a Cog
+  // with a vacant Trap spot; they do not wake an already-lured Cog.
+  if (!cog.isLured && !cog.isTrapped) return { trapped: true, lured: false };
+  return { trapped: cog.isTrapped, lured: cog.isLured };
+}
+
 function getGroupInheritedStunBonus(roundGags: AccuracyGag[], roundCogs: AccuracyCog[], trackId: string) {
   const currentTrackIndex = ACCURACY_TRACK_ORDER.indexOf(trackId as (typeof ACCURACY_TRACK_ORDER)[number]);
   if (currentTrackIndex <= 0) return 0;
@@ -103,10 +133,9 @@ function getGroupInheritedStunBonus(roundGags: AccuracyGag[], roundCogs: Accurac
   const lures = previousTracks.has('lure')
     ? roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag && gag.trackId === 'lure')
     : [];
-  const selectedTraps = roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag && gag.trackId === 'trap');
   const activatedTrapTargetCount = roundCogs.filter((cog, cogIndex) => {
     if (cog.isDead || !lures.some((lure) => lure.target === 'all' || lure.targetIdx === cogIndex)) return false;
-    return cog.isTrapped || selectedTraps.some((trap) => trap.target === 'all' || trap.targetIdx === cogIndex);
+    return getTrapPhaseState(roundGags, cog, cogIndex).trapped;
   }).length;
   const ordinaryStunBonus = roundGags
     .filter((gag): gag is NonNullable<AccuracyGag> => !!gag
@@ -134,11 +163,10 @@ function getLuredRatioBonus(roundGags: AccuracyGag[], roundCogs: AccuracyCog[], 
         && gag.trackId === priorTrack
         && isTargeted(gag, cogIndex));
       if (!targetedGags.length) continue;
-      if (priorTrack === 'lure') {
-        const hasPlacedTrap = roundGags.some((gag): gag is NonNullable<AccuracyGag> => !!gag
-          && gag.trackId === 'trap'
-          && isTargeted(gag, cogIndex));
-        lured = !(cog.isTrapped || hasPlacedTrap);
+      if (priorTrack === 'trap') {
+        lured = getTrapPhaseState(roundGags, cog, cogIndex).lured;
+      } else if (priorTrack === 'lure') {
+        lured = !getTrapPhaseState(roundGags, cog, cogIndex).trapped;
       } else if (priorTrack === 'sound' || priorTrack === 'throw' || priorTrack === 'squirt') {
         lured = false;
       }
@@ -156,7 +184,8 @@ export function calculateRoundAccuracy(
   getCogName: (cog: AccuracyCog, index: number) => string = (_cog, index) => `Cog ${index + 1}`,
 ) {
   const perCog: RoundCogAccuracy[] = [];
-  const carriedTrapCount = roundCogs.filter((cog) => !cog.isDead && cog.isTrapped).length;
+  const trapPhaseStates = roundCogs.map((cog, cogIndex) => getTrapPhaseState(roundGags, cog, cogIndex));
+  const placedTrapCount = roundCogs.filter((cog, cogIndex) => !cog.isDead && trapPhaseStates[cogIndex].trapped).length;
   const groupTargetTracks = new Set(roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag && gag.target === 'all').map((gag) => gag.trackId));
   const mixedTrackSourceTargets = new Map<string, Set<number>>();
   groupTargetTracks.forEach((trackId) => {
@@ -174,6 +203,7 @@ export function calculateRoundAccuracy(
     const entries: CogAccuracyEntry[] = [];
     let stunBonus = 0;
     let lured = !!cog.isLured;
+    const trapPhaseState = trapPhaseStates[cogIndex];
     for (const trackId of ACCURACY_TRACK_ORDER) {
       const trackGags = targetedGags.filter((gag) => gag.trackId === trackId);
       if (!trackGags.length) continue;
@@ -185,12 +215,14 @@ export function calculateRoundAccuracy(
       const baseline = baselineCandidates.reduce((highest, gag) => gag.gagIndex > highest.gagIndex ? gag : highest);
       const baseAccuracy = TRACK_BASE_ACCURACY[trackId]?.[baseline.gagIndex] ?? 100;
       const organicBonus = trackId === 'lure' && baseline.variant === 'organic' ? 10 : 0;
-      const targetedTraps = roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag && gag.trackId === 'trap' && (gag.target === 'all' || gag.targetIdx === cogIndex));
-      const allRoundTraps = roundGags.filter((gag): gag is NonNullable<AccuracyGag> => !!gag && gag.trackId === 'trap');
+      // In a mixed single/group Lure track, the single-target gag supplies the
+      // shared accuracy roll. Its Trap bonus therefore comes only from the
+      // Trap on that gag's target, not every Trap covered by the group Lure.
+      const lureAffectsGroup = trackId === 'lure' && baseline.target === 'all';
       const trapBonusCount = trackId === 'lure'
-        ? (hasGroupGag ? allRoundTraps.length + carriedTrapCount : targetedTraps.length + Number(cog.isTrapped))
+        ? (lureAffectsGroup ? placedTrapCount : Number(trapPhaseState.trapped))
         : 0;
-      const trapPlacementBonus = trapBonusCount > 0 ? 10 + (hasGroupGag ? (trapBonusCount - 1) * 5 : 0) : 0;
+      const trapPlacementBonus = trapBonusCount > 0 ? 10 + (lureAffectsGroup ? (trapBonusCount - 1) * 5 : 0) : 0;
       const lureBonus = trackId === 'lure' ? getAccuracyMultiLureBonus(trackGags, baseline) : 0;
       const receivesLuredRatio = trackId === 'sound'
         || ((trackId === 'throw' || trackId === 'squirt') && allTrackGags.some((gag) => gag.gagIndex === 6));
@@ -207,10 +239,11 @@ export function calculateRoundAccuracy(
       entries.push({ trackId, accuracy, baseAccuracy, organicBonus: specialRule ? 0 : organicBonus, defense: specialRule ? 0 : defense, stunBonus: specialRule || trackId === 'lure' ? 0 : inheritedStunBonus, trapPlacementBonus: specialRule ? 0 : trapPlacementBonus, lureBonus: specialRule ? 0 : lureBonus, luredRatio: specialRule ? 0 : luredRatio, rawAccuracy: specialRule ? accuracy : rawAccuracy, specialRule });
       if (accuracy > 0 && trackId !== 'trap' && trackId !== 'lure' && trackId !== 'special') stunBonus += trackGags.length * 25;
       if (trackId === 'lure' && accuracy > 0) {
-        if (cog.isTrapped || targetedTraps.length > 0) stunBonus += 50;
-        lured = !(cog.isTrapped || targetedTraps.length > 0);
+        if (trapPhaseState.trapped) stunBonus += 50;
+        lured = !trapPhaseState.trapped;
       }
-      if (trackId === 'trap' || trackId === 'sound' || trackId === 'throw' || trackId === 'squirt') lured = false;
+      if (trackId === 'trap') lured = trapPhaseState.lured;
+      if (trackId === 'sound' || trackId === 'throw' || trackId === 'squirt') lured = false;
     }
     perCog.push({ cogIndex, cogName: getCogName(cog, cogIndex), accuracy: entries.reduce((chance, entry) => chance * entry.accuracy / 100, 1) * 100, entries });
   });
@@ -275,4 +308,3 @@ export function calculateRoundAccuracy(
   });
   return { total: perCog.length ? totalChance * 100 : 0, perCog, factors };
 }
-

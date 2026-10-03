@@ -134,6 +134,65 @@ test('group Lure includes new and carried Traps in its placement bonus', () => {
   assert.equal(entry(result, 0, 'lure').trapPlacementBonus, 15);
 });
 
+test('Railroad places four Traps and gives group Lure the full placement bonus', () => {
+  const result = calculateRoundAccuracy(
+    [gag('trap', 6, 'all'), gag('lure', 6, 'all')],
+    [cog(), cog(), cog(), cog()],
+  );
+  assert.equal(entry(result, 0, 'lure').trapPlacementBonus, 25);
+});
+
+test('Railroad and a single-target Trap cancel the entire Railroad placement', () => {
+  const result = calculateRoundAccuracy(
+    [gag('trap', 6, 'all'), gag('trap', 5, 0), gag('lure', 6, 'all')],
+    [cog(), cog(), cog(), cog()],
+  );
+  assert.equal(entry(result, 0, 'lure').trapPlacementBonus, 0);
+});
+
+test('Trap SOS and a single-target Trap cancel only their overlapping Cog', () => {
+  const result = calculateRoundAccuracy(
+    [gag('trap', 5, 'all', 'sos'), gag('trap', 5, 0), gag('lure', 6, 'all')],
+    [cog(), cog(), cog(), cog()],
+  );
+  assert.equal(entry(result, 0, 'lure').trapPlacementBonus, 20);
+});
+
+test('single Lure precedence limits a mixed Lure track to its target Trap bonus', () => {
+  const result = calculateRoundAccuracy(
+    [gag('trap', 6, 'all'), gag('lure', 5, 'all'), gag('lure', 4, 0)],
+    [cog(), cog(), cog(), cog()],
+  );
+  assert.equal(entry(result, 0, 'lure').trapPlacementBonus, 10);
+  assert.equal(entry(result, 1, 'lure').trapPlacementBonus, 10);
+  assert.equal(result.factors.find((factor) => factor.label.includes('lure')).accuracy, entry(result, 0, 'lure').accuracy);
+});
+
+test('Railroad wakes previously lured Cogs before later accuracy checks', () => {
+  const result = calculateRoundAccuracy(
+    [gag('trap', 6, 'all'), gag('drop', 5, 0)],
+    [cog('20', { isLured: true }), cog()],
+  );
+  assert.notEqual(entry(result, 0, 'drop').accuracy, 0);
+  assert.doesNotMatch(entry(result, 0, 'drop').specialRule || '', /lured/i);
+});
+
+test('Trap SOS skips previously lured Cogs and preserves their Lure state', () => {
+  const cogs = [cog('20', { isLured: true }), cog(), cog(), cog()];
+  const lureResult = calculateRoundAccuracy(
+    [gag('trap', 5, 'all', 'sos'), gag('lure', 6, 'all')],
+    cogs,
+  );
+  assert.equal(entry(lureResult, 0, 'lure').trapPlacementBonus, 20);
+
+  const dropResult = calculateRoundAccuracy(
+    [gag('trap', 5, 'all', 'sos'), gag('drop', 5, 0)],
+    cogs,
+  );
+  assert.equal(entry(dropResult, 0, 'drop').accuracy, 0);
+  assert.match(entry(dropResult, 0, 'drop').specialRule, /always misses/i);
+});
+
 test('compatible multiple Lures add the historical multi-Lure bonus', () => {
   const result = calculateRoundAccuracy(
     [gag('lure', 3, 'all'), gag('lure', 5, 'all')],
