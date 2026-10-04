@@ -290,7 +290,11 @@ export function startCavalcadeBanner() {
     if (expired() || fallbackAttemptedCycle === cycle || isCurrentCycleLocation(readLast(), cycle, announcedAt)) return;
     fallbackAttemptedCycle = cycle;
     try {
-      const response = await fetchWithTimeout(fetch, FALLBACK_API_URL, { cache: 'no-store', signal: requests.signal });
+      const response = await fetchWithTimeout(pageFetch, FALLBACK_API_URL, {
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: requests.signal,
+      });
       if (!response.ok) return;
       const result = await response.json() as FallbackResponse;
       if (expired()) return;

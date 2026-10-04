@@ -7,11 +7,12 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.2.37',
-    date: 'Oct 2, 2026',
+    date: 'Oct 3, 2026',
     changes: [
       'Fix mid-round Defense Down updates in the Facilities Calculator for Club Presidents',
       'Fix Railroad cancellation with other Traps',
       'Fix Trap and Lure accuracy bonuses',
+      'Fix error fetching the Cavalcade last location on Firefox'
     ]
   },
   {
