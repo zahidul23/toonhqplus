@@ -51,6 +51,7 @@ export default defineBackground(() => {
   const TRACKED_PORTS = ['1547', '1548', '1549', '1550', '1551', '1552', '1553', '1554'];
   const failedPorts = new Set<string>();
   const connectingPorts = new Set<string>();
+  const pendingConnections = new Map<string, Promise<void>>();
   const intentionalDisconnectSockets = new WeakSet<WebSocket>();
   const TRACKER_ENABLED_KEY = 'tracker-enabled';
   const REWARD_NOTIFICATIONS_ENABLED_KEY = 'reward-notifications-enabled';
@@ -62,6 +63,7 @@ export default defineBackground(() => {
   let rewardNotificationSequence = 0;
   let rewardNotificationQueue: Promise<void> = Promise.resolve();
   let trackerEnabled: boolean | undefined = undefined;
+  let trackerPreferenceRevision = 0;
   let trackingTimeout: ReturnType<typeof setTimeout> | null = null;
   let autoDiscoverTimeout: ReturnType<typeof setTimeout> | null = null;
   const KEEP_ALIVE_ALARM = 'toontracker-keepalive';
@@ -102,7 +104,7 @@ export default defineBackground(() => {
   }
 
   async function syncTrackerRuntimeState() {
-    trackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
+    trackerEnabled = await readTrackerPreference();
     if (trackerEnabled === true) {
       startAutoDiscover();
       startTracking();
@@ -165,13 +167,27 @@ export default defineBackground(() => {
     await syncTrackerRuntimeState();
   }
 
+  async function readTrackerPreference(): Promise<boolean | undefined> {
+    const stored = await browser.storage.local.get(TRACKER_ENABLED_KEY);
+    if (typeof stored[TRACKER_ENABLED_KEY] === 'boolean') return stored[TRACKER_ENABLED_KEY];
+    const legacy = await getSetting<boolean>(TRACKER_ENABLED_KEY);
+    if (typeof legacy === 'boolean') {
+      await browser.storage.local.set({ [TRACKER_ENABLED_KEY]: legacy });
+    }
+    return typeof legacy === 'boolean' ? legacy : undefined;
+  }
+
   async function isTrackerEnabled() {
-    const storedTrackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
+    const storedTrackerEnabled = await readTrackerPreference();
     return storedTrackerEnabled === true;
   }
 
   async function initializeBackground() {
-    trackerEnabled = await getSetting<boolean>(TRACKER_ENABLED_KEY);
+    const revision = trackerPreferenceRevision;
+    const storedPreference = await readTrackerPreference();
+    if (revision !== trackerPreferenceRevision) return;
+    trackerEnabled = storedPreference;
+
     if (trackerEnabled === true) {
       startAutoDiscover();
       startTracking();
@@ -218,6 +234,7 @@ export default defineBackground(() => {
     try {
       browser.runtime.sendMessage(payload).catch(() => { });
       const tabs = await browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] });
+
       tabs.forEach(tab => {
         if (tab.id) {
           browser.tabs.sendMessage(tab.id, payload).catch(() => { });
@@ -382,15 +399,25 @@ export default defineBackground(() => {
   }
 
   function connectToPort(port: string) {
-    if (trackerEnabled !== true) return;
-    if (connections.has(port)) return; // Already connected or connecting
-    if (failedPorts.has(port)) return; // Only attempt once until explicitly synced
-    if (connectingPorts.has(port)) return; // Prevent duplicate pending WebSockets
+    if (trackerEnabled !== true || connections.has(port) || failedPorts.has(port) || connectingPorts.has(port)) return;
 
     connectingPorts.add(port);
-    const conn = new WebSocket(`ws://localhost:${port}/`);
+    let conn: WebSocket;
+    try {
+      conn = new WebSocket(`ws://localhost:${port}/`);
+    } catch (error) {
+      connectingPorts.delete(port);
+      throw error;
+    }
+    let finishConnection!: () => void;
+    pendingConnections.set(port, new Promise<void>(resolve => { finishConnection = resolve; }));
+    const finishAttempt = () => {
+      pendingConnections.delete(port);
+      finishConnection();
+    };
 
     conn.onopen = () => {
+      finishAttempt();
       connectingPorts.delete(port);
       if (trackerEnabled !== true) {
         conn.close();
@@ -401,6 +428,9 @@ export default defineBackground(() => {
       connections.set(port, info);
       failedPorts.delete(port);
       authorizePort(port, info);
+      try {
+        conn.send(JSON.stringify({ request: "all" }));
+      } catch (e) { }
       broadcastStatus();
     };
 
@@ -410,6 +440,7 @@ export default defineBackground(() => {
 
       try {
         const msgData = JSON.parse(event.data);
+
         if (msgData.type === 'authorize') {
           if (trackerEnabled === true) {
             conn.send(JSON.stringify({ type: 'authorize', id: msgData.id }));
@@ -465,6 +496,7 @@ export default defineBackground(() => {
     };
 
     conn.onclose = () => {
+      finishAttempt();
       connectingPorts.delete(port);
       const wasIntentionalDisconnect = intentionalDisconnectSockets.has(conn);
       if (connections.get(port)?.ws === conn) {
@@ -480,12 +512,12 @@ export default defineBackground(() => {
     };
 
     conn.onerror = () => {
+      finishAttempt();
       connectingPorts.delete(port);
       failedPorts.add(port);
       // Conn will fire onclose afterwards natively
     };
   }
-
 
   async function startTracking() {
     if (trackerEnabled !== true) return;
@@ -503,21 +535,28 @@ export default defineBackground(() => {
       }, TRACKING_POLL_MS);
     };
 
-    const pollTrackedPorts = () => {
-      if (trackerEnabled !== true) return;
-      TRACKED_PORTS.forEach(port => {
-        const info = connections.get(port);
-        if (!info && !failedPorts.has(port)) {
-          try { connectToPort(port); } catch (e) { }
-        } else if (info && info.ws.readyState === WebSocket.OPEN && info.authorized) {
-          try { info.ws.send(JSON.stringify({ request: "all" })); } catch (e) { }
-        }
-      });
-    };
-
     scheduleTrackingPoll();
 
     browser.alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: 1 });
+  }
+
+  function pollTrackedPorts(ports: readonly string[] = TRACKED_PORTS, force = false) {
+    if (trackerEnabled !== true) return;
+    ports.forEach(port => {
+      if (force) failedPorts.delete(port);
+      const info = connections.get(port);
+
+      if (!info) {
+        try { connectToPort(port); } catch (e) { }
+      } else if (info.ws.readyState === WebSocket.OPEN) {
+        if (force && !info.authorized) authorizePort(port, info);
+        if (info.authorized) {
+          try {
+            info.ws.send(JSON.stringify({ request: "all" }));
+          } catch (e) { }
+        }
+      }
+    });
   }
 
   function startAutoDiscover() {
@@ -567,11 +606,13 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Re-initialize if the SW was killed and restarted mid-session
-    if (trackerEnabled === undefined) {
+    if (trackerEnabled === undefined && !['SYNC_GAMES', 'GET_TRACKER_PREF', 'TRACKER_PREF_CHANGED'].includes(message.type)) {
       initializeBackground().catch(console.error);
     }
     if (message.type === 'TRACKER_PREF_CHANGED') {
+      trackerPreferenceRevision++;
       trackerEnabled = message.enabled;
+      browser.storage.local.set({ [TRACKER_ENABLED_KEY]: trackerEnabled }).catch(console.error);
       setSetting(TRACKER_ENABLED_KEY, trackerEnabled).catch(console.error);
 
       // Broadcast setting change to all other open tabs
@@ -602,7 +643,14 @@ export default defineBackground(() => {
       broadcastStatus();
       sendResponse({ received: true });
     } else if (message.type === 'GET_TRACKER_PREF') {
-      sendResponse({ enabled: trackerEnabled });
+      const getTrackerPreference = async () => {
+        if (trackerEnabled === undefined) await initializeBackground();
+        return { enabled: trackerEnabled };
+      };
+      getTrackerPreference().then(sendResponse).catch(error => {
+        sendResponse({ enabled: trackerEnabled });
+      });
+      return true;
     } else if (message.type === 'DISPLAY_MODE_CHANGED') {
       const mode = normalizeDisplayMode(message.mode);
       browser.tabs.query({ url: ['*://*.toonhq.org/*', '*://toonhq.org/*'] }).then(tabs => {
@@ -625,25 +673,6 @@ export default defineBackground(() => {
       return true;
     } else if (message.type === 'OPEN_REWARD_NOTIFICATION_SETTINGS') {
       const openRewardNotificationSettings = async () => {
-        if (import.meta.env.FIREFOX) {
-          await browser.tabs.create({ url: browser.runtime.getURL('notification-settings.html' as any) });
-          return { ok: true, opened: 'tab' };
-        }
-
-        const popupApi = (browser as any).action?.openPopup
-          ? (browser as any).action
-          : (browser as any).browserAction;
-
-        if (popupApi?.openPopup) {
-          try {
-            await popupApi.openPopup();
-            return { ok: true, opened: 'popup' };
-          } catch {
-            // Firefox before 149 requires an extension user gesture to open a
-            // toolbar popup. Fall back to the same extension page in a tab.
-          }
-        }
-
         await browser.tabs.create({
           url: browser.runtime.getURL('notification-settings.html' as any),
         });
@@ -664,21 +693,41 @@ export default defineBackground(() => {
       }).catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
       return true;
     } else if (message.type === 'SYNC_GAMES') {
-      if (trackerEnabled === true) {
+      const syncGames = async () => {
+        if (trackerEnabled === undefined) await initializeBackground();
+        if (trackerEnabled === undefined && message.trackerEnabled === true) {
+          trackerPreferenceRevision++;
+          trackerEnabled = true;
+          await browser.storage.local.set({ [TRACKER_ENABLED_KEY]: true });
+          await setSetting(TRACKER_ENABLED_KEY, true);
+        }
+        if (trackerEnabled !== true) {
+          return { sync: false };
+        }
         const portsToSync = message.port ? [message.port] : TRACKED_PORTS;
-
-        portsToSync.forEach(port => {
-          failedPorts.delete(port);
-          const info = connections.get(port);
-          if (info && info.ws.readyState === WebSocket.OPEN) {
-            authorizePort(port, info);
-          } else if (!info) {
-            try { connectToPort(port); } catch (e) { }
-          }
-        });
+        pollTrackedPorts(portsToSync, true);
+        startTracking();
+        startAutoDiscover();
         broadcastStatus();
-      }
-      sendResponse({ sync: true });
+        const attempts = portsToSync.map(port => pendingConnections.get(port)).filter(Boolean);
+
+        if (attempts.length > 0) {
+          let timeout: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              Promise.all(attempts),
+              new Promise<void>(resolve => { timeout = setTimeout(resolve, 3000); }),
+            ]);
+          } finally {
+            if (timeout !== undefined) clearTimeout(timeout);
+          }
+        }
+        return { sync: true };
+      };
+      syncGames().then(sendResponse).catch(error => {
+        sendResponse({ sync: false, error: error instanceof Error ? error.message : String(error) });
+      });
+      return true;
     } else if (message.type === 'DISCOVER_GAMES') {
       if (trackerEnabled === true) {
         TRACKED_PORTS.forEach(port => {
@@ -812,5 +861,4 @@ export default defineBackground(() => {
   void activatePendingUpdate().catch(error => {
     console.error('[ToonHQ+] Failed to activate extension update:', error);
   });
-
 });

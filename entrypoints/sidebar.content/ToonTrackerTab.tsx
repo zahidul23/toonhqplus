@@ -13,6 +13,7 @@ import {
 } from './trackerUtils';
 import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerUtils';
 import { normalizeToonOrderSetting, orderTrackerToons } from './toonOrder';
+import { requestRewardNotificationPermissionWithFallback } from '../lib/rewardNotificationPermission';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -1292,7 +1293,6 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
                 </div>
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
 
-
                   <ToonGagsStrip gags={data?.data?.gags as any} />
                   <div className="flex justify-center items-center gap-2 w-full pt-2 border-t border-white/10">
                     {CATEGORIES_CONFIG.map(({ id: cat, color }) => {
@@ -1300,7 +1300,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
                       return (
                         <div key={cat} className="relative flex items-center justify-center" title={rewardLabels[cat as keyof typeof rewardLabels]}>
                           <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-white/10" style={{ backgroundColor: `${color}15` }}>
-                            <img src={getExtensionImageUrl(`images/${cat}.png`)} className={`w-4 h-4 object-contain filter drop-shadow-sm ${count === 0 ? 'grayscale opacity-30' : 'opacity-90'}`} />
+                            <img src={getExtensionImageUrl(`images/${cat}.webp`)} className={`w-4 h-4 object-contain filter drop-shadow-sm ${count === 0 ? 'grayscale opacity-30' : 'opacity-90'}`} />
                           </div>
                           {count > 0 && (
                             <div className="absolute -top-1.5 -right-1.5 bg-black border border-white/10 text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-full min-w-[18px] flex items-center justify-center shadow-lg" style={{ color }}>
@@ -1313,7 +1313,6 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
                   </div>
                 </div>
               </div>
-
 
             </div>
 
@@ -1419,7 +1418,13 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [rewardHistory, setRewardHistory] = useState<RewardHistoryEntry[]>([]);
   const [trackerEnabled, setTrackerEnabled] = useState<boolean | undefined>(undefined);
   const [rewardNotificationsEnabled, setRewardNotificationsEnabled] = useState(false);
+  const [showNotificationFallback, setShowNotificationFallback] = useState(false);
+  const [notificationSettingsOpening, setNotificationSettingsOpening] = useState(false);
+  const [notificationFallbackError, setNotificationFallbackError] = useState<string | null>(null);
+  const rewardNotificationTogglePending = useRef(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [isSearchingGames, setIsSearchingGames] = useState(false);
+  const searchGamesPending = useRef(false);
   const [showRewardPieChart, setShowRewardPieChart] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -1484,6 +1489,8 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const toggleRewardNotifications = useCallback(async (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
+    if (rewardNotificationTogglePending.current) return;
+    rewardNotificationTogglePending.current = true;
     const previousEnabled = rewardNotificationsEnabled;
     try {
       if (previousEnabled) {
@@ -1500,15 +1507,21 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         return;
       }
 
+      const offerSettings = async () => {
+        setNotificationFallbackError(null);
+        setShowNotificationFallback(true);
+      };
       if (import.meta.env.FIREFOX) {
-        const opened = await browser.runtime.sendMessage({ type: 'OPEN_REWARD_NOTIFICATION_SETTINGS' });
-        if (opened?.ok === false) throw new Error(opened.error || 'Could not open notification settings.');
+        await offerSettings();
       } else {
-        const requested = await browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' });
-        if (requested?.ok === false) throw new Error(requested.error || 'Could not request notification permission.');
-        const enabled = requested?.granted === true;
-        setRewardNotificationsEnabled(enabled);
-        await browser.storage.local.set({ 'reward-notifications-enabled': enabled });
+        const enabled = await requestRewardNotificationPermissionWithFallback(
+          () => browser.runtime.sendMessage({ type: 'REQUEST_REWARD_NOTIFICATION_PERMISSION' }),
+          offerSettings,
+        );
+        if (enabled) {
+          setRewardNotificationsEnabled(true);
+          await browser.storage.local.set({ 'reward-notifications-enabled': true });
+        }
       }
     } catch (error) {
       console.error('[ToonHQ+] Failed to update reward notifications.', error);
@@ -1523,8 +1536,25 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         setRewardNotificationsEnabled(previousEnabled);
       }
       window.alert('ToonHQ+ could not update reward notifications. Please try again.');
+    } finally {
+      rewardNotificationTogglePending.current = false;
     }
   }, [rewardNotificationsEnabled]);
+
+  const openNotificationSettings = useCallback(async () => {
+    setNotificationSettingsOpening(true);
+    setNotificationFallbackError(null);
+    try {
+      const opened = await browser.runtime.sendMessage({ type: 'OPEN_REWARD_NOTIFICATION_SETTINGS' });
+      if (opened?.ok !== true) throw new Error(opened?.error || 'Could not open notification settings.');
+      setShowNotificationFallback(false);
+    } catch (error) {
+      console.error('[ToonHQ+] Failed to open notification settings.', error);
+      setNotificationFallbackError('Could not open the page. Please try again.');
+    } finally {
+      setNotificationSettingsOpening(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (subView === 'rewards_detail' && (window as any)._pendingRewardCategory) {
@@ -1554,14 +1584,15 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     });
 
     const listener = (message: any) => {
-      if (message.type === 'TRACKER_PREF_CHANGED') setTrackerEnabled(message.enabled);
+      if (message.type === 'TRACKER_PREF_CHANGED') {
+        setTrackerEnabled(message.enabled);
+      }
     };
     browser.runtime.onMessage.addListener(listener);
     return () => {
       browser.runtime.onMessage.removeListener(listener);
     };
   }, []);
-
 
   // Listen for background script updates
   useEffect(() => {
@@ -1576,6 +1607,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
         if (message.toonTrackerData) {
           const incomingToonId = String(message.toonTrackerData.data.toon.id);
+
           if (!selectedToonIdRef.current || String(selectedToonIdRef.current) === incomingToonId) {
             setToonTrackerData(current => isDeepEqual(current, message.toonTrackerData) ? current : message.toonTrackerData);
             if (!selectedToonIdRef.current) {
@@ -1683,12 +1715,25 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     setRewardHistory(current => isDeepEqual(current, response?.history || []) ? current : (response?.history || []));
   }, []);
 
-  const startSync = useCallback((port?: string) => {
-    browser.runtime.sendMessage({
+  const startSync = useCallback((port?: string, enabled?: boolean) => {
+    return browser.runtime.sendMessage({
       type: 'SYNC_GAMES',
-      port: port
-    });
+      port: port,
+      trackerEnabled: enabled,
+    }).catch(console.error);
   }, []);
+
+  const searchGames = useCallback(async () => {
+    if (searchGamesPending.current) return;
+    searchGamesPending.current = true;
+    setIsSearchingGames(true);
+    try {
+      await startSync(undefined, trackerEnabled);
+    } finally {
+      searchGamesPending.current = false;
+      setIsSearchingGames(false);
+    }
+  }, [startSync, trackerEnabled]);
 
   useEffect(() => {
     browser.runtime.sendMessage({ type: 'GET_TOON_DATA', toonId: 'list' }).then(res => {
@@ -1786,7 +1831,6 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     const groups = groupRewardHistory(items);
     return groups.slice(0, isExpanded ? 10 : RECENT_REWARD_LIMIT);
   }, [filteredRewardHistory, isExpanded]);
-
 
   if (subView === 'rewards_detail' && toonTrackerData && trackerEnabled === true) {
     const rewards = toonTrackerData.data.rewards || { pinkslips: 0, remotes: {}, sos: {}, summons: {}, unites: {} };
@@ -2042,7 +2086,22 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   }
 
   return (
-    <section key="main-tracker" className="flex-1 flex flex-col overflow-hidden">
+    <section key="main-tracker" className="relative flex-1 flex flex-col overflow-hidden">
+      {showNotificationFallback && (
+        <div role="dialog" aria-label="Notification permission help" onKeyDown={event => {
+          if (event.key === 'Escape') setShowNotificationFallback(false);
+        }} className="absolute top-16 left-3 right-3 z-[500] rounded-xl border border-emerald-300/30 bg-slate-950 p-4 shadow-2xl text-white">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold">No permission prompt?</p>
+            <button type="button" aria-label="Dismiss notification permission help" onClick={() => setShowNotificationFallback(false)} className="cursor-pointer rounded px-2 py-1 text-white/70 hover:text-white">✕</button>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-white/80">If no notification permission prompt was shown, you can enable notifications from the confirmation page.</p>
+          <button type="button" autoFocus disabled={notificationSettingsOpening} onClick={openNotificationSettings} className="mt-3 w-full cursor-pointer rounded-lg border border-emerald-400/50 bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-wait disabled:opacity-70">
+            {notificationSettingsOpening ? 'Opening…' : 'Open notification confirmation page'}
+          </button>
+          {notificationFallbackError && <p role="alert" className="mt-2 text-xs text-red-300">{notificationFallbackError}</p>}
+        </div>
+      )}
       <ToonHeader
         isExpanded={isExpanded}
         toonTrackerData={toonTrackerData}
@@ -2226,19 +2285,22 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
         ) : (
           <div className="h-full flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
             {(hasLoaded && trackerEnabled === true) ? (
-              <div className="flex flex-col items-center gap-6 opacity-40">
+              <div className="flex flex-col items-center gap-6">
                 <div className="w-20 h-20 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center animate-pulse">
                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400/50"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
                 </div>
                 <div className="text-center space-y-2">
-                  <p className="text-[11.5px] font-black text-green-200 uppercase tracking-[0.3em] leading-relaxed">Connect to your toon<br />to see stats</p>
-                  <p className="text-[9px] text-white/40 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">Enable "Companion App Support" in your TTR settings to get started</p>
+                  <p className="text-sm font-bold text-emerald-200 leading-relaxed">Connect to your toon<br />to see stats</p>
+                  <p className="text-[11px] text-white/75 max-w-[240px] mx-auto leading-relaxed">Enable <span className="font-semibold text-white/90">Companion App Support</span> in your TTR settings to get started.</p>
                 </div>
                 <button
-                  onClick={() => getSetting<string>('tracker-auth-key').then(key => startSync(key || undefined))}
-                  className="mt-2 px-8 py-2.5 rounded-full border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 text-[10.5px] font-black uppercase tracking-[0.2em] transition-all"
+                  onClick={searchGames}
+                  disabled={isSearchingGames}
+                  aria-busy={isSearchingGames}
+                  className="mt-2 inline-flex items-center justify-center gap-2 px-8 py-2.5 rounded-full border border-emerald-400/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-xs font-bold tracking-wide transition-all cursor-pointer disabled:cursor-wait disabled:opacity-70"
                 >
-                  Search for Games
+                  {isSearchingGames && <svg aria-hidden="true" className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>}
+                  {isSearchingGames ? 'Checking…' : 'Search for Games'}
                 </button>
               </div>
             ) : hasLoaded ? (

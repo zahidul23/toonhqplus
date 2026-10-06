@@ -13,7 +13,7 @@ export default function App() {
     ]).then(([granted, stored]) => {
       const active = granted && stored['reward-notifications-enabled'] === true;
       setEnabled(active);
-      setStatus(active ? 'Reward notifications are enabled.' : 'Click Enable to grant Firefox notification permission.');
+      setStatus(active ? 'Reward notifications are enabled.' : 'Click Enable to allow ToonHQ+ reward notifications.');
     }).catch(error => {
       console.error(error);
       setStatus('Could not check notification permission.');
@@ -22,7 +22,7 @@ export default function App() {
 
   const enableNotifications = async () => {
     setBusy(true);
-    setStatus('Waiting for Firefox permission…');
+    setStatus('Waiting for browser permission…');
     try {
       const granted = await browser.permissions.request({ permissions: ['notifications'] });
       await browser.storage.local.set({ 'reward-notifications-enabled': granted });
@@ -30,7 +30,7 @@ export default function App() {
       setStatus(granted ? 'Reward notifications are enabled. You can close this page.' : 'Notification permission was not granted.');
     } catch (error) {
       console.error('[ToonHQ+] Failed to request notification permission.', error);
-      setStatus('Firefox could not grant notification permission. Please try again.');
+      setStatus('The browser could not grant notification permission. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -40,7 +40,7 @@ export default function App() {
     setBusy(true);
     await browser.storage.local.set({ 'reward-notifications-enabled': false });
     setEnabled(false);
-    setStatus('Reward notifications are disabled. Firefox permission remains available.');
+    setStatus('Reward notifications are disabled. Browser permission remains available.');
     setBusy(false);
   };
 
@@ -53,7 +53,7 @@ export default function App() {
         <button type="button" disabled={busy} onClick={enabled ? disableNotifications : enableNotifications}>
           {busy ? 'Please wait…' : enabled ? 'Disable reward notifications' : 'Enable reward notifications'}
         </button>
-        <p className="footnote">Disabling this setting keeps Firefox permission available. You can revoke it from Firefox Add-ons Manager.</p>
+        <p className="footnote">Disabling this setting keeps browser permission available. You can manage ToonHQ+ permissions in your browser’s extension settings.</p>
       </section>
     </main>
   );
