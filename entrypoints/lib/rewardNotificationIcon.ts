@@ -41,7 +41,8 @@ function loadMickeyNumbersFont() {
       const fontSet: FontFaceSet | undefined = (self as any).fonts ?? (globalThis as any).document?.fonts;
       if (!fontSet) return false;
       for (const font of fonts) fontSet.add(font);
-      await fontSet.ready;
+      // Each face is already loaded. Waiting for the entire set's ready promise
+      // can stall icon generation in Chrome's background worker.
       return true;
     } catch {
       return false;
@@ -56,48 +57,39 @@ function drawMickeyLabel(
   fillColor: string,
   outlineColor: string,
 ) {
-  const family = 'MickeyNumbers, Arial Black, Arial';
-  const fillFamily = 'MickeyNumbersFill, Arial Black, Arial';
-  let plusSize = 224;
-  let amountSize = 224;
-  ctx.font = `${plusSize}px ${family}`;
-  let plusWidth = ctx.measureText('+').width;
-  ctx.font = `${amountSize}px ${family}`;
-  let amountWidth = ctx.measureText(amount).width;
-  const availableWidth = DESIGN_SIZE - 32;
-  if (plusWidth + amountWidth > availableWidth) {
-    const scale = availableWidth / (plusWidth + amountWidth);
-    plusSize *= scale;
-    amountSize *= scale;
-    ctx.font = `${plusSize}px ${family}`;
-    plusWidth = ctx.measureText('+').width;
-    ctx.font = `${amountSize}px ${family}`;
-    amountWidth = ctx.measureText(amount).width;
-  }
-
-  const left = (DESIGN_SIZE - plusWidth - amountWidth) / 2;
-  const topY = 0;
-  const pieces = [
-    { text: '+', font: `${plusSize}px ${family}`, x: left + plusWidth / 2 },
-    { text: amount, font: `${amountSize}px ${family}`, x: left + plusWidth + amountWidth / 2 },
-  ];
   ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
+  const families = ['MickeyNumbers, Arial Black, Arial', 'MickeyNumbersFill, Arial Black, Arial'];
+  const text = `+${amount}`;
+  const boundsAt = (size: number) => {
+    const metrics = families.map(family => {
+      ctx.font = `${size}px ${family}`;
+      return ctx.measureText(text);
+    });
+    const left = Math.max(...metrics.map(metric => metric.actualBoundingBoxLeft ?? 0));
+    const right = Math.max(...metrics.map(metric => metric.actualBoundingBoxRight ?? metric.width));
+    const ascent = Math.max(...metrics.map(metric => metric.actualBoundingBoxAscent ?? size * 0.8));
+    const descent = Math.max(...metrics.map(metric => metric.actualBoundingBoxDescent ?? size * 0.2));
+    return { left, width: left + right, ascent, height: ascent + descent };
+  };
+  const initial = boundsAt(224);
+  // Fit the ink of both font layers, rather than their advance width or the
+  // font's "top" baseline, which can leave these glyphs above the canvas.
+  const size = 224 * Math.min(1, (DESIGN_SIZE - 32) / initial.width, 72 / initial.height);
+  const bounds = boundsAt(size);
+  const x = (DESIGN_SIZE - bounds.width) / 2 + bounds.left;
+  const y = 8 + bounds.ascent;
   // The companion font contains solid glyph silhouettes while MickeyNumbers
   // retains the original outlined bands, so both colors remain independent.
   ctx.fillStyle = fillColor;
-  for (const piece of pieces) {
-    ctx.font = piece.font.replace(family, fillFamily);
-    ctx.fillText(piece.text, piece.x, topY);
-  }
+  ctx.font = `${size}px ${families[1]}`;
+  ctx.fillText(text, x, y);
   ctx.fillStyle = outlineColor;
-  for (const piece of pieces) {
-    ctx.font = piece.font;
-    ctx.fillText(piece.text, piece.x, topY);
-  }
+  ctx.font = `${size}px ${families[0]}`;
+  ctx.fillText(text, x, y);
   ctx.restore();
 }
 
@@ -120,14 +112,14 @@ function summonBadgeSvg(type: string) {
 
 function getCogImage(name: string) {
   const rank = cogs.flatMap(suit => suit.ranks).find(cog => cog.name === name);
-  return rank ? `${TOONHQ_ASSETS}/cogs/${rank.image}` : assetUrl('images/summons.png');
+  return rank ? `${TOONHQ_ASSETS}/cogs/${rank.image}` : assetUrl('images/summons.webp');
 }
 
 function getGagUpImage(name: string) {
   const cleanName = name.replace(/[\u0000-\u001f]/g, '').trim();
   const track = gags.find(candidate => cleanName.toLowerCase().endsWith(candidate.name.toLowerCase()));
   const slug = track ? track.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'all';
-  return assetUrl(`images/unites/gag-up-${slug}.png`);
+  return assetUrl(`images/unites/gag-up-${slug}.webp`);
 }
 
 function getPrimaryImage(change: RewardChange) {
@@ -137,15 +129,15 @@ function getPrimaryImage(change: RewardChange) {
   }
   if (change.type === 'summons') return getCogImage(change.subtype);
   if (change.type === 'unites' && change.metadata?.uniteCategory === 'Gag-Up') return getGagUpImage(change.subtype);
-  if (change.type === 'unites' && change.metadata?.uniteCategory === 'Jellybeans') return assetUrl('images/unites/jellybean-jar.png');
+  if (change.type === 'unites' && change.metadata?.uniteCategory === 'Jellybeans') return assetUrl('images/unites/jellybean-jar.webp');
   if (change.type === 'unites' && change.metadata?.uniteCategory === 'Toon-Up') {
-    return assetUrl('images/unites/pixie-dust.png');
+    return assetUrl('images/unites/pixie-dust.webp');
   }
-  if (change.type === 'remotes' && /heal/i.test(change.subtype)) return assetUrl('images/remotesheal.png');
+  if (change.type === 'remotes' && /heal/i.test(change.subtype)) return assetUrl('images/remotesheal.webp');
   const names: Record<string, string> = {
-    sos: 'sos.png', unites: 'unites.png', summons: 'summons.png', pinkslips: 'pinkslips.png', remotes: 'remotes.png',
+    sos: 'sos.webp', unites: 'unites.webp', summons: 'summons.webp', pinkslips: 'pinkslips.webp', remotes: 'remotes.webp',
   };
-  return assetUrl(`images/${names[change.type] || 'sos.png'}`);
+  return assetUrl(`images/${names[change.type] || 'sos.webp'}`);
 }
 
 async function blobToDataUrl(blob: Blob) {
@@ -158,6 +150,26 @@ async function blobToDataUrl(blob: Blob) {
 }
 
 export async function createRewardNotificationIcon(change: RewardChange): Promise<string> {
+  if (change.type === 'unites') {
+    const amount = Number(change.subtype.match(/\d+/)?.[0]);
+    const category = change.metadata?.uniteCategory;
+    if (category === 'Toon-Up' && [20, 35, 50, 65, 80].includes(amount)) {
+      return assetUrl(`images/unites/toon-up-${amount}.webp`);
+    }
+    if (category === 'Jellybeans' && [100, 200, 350, 600].includes(amount)) {
+      return assetUrl(`images/unites/jellybeans-${amount}.webp`);
+    }
+  }
+  try {
+    return await renderRewardNotificationIcon(change);
+  } catch (error) {
+    console.warn('[ToonHQ+] Could not render reward notification icon; using the reward image.', error);
+    return getPrimaryImage(change);
+  }
+}
+
+// Also used by the offline icon generator. Unknown amounts retain this renderer.
+export async function renderRewardNotificationIcon(change: RewardChange): Promise<string> {
   if (change.type === 'unites' && change.metadata?.uniteCategory === 'Gag-Up') return getPrimaryImage(change);
   if (typeof OffscreenCanvas === 'undefined') return getPrimaryImage(change);
   const canvas = new OffscreenCanvas(RENDER_SIZE, RENDER_SIZE);

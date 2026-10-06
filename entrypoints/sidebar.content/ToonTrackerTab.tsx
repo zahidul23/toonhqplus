@@ -130,11 +130,11 @@ function isRecentlyEarned(timestamp: number): boolean {
 }
 
 const REWARD_CATEGORIES_CONFIG = [
-  { id: 'sos', label: 'SOS Cards', img: 'sos.png' },
-  { id: 'unites', label: 'Unites', img: 'unites.png' },
-  { id: 'summons', label: 'Cog Summons', img: 'summons.png' },
-  { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.png' },
-  { id: 'remotes', label: 'Remotes', img: 'remotes.png' }
+  { id: 'sos', label: 'SOS Cards', img: 'sos.webp' },
+  { id: 'unites', label: 'Unites', img: 'unites.webp' },
+  { id: 'summons', label: 'Cog Summons', img: 'summons.webp' },
+  { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.webp' },
+  { id: 'remotes', label: 'Remotes', img: 'remotes.webp' }
 ] as const;
 
 const RewardMessage = React.memo(({ entry }: { entry: RewardHistoryEntry }) => {
@@ -632,7 +632,7 @@ const PinkSlipsGridView = React.memo(({ count }: { count: number }) => {
         {slots.map((_, i) => (
           <div key={i} className="flex items-center justify-center">
             <img
-              src={getExtensionImageUrl('images/pinkslips.png')}
+              src={getExtensionImageUrl('images/pinkslips.webp')}
               className={`w-full h-full max-h-8 object-contain transition-all duration-500 ${i >= count ? 'grayscale opacity-5' : 'drop-shadow-[0_0_5px_rgba(251,113,133,0.5)]'}`}
               alt="Pink Slip"
             />
@@ -657,7 +657,7 @@ const RemoteCard = React.memo(({ type, level, count }: { type: string, level: st
         </div>
 
         <img
-          src={type.includes("Healing") ? getExtensionImageUrl('images/remotesheal.png') : getExtensionImageUrl('images/remotes.png')}
+          src={type.includes("Healing") ? getExtensionImageUrl('images/remotesheal.webp') : getExtensionImageUrl('images/remotes.webp')}
           className="w-full h-full object-contain filter drop-shadow-md"
           alt={`${level} Star ${type}`}
         />
@@ -2115,11 +2115,11 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                         summons: Object.values(rewards.summons || {}).reduce((a: number, b: any) => a + (b.single ? 1 : 0) + (b.building ? 1 : 0) + (b.invasion ? 1 : 0), 0),
                       };
                       const types = [
-                        { id: 'sos', img: 'sos.png', count: totals.sos, bg: '#6b21a8' },
-                        { id: 'unites', img: 'unites.png', count: totals.unites, bg: '#14532d' },
-                        { id: 'summons', img: 'summons.png', count: totals.summons, bg: '#1e3a5f' },
-                        { id: 'pinkslips', img: 'pinkslips.png', count: totals.pinkslips, bg: '#4a3728' },
-                        { id: 'remotes', img: 'remotes.png', count: totals.remotes, bg: '#991b1b' }
+                        { id: 'sos', img: 'sos.webp', count: totals.sos, bg: '#6b21a8' },
+                        { id: 'unites', img: 'unites.webp', count: totals.unites, bg: '#14532d' },
+                        { id: 'summons', img: 'summons.webp', count: totals.summons, bg: '#1e3a5f' },
+                        { id: 'pinkslips', img: 'pinkslips.webp', count: totals.pinkslips, bg: '#4a3728' },
+                        { id: 'remotes', img: 'remotes.webp', count: totals.remotes, bg: '#991b1b' }
                       ] as const;
 
                       const handleRewardClick = (e: React.MouseEvent, category: RewardCategory) => {

@@ -16,6 +16,12 @@ stats-*.json
 web-ext.config.ts
 native-toonhq/
 
+# Generated asset experiments and audit output
+/docs/notification-icon-webp-q85/
+/docs/notification-icon-webp-q95/
+/docs/asset-audit/*.json
+/docs/asset-audit/*.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

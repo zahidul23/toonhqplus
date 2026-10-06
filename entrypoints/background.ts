@@ -302,7 +302,7 @@ export default defineBackground(() => {
         options: {
           type: 'basic',
           iconUrl: hasHealingRemote && hasDamageRemote
-            ? browser.runtime.getURL('images/remotes-combined.png' as any)
+            ? browser.runtime.getURL('images/remotes-combined.webp' as any)
             : await createRewardNotificationIcon(remoteChanges[0]),
           title: `+${total} ${total === 1 ? 'Remote' : 'Remotes'}${import.meta.env.FIREFOX ? ' • ToonHQ+' : ''}`,
           message: import.meta.env.FIREFOX ? `${details.join('\n')}\n\n${data.data.toon.name}` : details.join('\n'),

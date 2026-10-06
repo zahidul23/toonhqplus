@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.38',
+    date: 'Oct 5, 2026',
+    changes: [
+      'Fix issue with unite reward notifications',
+      'Optimize image file sizes across the extension'
+    ]
+  },
+  {
     version: '1.2.37',
     date: 'Oct 3, 2026',
     changes: [

@@ -99,13 +99,13 @@ export const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; 
     { gagIndex: 5, damage: 180, image: SOS_CLERK_CLARA, name: "Clerk Clara" },
   ],
   special: [
-    { gagIndex: 0, damage: 9999, image: getExtensionImageUrl('images/pinkslips.png'), name: "Pink Slip", isInstaKill: true },
-    { gagIndex: 1, damage: 0, rounds: 2, dmgOthers: 45, dmgExpire: 45, image: getExtensionImageUrl('images/remotes.png'), name: "1-Star Damage Remote", isRemote: true, stars: 1 },
-    { gagIndex: 2, damage: 0, rounds: 3, dmgOthers: 60, dmgExpire: 90, image: getExtensionImageUrl('images/remotes.png'), name: "2-Star Damage Remote", isRemote: true, stars: 2 },
-    { gagIndex: 3, damage: 0, rounds: 4, dmgOthers: 75, dmgExpire: 150, image: getExtensionImageUrl('images/remotes.png'), name: "3-Star Damage Remote", isRemote: true, stars: 3 },
-    { gagIndex: 4, damage: 0, rounds: 2, dmgOthers: 0, dmgExpire: 45, image: getExtensionImageUrl('images/remotesheal.png'), name: "1-Star Heal Remote", isRemote: true, stars: 1, isHeal: true },
-    { gagIndex: 5, damage: 0, rounds: 3, dmgOthers: 0, dmgExpire: 90, image: getExtensionImageUrl('images/remotesheal.png'), name: "2-Star Heal Remote", isRemote: true, stars: 2, isHeal: true },
-    { gagIndex: 6, damage: 0, rounds: 4, dmgOthers: 0, dmgExpire: 150, image: getExtensionImageUrl('images/remotesheal.png'), name: "3-Star Heal Remote", isRemote: true, stars: 3, isHeal: true },
+    { gagIndex: 0, damage: 9999, image: getExtensionImageUrl('images/pinkslips.webp'), name: "Pink Slip", isInstaKill: true },
+    { gagIndex: 1, damage: 0, rounds: 2, dmgOthers: 45, dmgExpire: 45, image: getExtensionImageUrl('images/remotes.webp'), name: "1-Star Damage Remote", isRemote: true, stars: 1 },
+    { gagIndex: 2, damage: 0, rounds: 3, dmgOthers: 60, dmgExpire: 90, image: getExtensionImageUrl('images/remotes.webp'), name: "2-Star Damage Remote", isRemote: true, stars: 2 },
+    { gagIndex: 3, damage: 0, rounds: 4, dmgOthers: 75, dmgExpire: 150, image: getExtensionImageUrl('images/remotes.webp'), name: "3-Star Damage Remote", isRemote: true, stars: 3 },
+    { gagIndex: 4, damage: 0, rounds: 2, dmgOthers: 0, dmgExpire: 45, image: getExtensionImageUrl('images/remotesheal.webp'), name: "1-Star Heal Remote", isRemote: true, stars: 1, isHeal: true },
+    { gagIndex: 5, damage: 0, rounds: 3, dmgOthers: 0, dmgExpire: 90, image: getExtensionImageUrl('images/remotesheal.webp'), name: "2-Star Heal Remote", isRemote: true, stars: 2, isHeal: true },
+    { gagIndex: 6, damage: 0, rounds: 4, dmgOthers: 0, dmgExpire: 150, image: getExtensionImageUrl('images/remotesheal.webp'), name: "3-Star Heal Remote", isRemote: true, stars: 3, isHeal: true },
   ],
   sound: [
     { gagIndex: 3, damage: 35, image: SOS_BARB, name: "Barbara Seville" },
@@ -300,16 +300,16 @@ function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
 
 
 const STATUS_EFFECTS = [
-  { id: 'isTrapped', label: 'Trapped', icon: 'Statuseffect_trapped.png', color: 'bg-orange-500', shadow: 'rgba(249,115,22,0.4)' },
-  { id: 'isLured', label: 'Lured', icon: 'Statuseffect_lured.png', color: 'bg-emerald-500', shadow: 'rgba(16,185,129,0.4)' },
-  { id: 'isAttentive', label: 'Attentive', icon: 'Statuseffect_attentive.png', color: 'bg-blue-500', shadow: 'rgba(59,130,246,0.4)' },
-  { id: 'isDefenseDown', label: 'Defense Down', icon: 'Statuseffect_defensedown.png', color: 'bg-red-500', shadow: 'rgba(239,68,68,0.4)' },
-  { id: 'isDefenseUp', label: 'Defense Up', icon: 'Statuseffect_defenseup_Cog.png', color: 'bg-blue-600', shadow: 'rgba(37,99,235,0.4)' },
-  { id: 'isImmunity', label: 'Immunity', icon: 'Statuseffect_immunity.png', color: 'bg-gray-500', shadow: 'rgba(107,114,128,0.4)' },
-  { id: 'isOverpaid', label: 'Overpaid', icon: 'Statuseffect_overpaid.png', color: 'bg-yellow-500', shadow: 'rgba(234,179,8,0.4)' },
-  { id: 'isRemoteDmg', label: 'Remote DMG', icon: 'Statuseffect_remotedmg.png', color: 'bg-violet-500', shadow: '#8b5cf6' },
-  { id: 'isRemoteHeal', label: 'Remote HEAL', icon: 'Statuseffect_remotedmg.png', color: 'bg-violet-500', shadow: '#8b5cf6' },
-  { id: 'isTenure', label: 'Tenure', icon: 'Statuseffect_tenure.png', color: 'bg-amber-500', shadow: 'rgba(245,158,11,0.4)' },
+  { id: 'isTrapped', label: 'Trapped', icon: 'Statuseffect_trapped.webp', color: 'bg-orange-500', shadow: 'rgba(249,115,22,0.4)' },
+  { id: 'isLured', label: 'Lured', icon: 'Statuseffect_lured.webp', color: 'bg-emerald-500', shadow: 'rgba(16,185,129,0.4)' },
+  { id: 'isAttentive', label: 'Attentive', icon: 'Statuseffect_attentive.webp', color: 'bg-blue-500', shadow: 'rgba(59,130,246,0.4)' },
+  { id: 'isDefenseDown', label: 'Defense Down', icon: 'Statuseffect_defensedown.webp', color: 'bg-red-500', shadow: 'rgba(239,68,68,0.4)' },
+  { id: 'isDefenseUp', label: 'Defense Up', icon: 'Statuseffect_defenseup_Cog.webp', color: 'bg-blue-600', shadow: 'rgba(37,99,235,0.4)' },
+  { id: 'isImmunity', label: 'Immunity', icon: 'Statuseffect_immunity.webp', color: 'bg-gray-500', shadow: 'rgba(107,114,128,0.4)' },
+  { id: 'isOverpaid', label: 'Overpaid', icon: 'Statuseffect_overpaid.webp', color: 'bg-yellow-500', shadow: 'rgba(234,179,8,0.4)' },
+  { id: 'isRemoteDmg', label: 'Remote DMG', icon: 'Statuseffect_remotedmg.webp', color: 'bg-violet-500', shadow: '#8b5cf6' },
+  { id: 'isRemoteHeal', label: 'Remote HEAL', icon: 'Statuseffect_remotedmg.webp', color: 'bg-violet-500', shadow: '#8b5cf6' },
+  { id: 'isTenure', label: 'Tenure', icon: 'Statuseffect_tenure.webp', color: 'bg-amber-500', shadow: 'rgba(245,158,11,0.4)' },
 ];
 
 function getCogMaxHp(cog: Cog, allCogs: Cog[]): number {

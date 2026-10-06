@@ -34,7 +34,7 @@ def extract(
         )
     else:
         image.thumbnail(output_size, Image.Resampling.LANCZOS)
-    image.save(OUTPUT / name, optimize=True)
+    image.save(OUTPUT / name, quality=85, method=6)
 
 
 def atlas_card(atlas: str, crop: tuple[int, int, int, int]) -> Image.Image:
@@ -113,7 +113,7 @@ def export_gag_up(name: str, gag_image: str | None) -> None:
     # Both the 56 px sidebar slot and Chrome/Windows notifications render best
     # from this pre-filtered size; keeping a separate 256 px copy adds no value.
     notification = result.resize((128, 128), Image.Resampling.LANCZOS)
-    notification.save(OUTPUT / f"gag-up-{name}.png", optimize=True)
+    notification.save(OUTPUT / f"gag-up-{name}.webp", quality=85, method=6)
 
 
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -121,7 +121,7 @@ OUTPUT.mkdir(parents=True, exist_ok=True)
 # ttr_m_gui_bat_gagShop.bam jellybeanJar_GRP: remastered jar card UVs
 # (0.0078125, 0.20703125) to (0.7109375, 0.9921875).
 extract(
-    "jellybean-jar.png",
+    "jellybean-jar.webp",
     "purchase_gui_remastered_palette_4amla_1",
     (2, 2, 182, 203),
     TTR_PHASE_4_MAPS,
