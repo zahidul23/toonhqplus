@@ -1,3 +1,5 @@
+import { GagButton as SharedGagButton, SosStars, SosCardImage } from './components/GagButton';
+import { CalculatorPortalProvider } from './components/CalculatorPortal';
 import React, { useEffect, useMemo, useState, memo } from 'react';
 import { gags as gagsConfig } from './gags';
 import { CogCalculator } from './CogCalculator';
@@ -507,6 +509,7 @@ type GagButtonProps = {
   color: string;
   title: string;
   damage: number;
+  stars?: number;
   disabled?: boolean;
   onClick: () => void;
   overlayBottomRight?: React.ReactNode;
@@ -514,40 +517,14 @@ type GagButtonProps = {
   overlayTopLeft?: React.ReactNode;
 };
 
-const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, disabled = false, onClick, overlayBottomRight, overlayBottom, overlayTopLeft }: GagButtonProps) => {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`gag-button group relative flex h-10 items-center justify-center rounded-md border transition-colors ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:brightness-110'
-        }`}
-      style={{ backgroundColor: color, borderColor: color }}
-      title={title}
-    >
-      <img
-        src={imageSrc}
-        alt={imageAlt}
-        draggable="false"
-        className="h-8 w-8 rounded-sm object-contain drop-shadow-md transition-transform group-hover:scale-[1.03]"
-      />
-      {overlayTopLeft && <div className="absolute left-1 top-1">{overlayTopLeft}</div>}
-      <div className="absolute right-1 top-1">
-        <MinusDamageBubble value={damage} />
-      </div>
-      {overlayBottomRight && (
-        <div className="absolute -bottom-1 -right-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
-          {overlayBottomRight}
-        </div>
-      )}
-      {overlayBottom && (
-        <div className="absolute -bottom-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
-          {overlayBottom}
-        </div>
-      )}
-    </button>
-  );
-});
+const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, stars, disabled = false, onClick, overlayBottomRight, overlayBottom, overlayTopLeft }: GagButtonProps) => (
+  <SharedGagButton imageSrc={imageSrc} imageAlt={imageAlt} color={color} title={title}
+    tooltipContent={{ name: imageAlt, damage, accuracy: stars ? 100 : undefined }}
+    stars={stars} disabled={disabled} onClick={onClick}
+    overlayTopRight={<MinusDamageBubble value={damage} />}
+    overlayBottom={<>{overlayBottomRight}{overlayBottom}{overlayTopLeft}</>}
+  />
+));
 
 // ─── Boiler Calculator subcomponents ──────────────────────────────────────────
 
@@ -584,10 +561,10 @@ function SosSoundPicker({
 }) {
   return (
     <div className="flex gap-1">
-      <div className='gag-button'></div>
-      <div className='gag-button'></div>
-      <div className='gag-button'></div>
-      <div className='gag-button'></div>
+      <div className='gag-btn-base border-transparent'></div>
+      <div className='gag-btn-base border-transparent'></div>
+      <div className='gag-btn-base border-transparent'></div>
+      <div className='gag-btn-base border-transparent'></div>
       {SOS_SOUND_GAGS.map((sos) => {
         const gag = track.gags[sos.gagIndex];
         const roundType = roundStats[activeCell.round]?.roundType;
@@ -596,19 +573,13 @@ function SosSoundPicker({
           <GagButton
             key={`sos-${sos.gagIndex}`}
             imageSrc={sos.image}
-            imageAlt={gag?.name || 'SOS'}
+            imageAlt={sos.name}
             color={track.color}
             title={`${sos.name} (${sos.damage})`}
             damage={sos.damage}
             disabled={disabled}
             onClick={() => onSelect(sos.gagIndex)}
-            overlayBottom={
-              <div className='flex'>
-                {[...Array(sos.gagIndex)].map((_, i) => (
-                  <StarIcon key={i} className="w-2.5 h-2.5 text-yellow-300" />
-                ))}
-              </div>
-            }
+            stars={sos.gagIndex}
           />
         );
       })}
@@ -892,21 +863,21 @@ const RoundSlotButton = memo(({
     <button
       type="button"
       onClick={handleClick}
-      className={`gag-button group relative flex h-10 w-10 items-center justify-center rounded-md border transition-colors cursor-pointer ${isActive ? 'border-emerald-400/70 bg-emerald-500/10' : cell ? 'hover:brightness-75' : 'border-white/10 bg-black/25 hover:bg-black/35'
+      className={`round-slot-btn group relative flex h-10 w-10 items-center justify-center rounded-md border transition-colors cursor-pointer ${isActive ? 'border-emerald-400/70 bg-emerald-500/10' : cell ? 'hover:brightness-75' : 'border-white/10 bg-black/25 hover:bg-black/35'
         }`}
       style={cell && track ? { backgroundColor: track.color, borderColor: track.color } : undefined}
       title={name ? `${name} (${cellDamage}) — click to remove` : 'Click a gag to insert'}
     >
       {/* Fixed-size container so filled and empty slots are identical dimensions */}
       <div className="h-8 w-8 flex items-center justify-center">
-        {imgSrc ? (
+        {imgSrc ? (cell?.variant === 'sos' ? <SosCardImage src={imgSrc} alt={name || 'SOS'} /> : (
           <img
             src={imgSrc}
             alt={name || 'Gag'}
             draggable="false"
             className="h-8 w-8 rounded-sm object-contain drop-shadow-md"
           />
-        ) : (
+        )) : (
           <span className="h-8 w-8 rounded-sm" />
         )}
       </div>
@@ -920,13 +891,7 @@ const RoundSlotButton = memo(({
           <img src="https://toonhq.org/static/assets/gags/ttr/organic.webp" alt="Organic" draggable="false" className="h-5 w-5 object-contain" />
         </div>
       )}
-      {cell?.variant === 'sos' && (
-        <div className="absolute -bottom-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)] text-yellow-300 flex">
-          {[...Array(sosInfo?.gagIndex ?? 0)].map((_, i) => (
-            <StarIcon key={i} className="w-2.5 h-2.5" />
-          ))}
-        </div>
-      )}
+      {cell?.variant === 'sos' && <SosStars count={sosInfo?.gagIndex ?? 0} />}
     </button>
   );
 });
@@ -1062,7 +1027,7 @@ function RoundPhaseGroup({
 }) {
   if (group.kind === 'neutral') {
     return (
-      <div className="flex flex-col gap-1 m-1 w-[345px]">
+      <div className="flex flex-col gap-1 m-1 min-w-0">
         {group.rounds.map((roundIndex) => (
           <RoundRow
             key={roundIndex}
@@ -1097,7 +1062,7 @@ function RoundPhaseGroup({
     : isDefenseFullyMeltdown ? 'Meltdown' : 'Defense - Meltdown';
 
   return (
-    <div className="flex gap-1.5">
+    <div className="boiler-phase-group flex gap-1.5">
       <RoundRowsColumn
         rounds={group.firedUp}
         label={firedUpLabel}
@@ -1164,10 +1129,10 @@ function RoundsPanel({
   onClearAll: () => void;
 }) {
   return (
-    <section className="rounded-xl bg-black/40  p-2 flex flex-col h-full relative">
+    <section className="boiler-rounds rounded-xl bg-black/40 p-2 flex flex-col min-w-0 h-full relative">
       {/* Header: health bar */}
-      <div className="my-4 flex items-center justify-center h-[50px] relative">
-        <div className="relative w-[300px]">
+      <div className="boiler-rounds-header my-4 flex items-center justify-center h-[50px] relative">
+        <div className="boiler-summary-health relative w-[300px]">
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
             {remainingHp} / {maxHp}
@@ -1430,7 +1395,7 @@ function BoilerCalculator() {
   }, [lastAddedRound]);
 
   return (
-    <div className="grid grid-cols-[38%_62%] gap-3 h-full">
+    <div data-calculator-layout className="boiler-calc-container grid grid-cols-[minmax(380px,38fr)_minmax(0,62fr)] gap-3 h-full">
       <GagPickerPanel
         stars={stars}
         onSetStars={handleSetStars}
@@ -2817,6 +2782,7 @@ export function ShtickerBook({
           onClick={closeBook}
         >
           <div
+            data-book-calculator={['boiler_calc', 'cog_calc', 'gag_calc'].includes(activeTab) ? activeTab : undefined}
             className={`info-book-panel absolute bottom-4 overflow-hidden rounded-2xl border border-[#0a2e1d] bg-[#0c3622] shadow-2xl ${sidebarOnLeft ? 'right-4' : 'left-4'} ${isClosing ? 'is-closing' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2839,7 +2805,7 @@ export function ShtickerBook({
                   <FacilitiesTabContent activeFacility={activeFacility} setActiveFacility={setActiveFacility} />
                 )}
                 {activeTab === 'field_office' && <FieldOfficeTabContent />}
-                {activeTab === 'boiler_calc' && <BoilerCalculator />}
+                {activeTab === 'boiler_calc' && <CalculatorPortalProvider><BoilerCalculator /></CalculatorPortalProvider>}
                 {activeTab === 'cog_calc' && <CogCalculator />}
                 {activeTab === 'gag_calc' && <GagCalculator />}
                 {activeTab === 'bosses' && (

@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.39',
+    date: 'Oct 15, 2026',
+    changes: [
+      'Add Toons Hit accuracy boosts to the Gag and Facilities Calculators',
+      'Improve gag and SOS card tooltips across all calculators',
+      'Improve calculator layouts for smaller windows and screens'
+    ]
+  },
+  {
     version: '1.2.38',
     date: 'Oct 5, 2026',
     changes: [

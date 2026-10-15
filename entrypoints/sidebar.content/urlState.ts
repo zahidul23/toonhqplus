@@ -11,7 +11,7 @@ type EncodedCogGag = EncodedGag & {
   targetIdx?: number;
 };
 
-const TRACK_IDS = ['trap', 'lure', 'sound', 'throw', 'squirt', 'drop', 'special'] as const;
+const TRACK_IDS = ['trap', 'lure', 'sound', 'throw', 'squirt', 'drop', 'special', 'toonsHit'] as const;
 const VARIANTS = ['base', 'organic', 'sos'] as const;
 const EMPTY_GAG_CODE = '00';
 
@@ -131,5 +131,4 @@ export function decodeCogRoundsFromSearch(
   }
   return rounds;
 }
-
 

@@ -1,4 +1,12 @@
-import React, { useState, useMemo, memo, useEffect, useRef, useLayoutEffect } from 'react';
+import { TOONS_HIT_CARDS, TOONS_HIT_COLOR, getToonsHitRounds } from './toonsHit';
+import { GagButton, GagTooltip, SosCardImage, SosStars } from './components/GagButton';
+import type { GagTooltipContent, GagTooltipPosition } from './components/GagButton';
+import { SelectedGagSlot } from './components/Cog/SelectedGagSlot';
+import { CalculatorPortalProvider, useCalculatorPortal } from './components/CalculatorPortal';
+import { AccuracyDetails, useMobileAccuracy } from './components/AccuracyDetails';
+import { getGagBaseAccuracy } from './gagAccuracy';
+import { REMOTE_FIRE_COLOR, REWARD_CONTAINER_COLOR } from './rewardColors';
+import React, { useState, useId, useMemo, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
 import { calculateRoundAccuracy as calculateRoundAccuracyCore } from './cogAccuracy';
@@ -98,6 +106,7 @@ export const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; 
     { gagIndex: 4, damage: 120, image: SOS_CLERK_PENNY, name: "Clerk Penny" },
     { gagIndex: 5, damage: 180, image: SOS_CLERK_CLARA, name: "Clerk Clara" },
   ],
+  toonsHit: TOONS_HIT_CARDS.map(card => ({ ...card, damage: 0, image: getExtensionImageUrl(card.image) })),
   special: [
     { gagIndex: 0, damage: 9999, image: getExtensionImageUrl('images/pinkslips.webp'), name: "Pink Slip", isInstaKill: true },
     { gagIndex: 1, damage: 0, rounds: 2, dmgOthers: 45, dmgExpire: 45, image: getExtensionImageUrl('images/remotes.webp'), name: "1-Star Damage Remote", isRemote: true, stars: 1 },
@@ -124,13 +133,34 @@ export const SOS_GAGS: Record<string, Array<{ gagIndex: number; damage: number; 
   ],
 };
 
-const LURE_DURATIONS: Record<number, number> = {
+export const LURE_DURATIONS: Record<number, number> = {
   0: 3, 1: 3, 2: 4, 3: 4, 4: 5, 5: 5, 6: 9
 };
 
 type GagVariant = 'base' | 'organic' | 'sos';
 type SelectedGag = { trackId: string; gagIndex: number; variant: GagVariant; target: 'single' | 'all'; targetIdx?: number } | null;
 
+
+function getSelectedGagTooltip(gag: SelectedGag): GagTooltipContent | undefined {
+  if (!gag) return;
+  const sos = gag.variant === 'sos' ? SOS_GAGS[gag.trackId]?.find(card => card.gagIndex === gag.gagIndex) : undefined;
+  if (sos) {
+    if (gag.trackId === 'toonsHit') return { name: sos.name, rounds: sos.rounds, description: '+75% gag accuracy' };
+    if (sos.isRemote) return { name: sos.name, rounds: sos.rounds,
+      damage: sos.isHeal ? undefined : sos.dmgOthers, damageLabel: 'damage per round',
+      description: `${sos.dmgExpire} self damage on expiry` };
+    if (sos.isInstaKill) return { name: sos.name, description: 'Instantly defeats eligible Cogs' };
+    return { name: sos.name, accuracy: 100, damage: gag.trackId === 'lure' ? undefined : sos.damage,
+      rounds: gag.trackId === 'lure' ? sos.rounds : undefined };
+  }
+  const data = (gagsConfig as GagTrack[]).find(track => track.id === gag.trackId)?.gags[gag.gagIndex];
+  if (!data) return;
+  const organic = gag.variant === 'organic';
+  return { name: `${organic ? 'Organic ' : ''}${data.name}`,
+    damage: gag.trackId === 'lure' ? undefined : organic ? data.organic ?? data.base : data.base,
+    accuracy: getGagBaseAccuracy(gag.trackId, gag.gagIndex, organic),
+    rounds: gag.trackId === 'lure' ? LURE_DURATIONS[gag.gagIndex] : undefined };
+}
 
 type GagTrack = {
   id: string;
@@ -290,11 +320,12 @@ function calculateRoundAccuracyLegacy(roundGags: SelectedGag[], roundCogs: Cog[]
   return { total: perCog.length ? totalChance * 100 : 0, perCog, factors };
 }
 
-function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[]) {
+function calculateRoundAccuracy(roundGags: SelectedGag[], roundCogs: Cog[], toonsHit = false) {
   return calculateRoundAccuracyCore(
     roundGags,
     roundCogs,
     (cog, cogIndex) => COG_CHOICES.find((candidate) => candidate.id === cog.id)?.label ?? `Cog ${cogIndex + 1}`,
+    toonsHit,
   );
 }
 
@@ -334,56 +365,10 @@ function getCogMaxHp(cog: Cog, allCogs: Cog[]): number {
 
 // ─── Components ───────────────────────────────────────────────────────────────
 
-const GagButton = memo(({ imageSrc, imageAlt, color, title, organicTitle, damage, disabled = false, onClick, onOrganicClick, overlayBottom, targetPopup, organicTargetPopup, hasOrganic }: any) => {
-  return (
-    <div className="relative group">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={`gag-button relative flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:brightness-110'
-          }`}
-        style={{ backgroundColor: color, borderColor: color }}
-        title={title}
-      >
-        <div className="h-8 w-8 flex items-center justify-center">
-          <img
-            src={imageSrc}
-            alt={imageAlt}
-            draggable="false"
-            className="h-8 w-8 rounded-sm drop-shadow-md object-contain"
-          />
-        </div>
-        {overlayBottom && (
-          <div className="absolute inset-x-0 bottom-0.5 flex justify-center gap-0.5 px-1">
-            {overlayBottom}
-          </div>
-        )}
-      </button>
-
-      {hasOrganic && (
-        <button
-          type="button"
-          onClick={onOrganicClick}
-          className="absolute -top-2 -right-2 z-20 w-6 h-6 transition-all opacity-0 group-hover:opacity-100 grayscale hover:grayscale-0 hover:scale-125 active:scale-90 cursor-pointer flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-          title={organicTitle || `Organic ${title}`}
-        >
-          <img
-            src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
-            alt="Organic"
-            className="w-full h-full object-contain"
-          />
-        </button>
-      )}
-
-      {targetPopup}
-      {organicTargetPopup}
-    </div>
-  );
-});
-
 const TargetPopup = ({ trackId, gagIndex, variant, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, onSelectGag, currentRoundGags }: any) => {
   const isOpen = activePopup?.trackId === trackId && activePopup?.gagIndex === gagIndex && activePopup?.variant === variant && !activePopup?.subType;
+  const root = useCalculatorPortal();
+  const anchorRef = useRef<HTMLSpanElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ left: '50%', transform: 'translateX(-50%)', visibility: 'hidden' });
   const [arrowStyle, setArrowStyle] = useState<React.CSSProperties>({ left: '50%', transform: 'translateX(-50%)' });
@@ -391,10 +376,9 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, activePreset, cogDamage
   useLayoutEffect(() => {
     if (isOpen && popupRef.current) {
       const popupRect = popupRef.current.getBoundingClientRect();
-      const container = popupRef.current.closest('.gag-picker-container') || document.body;
-      const containerRect = container.getBoundingClientRect();
+      const containerRect = { left: 0, right: window.innerWidth };
 
-      const button = popupRef.current.parentElement;
+      const button = anchorRef.current?.parentElement;
       if (!button) return;
       const buttonRect = button.getBoundingClientRect();
 
@@ -408,8 +392,8 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, activePreset, cogDamage
         targetLeft = containerRect.right - margin - popupRect.width;
       }
 
-      const relativeLeft = targetLeft - buttonRect.left;
-      setPopupStyle({ left: `${relativeLeft}px`, transform: 'none', visibility: 'visible' });
+      const top = Math.max(8, buttonRect.top - popupRect.height - 12);
+      setPopupStyle({ position: 'fixed', top, left: targetLeft, transform: 'none', visibility: 'visible' });
 
       const relativeArrowLeft = buttonCenter - targetLeft;
       setArrowStyle({ left: `${relativeArrowLeft}px`, transform: 'translateX(-50%)' });
@@ -418,8 +402,8 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, activePreset, cogDamage
 
   if (!isOpen) return null;
 
-  return (
-    <div ref={popupRef} style={popupStyle} className="absolute bottom-full mb-3 w-max bg-[#0c3622] p-2 rounded-2xl border border-white/10 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2">
+  return <span ref={anchorRef}>{createPortal(
+    <div ref={popupRef} style={popupStyle} className="fixed w-max bg-[#0c3622] p-2 rounded-2xl border border-white/10 shadow-2xl z-[2147483647] animate-in fade-in slide-in-from-bottom-2">
       <div className="flex gap-2">
         {cogs.map((cog: any, cogIdx: number) => {
           const choice = COG_CHOICES.find(c => c.id === cog.id);
@@ -478,12 +462,62 @@ const TargetPopup = ({ trackId, gagIndex, variant, cogs, activePreset, cogDamage
         })}
       </div>
       <div style={arrowStyle} className="absolute top-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]"></div>
-    </div>
-  );
+    </div>, root
+  )}</span>;
 };
 
 const RemoteStarsPopup = ({ gagIndex, activePopup, setActivePopup }: any) => {
   const isOpen = activePopup?.trackId === 'special' && activePopup?.gagIndex === gagIndex && activePopup?.subType === 'stars';
+  const root = useCalculatorPortal();
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ position: 'fixed', top: 0, left: 0, visibility: 'hidden' });
+  const [arrowStyle, setArrowStyle] = useState<React.CSSProperties>({ position: 'absolute', left: '50%', transform: 'translateX(-50%)' });
+  const tooltipId = useId();
+  const [tooltip, setTooltip] = useState<{ index: number; content: GagTooltipContent; position: GagTooltipPosition } | null>(null);
+  const showTooltip = (element: HTMLElement, index: number) => {
+    const remote = SOS_GAGS.special.find(remote => remote.gagIndex === index);
+    if (!remote) return;
+    const bounds = element.getBoundingClientRect();
+    const below = bounds.top < 140;
+    const halfWidth = Math.min(96, (window.innerWidth - 16) / 2);
+    setTooltip({ index, content: {
+      name: remote.name,
+      damage: remote.isHeal ? undefined : remote.dmgOthers,
+      damageLabel: 'damage per round',
+      rounds: remote.rounds,
+      description: `${remote.dmgExpire} self damage on expiry`,
+    }, position: {
+      left: Math.max(halfWidth + 8, Math.min(window.innerWidth - halfWidth - 8, bounds.left + bounds.width / 2)),
+      top: below ? bounds.bottom + 8 : bounds.top - 8,
+      below,
+    } });
+  };
+
+  useLayoutEffect(() => {
+    if (isOpen && popupRef.current) {
+      const popup = popupRef.current;
+      const popupRect = popup.getBoundingClientRect();
+      const button = anchorRef.current?.parentElement;
+      if (!button) return;
+      const buttonRect = button.getBoundingClientRect();
+
+      const buttonCenter = buttonRect.left + buttonRect.width / 2;
+      let targetLeft = buttonCenter - popupRect.width / 2;
+
+      const margin = 8;
+      if (targetLeft < margin) targetLeft = margin;
+      if (targetLeft + popupRect.width > window.innerWidth - margin) {
+        targetLeft = window.innerWidth - margin - popupRect.width;
+      }
+
+      const targetTop = Math.max(8, buttonRect.top - popupRect.height - 12);
+
+      setPopupStyle({ position: 'fixed', top: `${targetTop}px`, left: `${targetLeft}px`, visibility: 'visible' });
+      setArrowStyle({ position: 'absolute', left: `${buttonCenter - targetLeft - 8}px`, transform: 'none' });
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isHeal = gagIndex === 4;
@@ -497,36 +531,42 @@ const RemoteStarsPopup = ({ gagIndex, activePopup, setActivePopup }: any) => {
     return `${remote.name} (${remote.dmgOthers} damage for ${remote.rounds} rounds, ${selfDamage})`;
   };
 
-  return (
-    <div className="absolute bottom-full mb-3 right-0 w-max bg-[#0c3622] p-4 rounded-2xl border border-white/10 shadow-2xl z-[70] animate-in fade-in slide-in-from-bottom-2">
+  return <span ref={anchorRef}>{createPortal(
+    <div ref={popupRef} style={popupStyle} className="w-max bg-[#0c3622] border border-white/10 shadow-2xl p-4 rounded-2xl z-[2147483647] animate-in fade-in slide-in-from-bottom-2">
       <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-3 text-center">Select Level</div>
       <div className="flex gap-3">
         {items.map(idx => {
-          const rem = SOS_GAGS.special.find(s => s.gagIndex === idx);
+          const rem = SOS_GAGS.special.find((s: any) => s.gagIndex === idx);
           return (
             <button
               key={idx}
-              onClick={(e) => { e.stopPropagation(); setActivePopup({ trackId: 'special', gagIndex: idx, variant: 'sos' }); }}
-              className="group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-violet-500/20 hover:border-violet-500/50 rounded-xl border border-white/5 transition-all cursor-pointer min-w-[64px]"
-              title={getRemoteTitle(rem)}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setTooltip(null); setActivePopup({ trackId: 'special', gagIndex: idx, variant: 'sos' }); }}
+              onMouseEnter={event => showTooltip(event.currentTarget, idx)}
+              onMouseLeave={() => setTooltip(null)}
+              onFocus={event => showTooltip(event.currentTarget, idx)}
+              onBlur={() => setTooltip(null)}
+              onKeyDown={event => { if (event.key === 'Escape') setTooltip(null); }}
+              className="group/star relative flex flex-col items-center gap-2 p-3 bg-black/40 hover:bg-violet-500/20 hover:border-violet-500/50 border-white/5 rounded-xl border transition-all cursor-pointer min-w-[64px]"
+              aria-label={getRemoteTitle(rem)}
+              aria-describedby={tooltip?.index === idx ? tooltipId : undefined}
             >
-              <div className="relative">
-                <img src={rem?.image} className="w-10 h-10 object-contain group-hover/star:scale-110 transition-transform" />
-                <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5">
-                  {[...Array(rem?.stars)].map((_, i) => <span key={i} className="text-yellow-400 text-[10px] drop-shadow-sm">★</span>)}
-                </div>
-              </div>
+              {rem && <div className="relative w-10 h-12">
+                <SosCardImage src={rem.image} alt="" />
+              </div>}
+              {rem?.stars && <SosStars count={rem.stars} />}
               <span className="text-[10px] font-black text-white/80">{rem?.stars} Star</span>
             </button>
           );
         })}
       </div>
-      <div className="absolute top-full right-4 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]"></div>
-    </div>
-  );
+      <div style={arrowStyle} className="absolute top-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-[#0c3622]" />
+      {tooltip && <GagTooltip id={tooltipId} content={tooltip.content} position={tooltip.position} />}
+    </div>, root
+  )}</span>;
 };
 
-function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
+function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags, isOrganic = false, fillWidth = false, hideDivider = false }: any) {
   const isBase = mode === 'base';
   const items = isBase ? track.gags : (SOS_GAGS[track.id] || []).filter((s: any) => [3, 4, 5].includes(s.gagIndex));
 
@@ -542,12 +582,15 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages,
   };
 
   const getSosTitle = (gag: any) => {
+    if (track.id === 'toonsHit') return `${gag.name} (+75% accuracy, ${gag.rounds} rounds)`;
     if (track.id === 'lure' && gag.rounds) return `${gag.name} (${gag.rounds} rounds)`;
     return `${gag.name} (${gag.damage})`;
   };
 
   const handleGagClick = (e: React.MouseEvent, idx: number, variant: GagVariant) => {
     e.stopPropagation();
+    const effectiveVariant: GagVariant = (isBase && isOrganic && variant === 'base') ? 'organic' : variant;
+
     const isAllTarget = track.id === 'sound' || (['trap', 'lure', 'drop', 'throw', 'squirt'].includes(track.id) && idx === 6) || (track.id === 'lure' && [1, 3, 5].includes(idx)) || (!isBase && [3, 4, 5].includes(idx));
 
     let livingCount = 0;
@@ -555,24 +598,27 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages,
     cogs.forEach((c: any, i: number) => { if (!c.isDead) { livingCount++; livingTargetIdx = i; } });
 
     if (!isAllTarget && livingCount === 1 && livingTargetIdx !== -1) {
-      onSelectGag(track.id, idx, variant, livingTargetIdx);
+      onSelectGag(track.id, idx, effectiveVariant, livingTargetIdx);
       setActivePopup(null);
     } else if (isAllTarget) {
-      onSelectGag(track.id, idx, variant);
+      onSelectGag(track.id, idx, effectiveVariant);
       setActivePopup(null);
     } else {
-      if (activePopup?.trackId === track.id && activePopup?.gagIndex === idx && activePopup?.variant === variant) setActivePopup(null);
-      else setActivePopup({ trackId: track.id, gagIndex: idx, variant });
+      if (activePopup?.trackId === track.id && activePopup?.gagIndex === idx && activePopup?.variant === effectiveVariant) setActivePopup(null);
+      else setActivePopup({ trackId: track.id, gagIndex: idx, variant: effectiveVariant });
     }
   };
 
   return (
-    <div className="flex gap-1 h-10 items-center">
-      {mode === 'sos' && items.length > 0 && <div className="w-px h-8 bg-white/10 mx-1" />}
+    <div
+      className={fillWidth ? 'gag-track-fill gap-0.5' : 'gag-track-row flex gap-0.5 sm:gap-1 h-12 items-center'}
+      style={fillWidth ? { gridTemplateColumns: `repeat(${items.length}, 1fr)` } : undefined}
+    >
+      {!fillWidth && !hideDivider && mode === 'sos' && items.length > 0 && <div className="hidden sm:block w-px h-8 bg-white/10 mx-1" />}
       {items.map((gag: any, idx: number) => {
         const itemIdx = isBase ? idx : gag.gagIndex;
-        const variant = isBase ? 'base' : 'sos';
-        const titleText = isBase ? getBaseTitle(gag, idx) : getSosTitle(gag);
+        const variant: GagVariant = isBase ? 'base' : 'sos';
+        const titleText = isBase ? (isOrganic ? getOrganicTitle(gag, idx) : getBaseTitle(gag, idx)) : getSosTitle(gag);
         const organicTitle = isBase ? getOrganicTitle(gag, idx) : undefined;
 
         let gagDisabled = false;
@@ -583,13 +629,28 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages,
             key={itemIdx}
             imageSrc={isBase ? `https://toonhq.org/static/assets/gags/${gag.image}` : gag.image}
             imageAlt={gag.name}
+            imageScale={isBase ? 1 : 1.15}
+            stars={isBase ? undefined : gag.stars ?? gag.gagIndex}
             color={track.color}
             title={titleText}
             organicTitle={organicTitle}
+            tooltipContent={track.id === 'toonsHit'
+              ? { name: gag.name, rounds: gag.rounds, description: '+75% gag accuracy' }
+              : { name: `${isBase && isOrganic ? 'Organic ' : ''}${gag.name}`,
+                  damage: track.id === 'lure' ? undefined : isBase ? (isOrganic ? gag.organic ?? gag.base : gag.base) : gag.damage,
+                  accuracy: isBase ? getGagBaseAccuracy(track.id, idx, isOrganic) : 100,
+                  rounds: track.id === 'lure' ? (isBase ? LURE_DURATIONS[idx] : gag.rounds) : undefined }}
+            organicTooltipContent={isBase ? {
+              name: `Organic ${gag.name}`,
+              damage: track.id === 'lure' ? undefined : gag.organic ?? gag.base,
+              accuracy: getGagBaseAccuracy(track.id, idx, true),
+              rounds: track.id === 'lure' ? LURE_DURATIONS[idx] : undefined,
+            } : undefined}
             disabled={gagDisabled}
             onClick={(e: any) => handleGagClick(e, itemIdx, variant)}
             onOrganicClick={isBase ? ((e: any) => handleGagClick(e, itemIdx, 'organic')) : undefined}
             hasOrganic={isBase}
+            isOrganicActive={isBase && isOrganic}
             targetPopup={<TargetPopup trackId={track.id} gagIndex={itemIdx} variant={variant} cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
             organicTargetPopup={isBase ? <TargetPopup trackId={track.id} gagIndex={itemIdx} variant="organic" cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} /> : undefined}
           />
@@ -599,7 +660,7 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages,
   );
 }
 
-function SpecialGagColumn({ mode, onSelectGag, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags }: any) {
+function SpecialGagColumn({ mode, onSelectGag, cogs, activePreset, cogDamages, getHealthColor, activePopup, setActivePopup, currentRoundGags, horizontal = false, fillWidth = false }: any) {
   const isPinkSlip = mode === 'slips';
   const specialGags = SOS_GAGS.special;
 
@@ -615,28 +676,28 @@ function SpecialGagColumn({ mode, onSelectGag, cogs, activePreset, cogDamages, g
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={fillWidth ? (isPinkSlip ? '' : 'col-span-2') : horizontal ? '' : 'flex flex-col gap-2 mt-2'}>
       {isPinkSlip ? (
-        <div className="flex items-center gap-1">
-          <div className="w-px h-8 bg-white/10 mx-1" />
+        <div className={fillWidth ? 'gag-track-fill grid-cols-1' : 'flex items-center gap-1'}>
+          {!horizontal && <div className="hidden sm:block w-px h-8 bg-white/10 mx-1" />}
           <GagButton
             imageSrc={specialGags[0].image}
             imageAlt="Pink Slip"
-            color="#8b5cf6"
+            color={REMOTE_FIRE_COLOR}
             title="Pink Slip"
             onClick={(e: any) => handleGagClick(e, 0)}
             targetPopup={<TargetPopup trackId="special" gagIndex={0} variant="sos" cogs={cogs} activePreset={activePreset} cogDamages={cogDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} onSelectGag={onSelectGag} currentRoundGags={currentRoundGags} />}
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className={fillWidth ? 'gag-track-fill grid-cols-2 gap-0.5' : horizontal ? 'flex gap-1' : 'flex flex-col gap-6'}>
           {[1, 4].map(idx => (
-            <div key={idx} className="flex items-center gap-1">
-              <div className="w-px h-8 bg-white/10 mx-1" />
+            <div key={idx} className={fillWidth ? 'gag-track-fill grid-cols-1' : 'flex items-center gap-1'}>
+              {!horizontal && <div className="hidden sm:block w-px h-8 bg-white/10 mx-1" />}
               <GagButton
                 imageSrc={specialGags[idx].image}
                 imageAlt={idx === 1 ? "Damage Remote" : "Heal Remote"}
-                color="#8b5cf6"
+                color={REMOTE_FIRE_COLOR}
                 title={idx === 1 ? "Damage Remote" : "Heal Remote"}
                 onClick={(e: any) => handleGagClick(e, idx)}
                 targetPopup={
@@ -671,7 +732,9 @@ const DEFAULT_COGS: Cog[] = [
   { id: '14', isTrapped: false, isLured: false, isV2: false },
 ];
 
-export function CogCalculator() {
+function CogCalculatorContent() {
+  const root = useCalculatorPortal();
+  const mobileAccuracy = useMobileAccuracy();
   const [cogs, setCogs] = useState<Cog[]>(() => {
     const saved = localStorage.getItem('cog-calc-cogs');
     if (saved) {
@@ -1331,9 +1394,10 @@ export function CogCalculator() {
   }, [selectedGagsByRound, gagTracks, cogs]);
 
   const activeStats = roundResults[activeRound];
+  const toonsHitRounds = useMemo(() => getToonsHitRounds(selectedGagsByRound), [selectedGagsByRound]);
   const roundAccuracyResults = useMemo(() => selectedGagsByRound.map((roundGags, roundIndex) =>
-    calculateRoundAccuracy(roundGags, roundIndex === 0 ? cogs : roundResults[roundIndex - 1].finalCogs)
-  ), [selectedGagsByRound, cogs, roundResults]);
+    calculateRoundAccuracy(roundGags, roundIndex === 0 ? cogs : roundResults[roundIndex - 1].finalCogs, toonsHitRounds[roundIndex] > 0)
+  ), [selectedGagsByRound, cogs, roundResults, toonsHitRounds]);
   const startOfRoundStats = activeRound === 0 ? null : roundResults[activeRound - 1];
   const selectionCogs = startOfRoundStats?.finalCogs ?? cogs;
   const selectionDamages = startOfRoundStats?.cogDamages ?? cogs.map(() => 0);
@@ -1346,10 +1410,47 @@ export function CogCalculator() {
     return 'bg-red-500';
   };
 
+  const showRoundAccuracy = (index: number, element: HTMLElement) => {
+    const bounds = element.getBoundingClientRect();
+    setRoundAccuracyTooltip({ result: roundAccuracyResults[index], round: index + 1,
+      anchor: { left: bounds.left + bounds.width / 2, top: bounds.top, bottom: bounds.bottom }, root });
+  };
+
+  const roundAccuracyContent = roundAccuracyTooltip ? <>
+          {roundAccuracyTooltip.result.perCog.map((cog) => (
+            <div key={cog.cogIndex} className="mb-2 text-[11px] font-black text-white last:mb-0">
+              <div>{cog.cogName}: <span className="text-sky-300">{formatAccuracy(cog.accuracy)}%</span></div>
+              {cog.entries.map((entry) => {
+                const track = gagTracks.find((candidate) => candidate.id === entry.trackId);
+                return <div key={entry.trackId} className="mb-1 pl-2 text-[10px] font-bold leading-snug text-white/65 last:mb-0">
+                  <div className="font-black" style={{ color: track?.color ?? '#c4b5fd' }}>{track?.name ?? 'Special'}: {formatAccuracy(entry.accuracy)}%</div>
+                  {entry.specialRule ? (entry.trackId !== 'trap' ? <div className="pl-2">{entry.specialRule}</div> : null) : <div className="pl-2">
+                    <div>Base accuracy: {entry.baseAccuracy}%</div>
+                    {entry.organicBonus > 0 && <div>Organic bonus: +{entry.organicBonus}%{entry.baseAccuracy + entry.organicBonus > MAX_TOON_ACCURACY ? ' (base capped at 95%)' : ''}</div>}
+                    <div>Estimated effective evasion: {MAX_TRACK_EXP_BONUS - entry.defense > 0 ? '+' : ''}{MAX_TRACK_EXP_BONUS - entry.defense}%</div>
+                    {entry.trapPlacementBonus > 0 && <div>Trap Bonus: +{entry.trapPlacementBonus}%</div>}
+                    {entry.lureBonus > 0 && <div>Multi-Lure Bonus: +{entry.lureBonus}%</div>}
+                    {entry.luredRatio > 0 && <div>Lured Ratio Bonus: +{formatAccuracy(entry.luredRatio)}%</div>}
+                    {entry.toonsHitBonus > 0 && <div>Toons Hit: +{entry.toonsHitBonus}%</div>}
+                    {entry.stunBonus > 0 && <div>Stun bonus: +{entry.stunBonus}%</div>}
+                    <div className="mt-0.5 text-white">{entry.rawAccuracy > MAX_TOON_ACCURACY ? `Result: ${entry.rawAccuracy}% raw → ~${formatAccuracy(entry.accuracy)}% estimated soft cap` : `Result: ${formatAccuracy(entry.accuracy)}%`}</div>
+                  </div>}
+                </div>;
+              })}
+            </div>
+          ))}
+          <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] font-bold text-white/65">
+            <div>All-target-only tracks use one roll against the strongest Cog.</div>
+            <div>In mixed tracks, single-target rolls stay independent and the all-target gag inherits them.</div>
+            <div className="mt-1 tabular-nums">{roundAccuracyTooltip.result.factors.map((factor) => `${formatAccuracy(factor.accuracy)}%`).join(' × ')}</div>
+            <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(roundAccuracyTooltip.result.total)}% chance every gag hits every attacked Cog</div>
+          </div>
+  </> : null;
+
   return (
-    <div className="grid grid-cols-[30fr_70fr] gap-3 h-full overflow-visible" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
+    <div data-calculator-layout className="cog-calculator-container grid grid-cols-[minmax(280px,30fr)_minmax(0,70fr)] gap-3 h-full overflow-visible" onClick={() => { setActivePopup(null); setActiveCogSlot(null); setPresetMenuOpen(false); }}>
       {/* Left Panel: Selected Gags (Rounds) */}
-      <div className="bg-[#082416] rounded-xl p-3 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[540px] overflow-hidden">
+      <div className="facility-rounds bg-[#082416] rounded-xl p-3 flex flex-col gap-2 border border-white/5 shadow-inner min-h-[540px] overflow-hidden">
         <div className="flex items-center justify-between mb-1 flex-shrink-0">
           <h4 className="text-sm font-bold text-white">Rounds</h4>
           <button
@@ -1391,20 +1492,14 @@ export function CogCalculator() {
               <div className="w-14 flex flex-col items-center flex-shrink-0">
                 <span className="text-[10px] font-black text-white/40 uppercase">Round {rIdx + 1}</span>
                 {roundAccuracyResults[rIdx].perCog.length > 0 && (
-                  <span
+                  <button type="button" aria-label={`Round ${rIdx + 1} accuracy`} aria-haspopup={mobileAccuracy ? 'dialog' : undefined}
                     className="cursor-help whitespace-nowrap text-sm font-black tabular-nums text-sky-300 underline decoration-dotted decoration-sky-300/60 underline-offset-2"
-                    onMouseEnter={(event) => {
-                      const element = event.currentTarget;
-                      const bounds = element.getBoundingClientRect();
-                      setRoundAccuracyTooltip({
-                        result: roundAccuracyResults[rIdx],
-                        round: rIdx + 1,
-                        anchor: { left: bounds.left + bounds.width / 2, top: bounds.top, bottom: bounds.bottom },
-                        root: element.getRootNode() instanceof ShadowRoot ? element.getRootNode() as ShadowRoot : document.body,
-                      });
-                    }}
-                    onMouseLeave={() => setRoundAccuracyTooltip(null)}
-                  >{formatAccuracy(roundAccuracyResults[rIdx].total)}%</span>
+                    onMouseEnter={event => { if (!mobileAccuracy) showRoundAccuracy(rIdx, event.currentTarget); }}
+                    onMouseLeave={() => { if (!mobileAccuracy) setRoundAccuracyTooltip(null); }}
+                    onFocus={event => { if (!mobileAccuracy) showRoundAccuracy(rIdx, event.currentTarget); }}
+                    onBlur={() => { if (!mobileAccuracy) setRoundAccuracyTooltip(null); }}
+                    onClick={event => { event.stopPropagation(); showRoundAccuracy(rIdx, event.currentTarget); }}
+                  >{formatAccuracy(roundAccuracyResults[rIdx].total)}%</button>
                 )}
               </div>
               <div className="flex-1 flex gap-1 justify-center">
@@ -1431,7 +1526,8 @@ export function CogCalculator() {
                           })}
                         </div>
                       </div>
-                      <div
+                      <SelectedGagSlot
+                        content={getSelectedGagTooltip(gag)}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (gag) clearGagSlot(rIdx, gIdx);
@@ -1440,14 +1536,14 @@ export function CogCalculator() {
                             setActiveGagSlot(gIdx);
                           }
                         }}
-                        className={`w-14 h-10 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
+                        className={`facility-selected-gag w-14 h-10 rounded border flex items-center justify-center relative transition-all cursor-pointer ${isSlotActive ? 'border-emerald-500 bg-emerald-500/20' :
                           gag ? 'border-white/20' : 'border-dashed border-white/5 bg-black/10'
                           }`}
-                        style={gag && track ? { backgroundColor: (sosInfo?.isInstaKill || sosInfo?.isRemote) ? '#8b5cf6' : track.color } : {}}
+                        style={{ backgroundColor: gag?.trackId === 'toonsHit' ? TOONS_HIT_COLOR : sosInfo?.isInstaKill || sosInfo?.isRemote ? REMOTE_FIRE_COLOR : track?.color }}
                       >
                         {imgSrc ? (
                           <>
-                            <img src={imgSrc} alt="Gag" className="w-9 h-9 object-contain" />
+                            {sosInfo && !sosInfo.isInstaKill ? <SosCardImage src={imgSrc} alt={sosInfo.name} /> : <img src={imgSrc} alt={sosInfo?.name ?? gagData?.name ?? "Gag"} className="w-9 h-9 object-contain" />}
                             {gag?.variant === 'organic' && (
                               <img
                                 src="https://toonhq.org/static/assets/gags/ttr/organic.webp"
@@ -1455,18 +1551,12 @@ export function CogCalculator() {
                                 className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 shadow-sm z-10 drop-shadow-md object-contain"
                               />
                             )}
-                            {sosInfo?.isRemote && sosInfo.stars && (
-                              <div className="absolute -top-1.5 inset-x-0 flex justify-center gap-0.5 pointer-events-none">
-                                {[...Array(sosInfo.stars)].map((_, i) => (
-                                  <span key={i} className="text-yellow-400 text-[7px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">★</span>
-                                ))}
-                              </div>
-                            )}
+                            {sosInfo && !sosInfo.isInstaKill && gag && <SosStars count={sosInfo.stars ?? gag.gagIndex} />}
                           </>
                         ) : (
                           <span className="text-[10px] font-black text-white/5">{gIdx + 1}</span>
                         )}
-                      </div>
+                      </SelectedGagSlot>
                     </div>
                   );
                 })}
@@ -1479,7 +1569,7 @@ export function CogCalculator() {
       {/* Right Panel: Cogs & Gag Picker */}
       <div className="flex flex-col gap-3 min-w-0 relative overflow-visible">
         {/* Cogs Panel */}
-        <div className="bg-black/40 rounded-xl p-4 flex flex-col gap-4">
+        <div className="facility-cogs bg-black/40 rounded-xl p-4 flex flex-col gap-4">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <h4 className="text-base font-bold text-white">Cogs After Round {activeRound + 1}</h4>
             <div className="relative justify-self-center">
@@ -1809,69 +1899,55 @@ export function CogCalculator() {
         </div>
 
         {/* Gag Picker Panel (Now at the bottom) */}
-        <div className="flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
+        <div className="facility-picker flex flex-col gap-2 bg-black/40 rounded-xl p-3 h-fit">
           <div className="text-base font-bold text-white px-2 mb-1">Gag Picker (Round {activeRound + 1})</div>
-          <div className="bg-black/20 rounded-lg p-4 border border-white/5 gag-picker-container">
-            <div className="flex gap-1 items-start min-w-max">
+          <div className="bg-black/20 rounded-lg p-4 border border-white/5 gag-picker-container overflow-x-auto">
+            <div className="mx-auto flex w-max min-w-max gap-1 items-start">
               {/* Column 1: Gags */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
                 {gagTracks.map(track => (
                   <GagTrackRow key={track.id} track={track} mode="base" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
 
               {/* Column 2: SOS */}
-              <div className="flex flex-col gap-2">
-                {gagTracks.map(track => (
+              <div className="flex flex-col gap-1">
+                {gagTracks.map(track => track.id === 'throw' ? (
+                  <div key={track.id} className="flex gap-1">
+                    <div aria-hidden="true" className="flex flex-col gap-1">
+                      {[0, 1].map(row => <div key={row} className="facility-reward-row flex h-12 items-center"><div className="w-px h-8 bg-white/10 mx-1" /></div>)}
+                    </div>
+                    <div className="-mx-[4px] flex w-fit flex-col gap-1 rounded-lg px-[4px] ring-1 ring-inset ring-white/20" style={{ backgroundColor: REWARD_CONTAINER_COLOR }}>
+                    <div className="facility-reward-row relative flex h-12 items-center">
+                      <GagTrackRow track={{ id: 'toonsHit', name: 'Toons Hit', color: TOONS_HIT_COLOR, gags: [] }} mode="sos" hideDivider={true} onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                    </div>
+                    <div className="facility-reward-row relative flex h-12 items-center gap-1">
+                    <SpecialGagColumn mode="remotes" horizontal={true} onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                    <SpecialGagColumn mode="slips" horizontal={true} onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
+                    </div>
+                    </div>
+                  </div>
+                ) : track.id === 'squirt' ? null : (
                   <GagTrackRow key={track.id} track={track} mode="sos" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                 ))}
               </div>
 
-              {/* Column 3: Remotes */}
-              <div className="flex flex-col gap-2">
-                <SpecialGagColumn mode="remotes" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
-              </div>
-
-              {/* Column 4: Pink Slips */}
-              <div className="flex flex-col gap-2">
-                <SpecialGagColumn mode="slips" onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
-              </div>
             </div>
           </div>
         </div>
       </div>
-      {roundAccuracyTooltip && createPortal(
-        <div ref={roundAccuracyTooltipRef} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] max-h-[calc(100vh-1rem)] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltipPosition?.left ?? roundAccuracyTooltip.anchor.left, top: roundAccuracyTooltipPosition?.top ?? roundAccuracyTooltip.anchor.bottom + 12, visibility: roundAccuracyTooltipPosition ? 'visible' : 'hidden' }}>
-          <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/15 bg-[#020712]" aria-hidden="true" />
-          <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} accuracy</div>
-          {roundAccuracyTooltip.result.perCog.map((cog) => (
-            <div key={cog.cogIndex} className="mb-2 text-[11px] font-black text-white last:mb-0">
-              <div>{cog.cogName}: <span className="text-sky-300">{formatAccuracy(cog.accuracy)}%</span></div>
-              {cog.entries.map((entry) => {
-                const track = gagTracks.find((candidate) => candidate.id === entry.trackId);
-                return <div key={entry.trackId} className="mb-1 pl-2 text-[10px] font-bold leading-snug text-white/65 last:mb-0">
-                  <div className="font-black" style={{ color: track?.color ?? '#c4b5fd' }}>{track?.name ?? 'Special'}: {formatAccuracy(entry.accuracy)}%</div>
-                  {entry.specialRule ? (entry.trackId !== 'trap' ? <div className="pl-2">{entry.specialRule}</div> : null) : <div className="pl-2">
-                    <div>Base accuracy: {entry.baseAccuracy}%</div>
-                    {entry.organicBonus > 0 && <div>Organic bonus: +{entry.organicBonus}%{entry.baseAccuracy + entry.organicBonus > MAX_TOON_ACCURACY ? ' (base capped at 95%)' : ''}</div>}
-                    <div>Estimated effective evasion: {MAX_TRACK_EXP_BONUS - entry.defense > 0 ? '+' : ''}{MAX_TRACK_EXP_BONUS - entry.defense}%</div>
-                    {entry.trapPlacementBonus > 0 && <div>Trap Bonus: +{entry.trapPlacementBonus}%</div>}
-                    {entry.lureBonus > 0 && <div>Multi-Lure Bonus: +{entry.lureBonus}%</div>}
-                    {entry.luredRatio > 0 && <div>Lured Ratio Bonus: +{formatAccuracy(entry.luredRatio)}%</div>}
-                    {entry.stunBonus > 0 && <div>Stun bonus: +{entry.stunBonus}%</div>}
-                    <div className="mt-0.5 text-white">{entry.rawAccuracy > MAX_TOON_ACCURACY ? `Result: ${entry.rawAccuracy}% raw → ~${formatAccuracy(entry.accuracy)}% estimated soft cap` : `Result: ${formatAccuracy(entry.accuracy)}%`}</div>
-                  </div>}
-                </div>;
-              })}
-            </div>
-          ))}
-          <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] font-bold text-white/65">
-            <div>All-target-only tracks use one roll against the strongest Cog.</div>
-            <div>In mixed tracks, single-target rolls stay independent and the all-target gag inherits them.</div>
-            <div className="mt-1 tabular-nums">{roundAccuracyTooltip.result.factors.map((factor) => `${formatAccuracy(factor.accuracy)}%`).join(' × ')}</div>
-            <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(roundAccuracyTooltip.result.total)}% chance every gag hits every attacked Cog</div>
-          </div>
-        </div>, roundAccuracyTooltip.root)}
+      {roundAccuracyTooltip && <AccuracyDetails title={`Round ${roundAccuracyTooltip.round} accuracy`} onClose={() => setRoundAccuracyTooltip(null)}
+        desktop={createPortal(
+          <div ref={roundAccuracyTooltipRef} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] max-h-[calc(100vh-1rem)] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltipPosition?.left ?? roundAccuracyTooltip.anchor.left, top: roundAccuracyTooltipPosition?.top ?? roundAccuracyTooltip.anchor.bottom + 12, visibility: roundAccuracyTooltipPosition ? 'visible' : 'hidden' }}>
+            <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} accuracy</div>
+            {roundAccuracyContent}
+          </div>, root)}>
+        {roundAccuracyContent}
+      </AccuracyDetails>}
     </div>
   );
+}
+
+export function CogCalculator() {
+  return <CalculatorPortalProvider><CogCalculatorContent /></CalculatorPortalProvider>;
 }

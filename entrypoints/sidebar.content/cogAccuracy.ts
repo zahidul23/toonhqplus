@@ -1,3 +1,5 @@
+import { getToonsHitRounds, TOONS_HIT_BONUS } from './toonsHit.ts';
+
 export const MAX_TRACK_EXP_BONUS = 60;
 export const MAX_TOON_ACCURACY = 95;
 
@@ -53,6 +55,7 @@ export type CogAccuracyEntry = {
   lureBonus: number;
   luredRatio: number;
   rawAccuracy: number;
+  toonsHitBonus: number;
   specialRule?: string;
 };
 
@@ -182,7 +185,9 @@ export function calculateRoundAccuracy(
   roundGags: AccuracyGag[],
   roundCogs: AccuracyCog[],
   getCogName: (cog: AccuracyCog, index: number) => string = (_cog, index) => `Cog ${index + 1}`,
+  presetToonsHit = false,
 ) {
+  const toonsHitBonus = presetToonsHit || getToonsHitRounds([roundGags])[0] > 0 ? TOONS_HIT_BONUS : 0;
   const perCog: RoundCogAccuracy[] = [];
   const trapPhaseStates = roundCogs.map((cog, cogIndex) => getTrapPhaseState(roundGags, cog, cogIndex));
   const placedTrapCount = roundCogs.filter((cog, cogIndex) => !cog.isDead && trapPhaseStates[cogIndex].trapped).length;
@@ -228,7 +233,7 @@ export function calculateRoundAccuracy(
         || ((trackId === 'throw' || trackId === 'squirt') && allTrackGags.some((gag) => gag.gagIndex === 6));
       const luredRatio = receivesLuredRatio ? getLuredRatioBonus(roundGags, roundCogs, trackId) : 0;
       const rawAccuracy = Math.min(baseAccuracy + organicBonus, MAX_TOON_ACCURACY) + MAX_TRACK_EXP_BONUS - defense
-        + (trackId === 'lure' ? trapPlacementBonus + lureBonus : inheritedStunBonus + luredRatio);
+        + (trackId === 'lure' ? trapPlacementBonus + lureBonus : inheritedStunBonus + luredRatio) + toonsHitBonus;
       const hasSos = trackGags.some((gag) => gag.variant === 'sos');
       let accuracy = applyAccuracySoftCap(rawAccuracy);
       let specialRule: string | undefined;
@@ -236,7 +241,7 @@ export function calculateRoundAccuracy(
       else if (trackId === 'trap' || trackId === 'special' || hasSos) { accuracy = 100; specialRule = trackId === 'trap' ? 'Trap placement always hits' : 'Special/SOS gag always hits'; }
       else if (isRemoteControlled(roundGags, cog, cogIndex)) { accuracy = 100; specialRule = 'Gags cannot miss a remote-controlled Cog'; }
       else if (lured && trackId !== 'lure') { accuracy = 100; specialRule = 'Attacking a lured Cog always hits'; }
-      entries.push({ trackId, accuracy, baseAccuracy, organicBonus: specialRule ? 0 : organicBonus, defense: specialRule ? 0 : defense, stunBonus: specialRule || trackId === 'lure' ? 0 : inheritedStunBonus, trapPlacementBonus: specialRule ? 0 : trapPlacementBonus, lureBonus: specialRule ? 0 : lureBonus, luredRatio: specialRule ? 0 : luredRatio, rawAccuracy: specialRule ? accuracy : rawAccuracy, specialRule });
+      entries.push({ toonsHitBonus: specialRule ? 0 : toonsHitBonus, trackId, accuracy, baseAccuracy, organicBonus: specialRule ? 0 : organicBonus, defense: specialRule ? 0 : defense, stunBonus: specialRule || trackId === 'lure' ? 0 : inheritedStunBonus, trapPlacementBonus: specialRule ? 0 : trapPlacementBonus, lureBonus: specialRule ? 0 : lureBonus, luredRatio: specialRule ? 0 : luredRatio, rawAccuracy: specialRule ? accuracy : rawAccuracy, specialRule });
       if (accuracy > 0 && trackId !== 'trap' && trackId !== 'lure' && trackId !== 'special') stunBonus += trackGags.length * 25;
       if (trackId === 'lure' && accuracy > 0) {
         if (trapPhaseState.trapped) stunBonus += 50;

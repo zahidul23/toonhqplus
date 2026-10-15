@@ -1,7 +1,9 @@
+import { getToonsHitRounds, TOONS_HIT_BONUS } from './toonsHit.ts';
+
 const TRACK_IDS = ['trap', 'lure', 'sound', 'throw', 'squirt', 'drop'] as const;
 export type GagAccuracyTrackId = (typeof TRACK_IDS)[number];
 export type GagAccuracySelection = {
-  trackId: GagAccuracyTrackId;
+  trackId: GagAccuracyTrackId | 'toonsHit';
   gagIndex: number;
   variant: 'base' | 'organic' | 'sos';
 };
@@ -21,6 +23,11 @@ const COG_DEFENSE: Record<number, number> = {
 const MAX_TRACK_EXP_BONUS = 60;
 const MAX_TOON_ACCURACY = 95;
 
+export function getGagBaseAccuracy(trackId: string, gagIndex: number, organic = false) {
+  const base = TRACK_BASE_ACCURACY[trackId as GagAccuracyTrackId]?.[gagIndex] ?? 100;
+  return trackId === 'lure' && organic ? Math.min(base + 10, MAX_TOON_ACCURACY) : base;
+}
+
 function applyEstimatedSoftCap(rawAccuracy: number) {
   if (rawAccuracy <= MAX_TOON_ACCURACY) return Math.max(0, rawAccuracy);
   return Math.min(100, MAX_TOON_ACCURACY + (rawAccuracy - MAX_TOON_ACCURACY) * 0.04);
@@ -37,13 +44,15 @@ function getMultiLureBonus(lures: GagAccuracySelection[], baseline: GagAccuracyS
   }, 0);
 }
 
-export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, preLured: boolean, cogLevel: number) {
+export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, preLured: boolean, cogLevel: number, presetToonsHit = false) {
+  const toonsHitBonus = presetToonsHit || getToonsHitRounds([gags])[0] > 0 ? TOONS_HIT_BONUS : 0;
   const cogDefense = COG_DEFENSE[cogLevel] ?? COG_DEFENSE[20];
   const breakdown: Array<{
     trackId: GagAccuracyTrackId;
     baseAccuracy: number;
     organicBonus: number;
     expBonus: number;
+    toonsHitBonus: number;
     defense: number;
     stunBonus: number;
     stunSources: Array<{ trackId: GagAccuracyTrackId; gagCount: number; amount: number }>;
@@ -81,7 +90,7 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
       ? 10 + (lureAffectsGroup ? (trapPlacementCount - 1) * 5 : 0)
       : 0;
     const appliedStunBonus = trackId === 'lure' ? trapPlacementBonus : stunBonus;
-    const uncappedAccuracy = adjustedBaseAccuracy + MAX_TRACK_EXP_BONUS - cogDefense + appliedStunBonus + lureBonus;
+    const uncappedAccuracy = adjustedBaseAccuracy + MAX_TRACK_EXP_BONUS - cogDefense + appliedStunBonus + lureBonus + toonsHitBonus;
     let accuracy: number;
     let specialRule: string | undefined;
     if (trackId === 'drop' && lured) { accuracy = 0; specialRule = 'Drop always misses lured Cogs'; }
@@ -92,6 +101,7 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
     else accuracy = applyEstimatedSoftCap(uncappedAccuracy);
 
     breakdown.push({
+      toonsHitBonus: specialRule ? 0 : toonsHitBonus,
       trackId, baseAccuracy, organicBonus: specialRule ? 0 : organicBonus,
       expBonus: specialRule ? 0 : MAX_TRACK_EXP_BONUS, defense: specialRule ? 0 : cogDefense,
       stunBonus: specialRule || trackId === 'lure' ? 0 : stunBonus,
