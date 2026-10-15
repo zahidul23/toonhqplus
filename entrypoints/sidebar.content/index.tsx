@@ -1963,6 +1963,34 @@ export default defineContentScript({
       applyNavbarCustomization(currentSettings['navbar-config']);
     }
 
+    // Show the extension before waiting for ToonHQ's API or history tracking.
+    // A slow site request must not leave the sidebar missing during startup.
+    try {
+      const ui = await createShadowRootUi(ctx, {
+        name: 'toonhq-plus-sidebar',
+        position: 'overlay',
+        anchor: 'body',
+        append: 'last',
+        onMount(container) {
+          const wrapper = document.createElement('div');
+          wrapper.style.setProperty('--book-opened-image', `url("${getExtensionResourceUrl('/images/book_opened.webp')}")`);
+          wrapper.style.setProperty('--book-close-image', `url("${getExtensionResourceUrl('/images/book_close.webp')}")`);
+          wrapper.style.setProperty('--book-closed-image', `url("${getExtensionResourceUrl('/images/book_closed.webp')}")`);
+          wrapper.style.setProperty('--book-open-image', `url("${getExtensionResourceUrl('/images/book_open.webp')}")`);
+          container.append(wrapper);
+          const root = ReactDOM.createRoot(wrapper);
+          root.render(<SidebarApp />);
+          return root;
+        },
+        onRemove(root) {
+          root?.unmount();
+        },
+      });
+      ui.mount();
+    } catch (err) {
+      console.error('[ToonHQ Plus] Failed to mount sidebar:', err);
+    }
+
     let savedGroupFiltersByGame = await getSetting<Record<string, GroupFilters>>(GROUP_FILTERS_SETTING_KEY) || {};
     let restoredFilterGameId: number | null = null;
     let groupFiltersWrite = Promise.resolve();
@@ -2059,7 +2087,10 @@ export default defineContentScript({
       try {
         let toonsData = getToonHqOwnedToons();
         if (!Array.isArray(toonsData)) {
-          const toonsResp = await fetch('https://toonhq.org/api/toons/', { credentials: 'include' });
+          const toonsResp = await fetch('https://toonhq.org/api/toons/', {
+            credentials: 'include',
+            signal: AbortSignal.timeout(10_000),
+          });
           if (!toonsResp.ok) throw new Error(`ToonHQ returned ${toonsResp.status}.`);
           toonsData = await toonsResp.json();
         }
@@ -2204,7 +2235,10 @@ export default defineContentScript({
 
     // 2) Fetch current groups
     try {
-      const resp = await fetch('https://toonhq.org/api/groups/list/1/');
+      const resp = await fetch('https://toonhq.org/api/groups/list/1/', {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) throw new Error(`ToonHQ returned ${resp.status}.`);
       const data = await resp.json();
       if (data && Array.isArray(data.groups)) {
         data.groups.forEach((group: any) => {
@@ -2839,30 +2873,5 @@ export default defineContentScript({
       document.documentElement.appendChild(script);
     }
 
-    try {
-      const ui = await createShadowRootUi(ctx, {
-        name: 'toonhq-plus-sidebar',
-        position: 'overlay',
-        anchor: 'body',
-        append: 'last',
-        onMount(container) {
-          const wrapper = document.createElement('div');
-          wrapper.style.setProperty('--book-opened-image', `url("${getExtensionResourceUrl('/images/book_opened.webp')}")`);
-          wrapper.style.setProperty('--book-close-image', `url("${getExtensionResourceUrl('/images/book_close.webp')}")`);
-          wrapper.style.setProperty('--book-closed-image', `url("${getExtensionResourceUrl('/images/book_closed.webp')}")`);
-          wrapper.style.setProperty('--book-open-image', `url("${getExtensionResourceUrl('/images/book_open.webp')}")`);
-          container.append(wrapper);
-          const root = ReactDOM.createRoot(wrapper);
-          root.render(<SidebarApp />);
-          return root;
-        },
-        onRemove(root) {
-          root?.unmount();
-        },
-      });
-      ui.mount();
-    } catch (err) {
-      console.error('[ToonHQ Plus] Failed to mount sidebar:', err);
-    }
   },
 });

@@ -1,28 +1,13 @@
+import { readStartupSetting } from './lib/startupSettings';
+
 export default defineContentScript({
   matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
   runAt: 'document_start',
-  async main() {
+  async main(ctx) {
     // Read navbar-config from IndexedDB (can't import db.ts at document_start)
     let hasConfig = false;
     try {
-      await new Promise<void>((resolve) => {
-        // Open with version 1 so we never create the DB: only the sidebar's openDB() (with
-// onupgradeneeded) should do that. If we opened with DB_VERSION here and ran first,
-// the DB would be created at that version with no object stores.
-        const req = indexedDB.open('toonhqplus', 1);
-        req.onsuccess = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains('settings')) { resolve(); return; }
-          const t = db.transaction('settings', 'readonly');
-          const get = t.objectStore('settings').get('navbar-config');
-          get.onsuccess = () => {
-            hasConfig = !!(get.result?.value);
-            resolve();
-          };
-          get.onerror = () => resolve();
-        };
-        req.onerror = () => resolve();
-      });
+      hasConfig = !!(await readStartupSetting('navbar-config'));
     } catch { /* ignore */ }
 
     // Fallback: check old local storage key for users who haven't migrated yet
@@ -52,6 +37,13 @@ export default defineContentScript({
       } else {
         document.addEventListener('DOMContentLoaded', injectStyle);
       }
+      // Reveal navigation even if sidebar initialization fails or is delayed.
+      const revealTimeout = setTimeout(() => style.remove(), 3000);
+      ctx.onInvalidated(() => {
+        clearTimeout(revealTimeout);
+        document.removeEventListener('DOMContentLoaded', injectStyle);
+        style.remove();
+      });
     }
   }
 });

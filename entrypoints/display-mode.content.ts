@@ -1,43 +1,11 @@
 import { browser } from 'wxt/browser';
 import { DISPLAY_MODE_CSS, DISPLAY_MODE_STYLE_ID } from './lib/displayModeStyles';
 import { DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from './lib/displayMode';
+import { readStartupSetting } from './lib/startupSettings';
 
-const DB_NAME = 'toonhqplus';
-
-function readDisplayMode(): Promise<DisplayMode | undefined> {
-  return new Promise((resolve) => {
-    let request: IDBOpenDBRequest;
-    try {
-      request = indexedDB.open(DB_NAME);
-    } catch {
-      resolve(undefined);
-      return;
-    }
-    request.onerror = () => resolve(undefined);
-    request.onsuccess = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains('settings')) {
-        db.close();
-        resolve(undefined);
-        return;
-      }
-      try {
-        const transaction = db.transaction('settings', 'readonly');
-        const get = transaction.objectStore('settings').get(DISPLAY_MODE_SETTING);
-        get.onsuccess = () => {
-          db.close();
-          resolve(get.result?.value === undefined ? undefined : normalizeDisplayMode(get.result.value));
-        };
-        get.onerror = () => {
-          db.close();
-          resolve(undefined);
-        };
-      } catch {
-        db.close();
-        resolve(undefined);
-      }
-    };
-  });
+async function readDisplayMode(): Promise<DisplayMode | undefined> {
+  const mode = await readStartupSetting<unknown>(DISPLAY_MODE_SETTING);
+  return mode === undefined ? undefined : normalizeDisplayMode(mode);
 }
 
 export default defineContentScript({

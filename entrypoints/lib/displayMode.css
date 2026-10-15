@@ -435,6 +435,61 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog {
   background-color: #264d36 !important;
 }
 
+/* Role badges: keep native role hues, with pastel fills and dark text.
+   ToonHQ identifies these badges with inline colors, shared by the preview. */
+html[data-toonhq-plus-display-mode="dark"] .toon__label {
+  background: var(--hq-role-bg, #c4d6c9) !important;
+  color: var(--hq-role-text, #213b2c) !important;
+  /* An inset edge keeps ToonHQ's native font, padding, and badge dimensions. */
+  box-shadow: inset 0 0 0 1px var(--hq-role-border, #90aa98);
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-star > i {
+  color: var(--hq-role-star, #e7eee9) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.toon__label, .group-star > i):is([style*="#d84444"], [style*="rgb(216, 68, 68)"]) {
+  --hq-role-bg: #f1bec2;
+  --hq-role-text: #5a1d28;
+  --hq-role-border: #d78d97;
+  --hq-role-star: #ffc0c6;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.toon__label, .group-star > i):is([style*="#4c7dc5"], [style*="rgb(76, 125, 197)"]) {
+  --hq-role-bg: #b9cfee;
+  --hq-role-text: #203959;
+  --hq-role-border: #83a7d5;
+  --hq-role-star: #bbd7ff;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.toon__label, .group-star > i):is([style*="#889ee0"], [style*="rgb(136, 158, 224)"]) {
+  --hq-role-bg: #d3c9ef;
+  --hq-role-text: #3f315e;
+  --hq-role-border: #aa98cf;
+  --hq-role-star: #d6d0ff;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.toon__label, .group-star > i):is([style*="#1a5493"], [style*="rgb(26, 84, 147)"]) {
+  --hq-role-bg: #aaccec;
+  --hq-role-text: #183d60;
+  --hq-role-border: #76a4ce;
+  --hq-role-star: #aedaff;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.toon__label, .group-star > i):is([style*="#29783e"], [style*="rgb(41, 120, 62)"]) {
+  --hq-role-bg: #b5dcc0;
+  --hq-role-text: #173d25;
+  --hq-role-border: #7bb28c;
+  --hq-role-star: #b9ebcb;
+}
+
+html[data-toonhq-plus-display-mode="dark"] :is(.toon__label, .group-star > i):is([style*="#4992db"], [style*="rgb(73, 146, 219)"]) {
+  --hq-role-bg: #b0dae9;
+  --hq-role-text: #16475c;
+  --hq-role-border: #78b5cc;
+  --hq-role-star: #b7e5ff;
+}
+
 /* Vue detaches the open district-change menu from the group dialog. Identify
    the portaled surface by its injected district indicators instead of relying
    on dialog ancestry, and recolor both the wrapper and its painting layer. */
@@ -448,62 +503,67 @@ html[data-toonhq-plus-display-mode="dark"] :is(.multiselect__content, .multisele
   color: var(--hq-dark-text) !important;
 }
 
-/* ToonHQ supplies gag track backgrounds inline with an 0.8 alpha suffix.
-   Normalize only those known track colors in the group modal to full opacity. */
+/* Flatten ToonHQ's 80% gag colors onto white: channel = 0.8 * native + 51.
+   Use those lighter colors at full opacity to prevent dark dialog/row colors
+   from bleeding through. Artwork and native organic glows are unchanged. */
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="198, 89, 232"] {
-  background-color: rgb(198, 89, 232) !important;
+  background-color: rgb(209, 122, 237) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="232, 230, 90"] {
-  background-color: rgb(232, 230, 90) !important;
+  background-color: rgb(237, 235, 123) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="49, 190, 53"] {
-  background-color: rgb(49, 190, 53) !important;
+  background-color: rgb(90, 203, 93) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="62, 92, 235"] {
-  background-color: rgb(62, 92, 235) !important;
+  background-color: rgb(101, 125, 239) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="237, 160, 50"] {
-  background-color: rgb(237, 160, 50) !important;
+  background-color: rgb(241, 179, 91) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="245, 91, 214"] {
-  background-color: rgb(245, 91, 214) !important;
+  background-color: rgb(247, 124, 222) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="53, 234, 237"] {
-  background-color: rgb(53, 234, 237) !important;
+  background-color: rgb(93, 238, 241) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="198, 135, 240"] {
-  background-color: rgb(198, 135, 240) !important;
+  background-color: rgb(209, 159, 243) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="240, 74, 70"] {
-  background-color: rgb(240, 74, 70) !important;
+  background-color: rgb(243, 110, 107) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="70, 178, 64"] {
-  background-color: rgb(70, 178, 64) !important;
+  background-color: rgb(107, 193, 102) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="87, 97, 227"] {
-  background-color: rgb(87, 97, 227) !important;
+  background-color: rgb(121, 129, 233) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="241, 52, 188"] {
-  background-color: rgb(241, 52, 188) !important;
+  background-color: rgb(244, 93, 201) !important;
+}
+
+html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="232, 240, 72"] {
+  background-color: rgb(237, 243, 109) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="240, 136, 51"] {
-  background-color: rgb(240, 136, 51) !important;
+  background-color: rgb(243, 160, 92) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track[style*="50, 227, 240"] {
-  background-color: rgb(50, 227, 240) !important;
+  background-color: rgb(91, 233, 243) !important;
 }
 
 html[data-toonhq-plus-display-mode="dark"] .group-details-dialog .toon__track.toon__track--missing {

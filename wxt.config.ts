@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import { DEV_ADBLOCK_PATH, DEV_ADBLOCK_RULES, DEV_ADBLOCK_RULESET } from './tools/dev-adblock';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
@@ -37,7 +38,21 @@ export default defineConfig({
       } as any,
     },
   },
-  runner: {
+  hooks: {
+    'build:manifestGenerated'(wxt, manifest) {
+      if (wxt.config.command !== 'serve' || wxt.config.manifestVersion !== 3) return;
+      manifest.permissions ??= [];
+      manifest.permissions.push('declarativeNetRequest');
+      manifest.declarative_net_request = {
+        rule_resources: [{ id: DEV_ADBLOCK_RULESET, enabled: true, path: DEV_ADBLOCK_PATH }],
+      };
+    },
+    'build:publicAssets'(wxt, files) {
+      if (wxt.config.command !== 'serve' || wxt.config.manifestVersion !== 3) return;
+      files.push({ relativeDest: DEV_ADBLOCK_PATH, contents: JSON.stringify(DEV_ADBLOCK_RULES) });
+    },
+  },
+  webExt: {
     chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
     startUrls: ['https://toonhq.org/groups']
   },

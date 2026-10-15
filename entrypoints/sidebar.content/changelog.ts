@@ -11,7 +11,9 @@ export const changelog: ChangelogEntry[] = [
     changes: [
       'Add Toons Hit accuracy boosts to the Gag and Facilities Calculators',
       'Improve gag and SOS card tooltips across all calculators',
-      'Improve calculator layouts for smaller windows and screens'
+      'Improve calculator layouts for smaller windows and screens',
+      'Improve role badge contrast and gag track colors in Dark Mode',
+      'Improve sidebar startup and prevent navigation from staying hidden during slow loads'
     ]
   },
   {
