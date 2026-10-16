@@ -436,7 +436,7 @@ html[data-toonhq-plus-display-mode="dark"] .group-details-dialog {
 }
 
 /* Role badges: keep native role hues, with pastel fills and dark text.
-   ToonHQ identifies these badges with inline colors, shared by the preview. */
+   ToonHQ identifies these badges and their stars with inline colors. */
 html[data-toonhq-plus-display-mode="dark"] .toon__label {
   background: var(--hq-role-bg, #c4d6c9) !important;
   color: var(--hq-role-text, #213b2c) !important;

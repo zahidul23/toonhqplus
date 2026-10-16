@@ -191,11 +191,22 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
     }
 }
 
-function applyGroupDistrictIndicators() {
+function applyDistrictIndicators() {
   document.querySelectorAll<HTMLElement>('.groups-list-item[district-name]').forEach(groupCard => {
     const districtName = groupCard.getAttribute('district-name');
     const districtLine = groupCard.querySelectorAll<HTMLElement>('.info-card__content p')[1];
     if (districtName && districtLine) renderDistrictIndicators(districtLine, districtName);
+  });
+
+  document.querySelectorAll<HTMLElement>('.info-card--invasions').forEach(invasionCard => {
+    const districtLine = invasionCard.querySelector<HTMLElement>('.info-card__content p');
+    if (!districtLine) return;
+    // ToonHQ renders the district as plain text in the first paragraph. Read
+    // only that text so an existing population badge isn't part of its name.
+    const districtName = Array.from(districtLine.childNodes)
+      .filter(node => node.nodeType === Node.TEXT_NODE)
+      .map(node => node.textContent).join('').trim();
+    if (districtName) renderDistrictIndicators(districtLine, districtName);
   });
 
   document.querySelectorAll<HTMLElement>('.group-details-dialog').forEach(dialog => {
@@ -1881,7 +1892,7 @@ export default defineContentScript({
       if (!snapshot?.populationByDistrict) return;
       if (districtPopulation && (snapshot.fetchedAt || 0) < (districtPopulation.fetchedAt || 0)) return;
       districtPopulation = snapshot;
-      applyGroupDistrictIndicators();
+      applyDistrictIndicators();
     };
     const handlePopulationStorageChange = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
       if (areaName !== 'local') return;
@@ -2051,7 +2062,7 @@ export default defineContentScript({
       if (districtIndicatorFrame !== null) return;
       districtIndicatorFrame = window.requestAnimationFrame(() => {
         districtIndicatorFrame = null;
-        applyGroupDistrictIndicators();
+        applyDistrictIndicators();
       });
     };
     const districtIndicatorObserver = new MutationObserver(scheduleDistrictIndicators);

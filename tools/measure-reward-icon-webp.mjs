@@ -10,6 +10,8 @@ const moduleIndex = process.argv.indexOf('--runtime-modules');
 const qualityIndex = process.argv.indexOf('--quality');
 const quality = qualityIndex >= 0 ? Number(process.argv[qualityIndex + 1]) : 95;
 const install = process.argv.includes('--install');
+const categoryIndex = process.argv.indexOf('--category');
+const category = categoryIndex >= 0 ? process.argv[categoryIndex + 1] : undefined;
 if (!Number.isInteger(quality) || quality < 1 || quality > 100) throw new Error('Quality must be an integer from 1 to 100');
 const requireRuntime = createRequire(moduleIndex >= 0
   ? path.join(path.resolve(process.argv[moduleIndex + 1]), '_resolve.cjs')
@@ -67,7 +69,8 @@ vm.runInNewContext(compiled, sandbox);
 const variants = [
   ...[20, 35, 50, 65, 80].map(amount => ({ category: 'Toon-Up', amount, subtype: `${amount} Toon-Up`, slug: `toon-up-${amount}` })),
   ...[100, 200, 350, 600].map(amount => ({ category: 'Jellybeans', amount, subtype: `${amount} jellybeans`, slug: `jellybeans-${amount}` })),
-];
+  { category: 'Cartoonival', amount: 25, subtype: '25 tokens', slug: 'cartoonival-25' },
+].filter(variant => !category || variant.category === category);
 const results = [];
 const sheet = createCanvas(5 * 212, 2 * 242);
 const ctx = sheet.getContext('2d');

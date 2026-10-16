@@ -7,6 +7,7 @@ from PIL import Image
 
 TTR_MAPS = Path.home() / "Projects" / "ttrfiles" / "extracted" / "phase_3.5" / "phase_3.5" / "maps"
 TTR_PHASE_4_MAPS = Path.home() / "Projects" / "ttrfiles" / "extracted" / "phase_4" / "phase_4" / "maps"
+TTR_PHASE_6_MAPS = Path.home() / "Projects" / "ttrfiles" / "extracted" / "phase_6" / "phase_6" / "maps"
 OUTPUT = Path(__file__).resolve().parents[1] / "public" / "images" / "unites"
 
 
@@ -117,6 +118,22 @@ def export_gag_up(name: str, gag_image: str | None) -> None:
 
 
 OUTPUT.mkdir(parents=True, exist_ok=True)
+
+# ttr_m_tf_gui_tokens.bam token card uses this texture and its alpha mask.
+extract(
+    "cartoonival-token.webp",
+    "ttr_t_tf_gui_funnymoney",
+    (0, 0, 32, 32),
+    TTR_PHASE_6_MAPS,
+)
+
+# The same GUI model's jar card has the blue lid and Cartoonival tokens.
+extract(
+    "cartoonival-token-jar.webp",
+    "ttr_t_tf_gui_tokenJar",
+    (0, 0, 128, 128),
+    TTR_PHASE_6_MAPS,
+)
 
 # ttr_m_gui_bat_gagShop.bam jellybeanJar_GRP: remastered jar card UVs
 # (0.0078125, 0.20703125) to (0.7109375, 0.9921875).

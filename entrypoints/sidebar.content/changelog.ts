@@ -13,7 +13,12 @@ export const changelog: ChangelogEntry[] = [
       'Improve gag and SOS card tooltips across all calculators',
       'Improve calculator layouts for smaller windows and screens',
       'Improve role badge contrast and gag track colors in Dark Mode',
-      'Improve sidebar startup and prevent navigation from staying hidden during slow loads'
+      'Improve sidebar startup and prevent navigation from staying hidden during slow loads',
+      'Redesign the Shticker Book Unites page with reward icons, nearby counts, category totals and a compact responsive layout',
+      'Keep all Toon-Up, Gag-Up and Jellybean Unite types visible with muted zero counts, and mute empty category headers',
+      'Add Cogbucks Promotion Unites and Cartoonival token jar icons, showing these categories when rewards are held',
+      'Remember the selected reward category when reopening the Shticker Book',
+      'Show district population and chat status indicators on invasion cards'
     ]
   },
   {

@@ -14,6 +14,7 @@ import {
 import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerUtils';
 import { normalizeToonOrderSetting, orderTrackerToons } from './toonOrder';
 import { requestRewardNotificationPermissionWithFallback } from '../lib/rewardNotificationPermission';
+import { UniteInventory } from './components/UniteInventory';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -137,6 +138,12 @@ const REWARD_CATEGORIES_CONFIG = [
   { id: 'pinkslips', label: 'Pink Slips', img: 'pinkslips.webp' },
   { id: 'remotes', label: 'Remotes', img: 'remotes.webp' }
 ] as const;
+
+const REWARD_CATEGORY_STORAGE_KEY = 'toonhqplus_shtickerbook_reward_category';
+
+function isRewardCategory(value: unknown): value is RewardCategory {
+  return value === 'analytics' || REWARD_CATEGORIES_CONFIG.some(category => category.id === value);
+}
 
 const RewardMessage = React.memo(({ entry }: { entry: RewardHistoryEntry }) => {
   if (entry.message) return <span className="text-white/50 text-[11px] font-bold">{entry.message}</span>;
@@ -670,16 +677,6 @@ const RemoteCard = React.memo(({ type, level, count }: { type: string, level: st
         <div className="text-[10px] font-black uppercase tracking-widest truncate w-full text-right opacity-70">
           {level} Star
         </div>
-      </div>
-    </div>
-  );
-});
-const UniteListItem = React.memo(({ name, count, max = 100 }: { name: string, count: number, max?: number }) => {
-  return (
-    <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg bg-emerald-900/70 border border-emerald-500/10 hover:border-emerald-500/30 transition-all group shadow-sm">
-      <div className="text-[14px] font-bold text-pink-50/90 group-hover:text-white transition-colors truncate">{name}</div>
-      <div className="text-[13px] font-black text-pink-400 tabular-nums shrink-0 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">
-        {count}<span className="text-[10px] opacity-50 ml-0.5">/{max}</span>
       </div>
     </div>
   );
@@ -1403,7 +1400,14 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   const [pickerToonOrder, setPickerToonOrder] = useState<string[] | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [subView, setSubView] = useState<'main' | 'rewards_detail' | 'toons'>(initialSubView);
-  const [activeCategory, setActiveCategory] = useState<RewardCategory>(propCategory || 'analytics');
+  const [activeCategory, setActiveCategory] = useState<RewardCategory>(() => {
+    if (propCategory) return propCategory;
+    try {
+      const saved = localStorage.getItem(REWARD_CATEGORY_STORAGE_KEY);
+      if (isRewardCategory(saved)) return saved;
+    } catch { }
+    return 'analytics';
+  });
   const [sosSortBy, setSosSortBy] = useState<SOSTableSort>('default');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'24h' | '7d' | '30d'>('7d');
@@ -1458,15 +1462,23 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
 
   useEffect(() => {
+    if (subView !== 'rewards_detail') return;
+    try {
+      localStorage.setItem(REWARD_CATEGORY_STORAGE_KEY, activeCategory);
+    } catch { }
+  }, [activeCategory, subView]);
+
+  useEffect(() => {
     const handleOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.tab === 'reward_details' && detail.category) {
+      if (detail?.tab === 'reward_details' && isRewardCategory(detail.category)) {
         setActiveCategory(detail.category);
+        if (subView === 'rewards_detail') delete (window as any)._pendingRewardCategory;
       }
     };
     window.addEventListener('toonhqplus-open-shtickerbook', handleOpen);
     return () => window.removeEventListener('toonhqplus-open-shtickerbook', handleOpen);
-  }, []);
+  }, [subView]);
 
   useEffect(() => {
     Promise.all([
@@ -1558,7 +1570,8 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
   useEffect(() => {
     if (subView === 'rewards_detail' && (window as any)._pendingRewardCategory) {
-      setActiveCategory((window as any)._pendingRewardCategory);
+      const category = (window as any)._pendingRewardCategory;
+      if (isRewardCategory(category)) setActiveCategory(category);
       delete (window as any)._pendingRewardCategory;
     }
   }, [subView]);
@@ -1844,7 +1857,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
     return (
       <section key="rewards-detail" className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-        <div className="flex-1 flex gap-6 overflow-hidden pr-2 pt-0 pb-4">
+        <div className="flex-1 flex gap-6 overflow-hidden pr-2 pt-0 pb-0">
           <div className="w-80 flex flex-col gap-4 shrink-0 overflow-hidden pt-2">
             <ToonHeader
               isExpanded={isExpanded}
@@ -1987,7 +2000,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
               </div>
             </div>
-            <div className={`flex-1 ${activeCategory === 'analytics' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'} p-6`}>
+            <div className={`flex-1 ${activeCategory === 'analytics' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'} ${activeCategory === 'unites' ? 'p-3' : 'p-6'}`}>
               {activeCategory === 'analytics' && (
                 <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500">
                   <div className="w-full h-full max-w-4xl mx-auto">
@@ -1997,72 +2010,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               )}
               {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} sortBy={sosSortBy} />}
               {activeCategory === 'unites' && (
-                <div className="flex gap-x-12 h-full overflow-y-auto custom-scrollbar pr-4">
-                  {/* Left Column: Toon-Up and Jellybeans */}
-                  <div className="flex-1 flex flex-col gap-y-10">
-                    {['Toon-Up', 'Jellybeans'].map((categoryName) => {
-                      const types = (rewards.unites || {})[categoryName] || {};
-                      const sortedTypes = Object.entries(types as any).sort(([nameA], [nameB]) => {
-                        const cleanA = nameA.replace(/\u0003/g, '');
-                        const cleanB = nameB.replace(/\u0003/g, '');
-                        const valA = parseInt(cleanA) || 0;
-                        const valB = parseInt(cleanB) || 0;
-                        return valA - valB;
-                      });
-
-                      return (
-                        <div key={categoryName} className="flex flex-col gap-3">
-                          <h4 className="text-[14px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{categoryName}</h4>
-                          <div className="flex flex-col gap-1.5">
-                            {sortedTypes.length > 0 ? (
-                              sortedTypes.map(([name, count]) => (
-                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} max={categoryName === 'Cartoonival' ? 5 : 100} />
-                              ))
-                            ) : (
-                              <div className="py-2 text-[10px] font-black uppercase tracking-widest text-white/10 italic">None</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right Column: Gag-Up and Cartoonival */}
-                  <div className="flex-1 flex flex-col gap-y-10">
-                    {['Gag-Up', 'Cartoonival'].map((categoryName) => {
-                      const types = (rewards.unites || {})[categoryName] || {};
-                      const sortedTypes = Object.entries(types as any).sort(([nameA], [nameB]) => {
-                        const cleanA = nameA.replace(/\u0003/g, '');
-                        const cleanB = nameB.replace(/\u0003/g, '');
-                        if (categoryName === 'Gag-Up') {
-                          // const order = ['All', 'Sound', 'Throw', 'Squirt', 'Lure', 'Trap', 'Drop', 'Toon-Up']; // Preferred order
-                          const order = ['Toon-Up', 'Trap', 'Lure', 'Sound', 'Throw', 'Squirt', 'Drop', 'All']; // In-game order
-                          const indexA = order.findIndex(o => cleanA.endsWith(o));
-                          const indexB = order.findIndex(o => cleanB.endsWith(o));
-                          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                          if (indexA !== -1) return -1;
-                          if (indexB !== -1) return 1;
-                        }
-                        return cleanA.localeCompare(cleanB);
-                      });
-
-                      return (
-                        <div key={categoryName} className="flex flex-col gap-3">
-                          <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-pink-400/60 border-b border-pink-500/10 pb-1.5 shrink-0">{categoryName}</h4>
-                          <div className="flex flex-col gap-1.5">
-                            {sortedTypes.length > 0 ? (
-                              sortedTypes.map(([name, count]) => (
-                                <UniteListItem key={name} name={name.replace(/\u0003/g, '')} count={count as number} max={categoryName === 'Cartoonival' ? 5 : 100} />
-                              ))
-                            ) : (
-                              <div className="py-2 text-[10px] font-black uppercase tracking-widest text-white/10 italic">None</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <UniteInventory unites={rewards.unites || {}} getImageUrl={getExtensionImageUrl} />
               )}
               {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/100 border-b border-sky-500/10 pb-2">{type}s</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
               {activeCategory === 'summons' && <SummonsTableView summons={rewards.summons || {}} />}

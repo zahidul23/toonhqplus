@@ -116,6 +116,42 @@
 .gag-track-fill { display: grid; align-items: center; }
 .gag-track-fill .gag-btn-base { width: 100%; }
 
+/* Keep Unite icons and quantities together as the inventory pane narrows. */
+.unite-inventory { container-type: inline-size; }
+.unite-layout { display: flex; flex-direction: column; gap: 12px; }
+.unite-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.unite-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.unite-section { min-width: 0; padding: 12px; border: 1px solid #6ee7b71a; border-radius: 14px; background: #022c224d; }
+.unite-layout > .unite-section-full-width { width: 100%; }
+.unite-section-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #6ee7b71a; }
+.unite-section-heading[data-empty] .unite-category-icon { opacity: 0.4; filter: grayscale(1); }
+.unite-section-heading[data-empty] h4,
+.unite-section-heading[data-empty] .unite-section-total,
+.unite-section-heading[data-empty] .unite-section-total > span { color: #d1fae580; }
+.unite-category-icon { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; }
+.unite-section-total { display: flex; align-items: baseline; gap: 3px; color: #a7f3d0; font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.unite-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.unite-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px; border: 1px solid #6ee7b71f; border-radius: 10px; background: linear-gradient(135deg, #065f4666, #022c2299); }
+.unite-item-icon { width: 48px; height: 48px; flex-shrink: 0; object-fit: contain; filter: drop-shadow(0 2px 3px #0004); }
+.unite-item-label { color: #ecfdf5; font-size: 11.5px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
+.unite-item-count { display: flex; align-items: baseline; gap: 3px; color: #f9a8d4; font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.unite-item-count > span { color: #d1fae580; font-size: 10.5px; font-weight: 700; }
+.unite-item[data-empty] { background: #0002; border-color: #ffffff0d; }
+.unite-item[data-empty] .unite-item-icon { opacity: 0.4; filter: grayscale(1); }
+.unite-item[data-empty] .unite-item-count { color: #d1fae580; }
+.unite-empty { margin: 0; padding: 18px 8px; border: 1px dashed #6ee7b726; border-radius: 10px; color: #d1fae580; font-size: 12px; text-align: center; }
+@container (min-width: 700px) {
+  .unite-columns[data-align-promotions] > .unite-column { display: contents; }
+  .unite-columns[data-align-promotions] > .unite-column:first-child > .unite-section { grid-column: 1; }
+  .unite-columns[data-align-promotions] > .unite-column:last-child > .unite-section { grid-column: 2; }
+  .unite-columns[data-align-promotions] > .unite-column > .unite-section:first-child { grid-row: 1; }
+  .unite-columns[data-align-promotions] > .unite-column > .unite-section:last-child { grid-row: 2; }
+}
+@container (max-width: 699px) {
+  .unite-columns { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .unite-layout, .unite-column { gap: 10px; }
+}
+
 /* Calculator layouts follow the space available inside the Shticker Book. */
 .info-book-panel[data-book-calculator] {
   width: calc(100vw - 32px);

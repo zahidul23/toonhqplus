@@ -130,6 +130,7 @@ function getPrimaryImage(change: RewardChange) {
   if (change.type === 'summons') return getCogImage(change.subtype);
   if (change.type === 'unites' && change.metadata?.uniteCategory === 'Gag-Up') return getGagUpImage(change.subtype);
   if (change.type === 'unites' && change.metadata?.uniteCategory === 'Jellybeans') return assetUrl('images/unites/jellybean-jar.webp');
+  if (change.type === 'unites' && change.metadata?.uniteCategory === 'Cartoonival') return assetUrl('images/unites/cartoonival-token-jar.webp');
   if (change.type === 'unites' && change.metadata?.uniteCategory === 'Toon-Up') {
     return assetUrl('images/unites/pixie-dust.webp');
   }
@@ -159,6 +160,9 @@ export async function createRewardNotificationIcon(change: RewardChange): Promis
     if (category === 'Jellybeans' && [100, 200, 350, 600].includes(amount)) {
       return assetUrl(`images/unites/jellybeans-${amount}.webp`);
     }
+    if (category === 'Cartoonival' && amount === 25) {
+      return assetUrl('images/unites/cartoonival-25.webp');
+    }
   }
   try {
     return await renderRewardNotificationIcon(change);
@@ -186,7 +190,7 @@ export async function renderRewardNotificationIcon(change: RewardChange): Promis
   ]);
 
   if (primary) {
-    if (change.type === 'unites' && (change.metadata?.uniteCategory === 'Jellybeans' || change.metadata?.uniteCategory === 'Toon-Up')) {
+    if (change.type === 'unites' && ['Jellybeans', 'Toon-Up', 'Cartoonival'].includes(change.metadata?.uniteCategory || '')) {
       drawContained(ctx, primary, 46, 82, 164, 164);
     } else {
       drawContained(ctx, primary, 10, 10, 236, 236);
@@ -199,7 +203,7 @@ export async function renderRewardNotificationIcon(change: RewardChange): Promis
     drawMickeyLabel(ctx, amount, '#4ade80', '#166534');
   }
 
-  if (change.type === 'unites' && change.metadata?.uniteCategory === 'Jellybeans') {
+  if (change.type === 'unites' && ['Jellybeans', 'Cartoonival'].includes(change.metadata?.uniteCategory || '')) {
     const amount = change.subtype.match(/\d+/)?.[0];
     if (amount) {
       await loadMickeyNumbersFont();

@@ -1,3 +1,23 @@
+# Archived role badge preview
+
+This document preserves the temporary preview used to review ToonHQ role badges in dark mode. The preview is no longer an active extension entrypoint and runs in neither development nor production builds.
+
+The preview assigns the seven native badges to the first seven member rows in each group dialog. Each row receives the same badge in its desktop and mobile layouts. It only changes the displayed DOM; account and toon data are untouched. Morgan retains its native 2px font size.
+
+The actual dark-mode badge colors remain in `entrypoints/lib/displayMode.css` and continue to apply to real ToonHQ badges.
+
+## Restore temporarily for a visual review
+
+1. Copy the TypeScript below into `entrypoints/tag-preview.content.ts`.
+2. Add `VITE_TOONHQPLUS_TAG_PREVIEW=true` to the ignored `.env.local` file.
+3. Start or restart `npm run dev` or `npm run dev:network`, refresh ToonHQ, and open a group dialog. A group needs at least seven toon rows to display every badge.
+4. When finished, delete the temporary entrypoint and remove the environment flag. The runtime guard also prevents fake badges in production, but removing the entrypoint avoids emitting its inactive wrapper.
+
+## Preserved source
+
+Native label definitions were copied from the saved September 16, 2026 ToonHQ JavaScript bundle.
+
+```ts
 // Temporary dev-only preview, enabled by VITE_TOONHQPLUS_TAG_PREVIEW=true.
 // Match the labels in native-toonhq/toonhq-groups-app-2026-09-16.a5a51d0c.js.
 const labels = [
@@ -81,3 +101,4 @@ export default defineContentScript({
     });
   },
 });
+```
