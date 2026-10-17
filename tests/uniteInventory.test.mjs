@@ -14,8 +14,8 @@ const compiled = ts.transpileModule(source, {
 const sandbox = { exports: {}, require: createRequire(import.meta.url) };
 vm.runInNewContext(compiled, sandbox);
 const { UniteInventory } = sandbox.exports;
-const render = unites => renderToStaticMarkup(React.createElement(UniteInventory, {
-  unites, getImageUrl: path => `/${path}`,
+const render = (unites, layout) => renderToStaticMarkup(React.createElement(UniteInventory, {
+  unites, layout, getImageUrl: path => `/${path}`,
 }));
 
 test('Promotions shows and totals only the five supported Cogbucks Unites', () => {
@@ -67,16 +67,31 @@ test('held rewards reveal their section while retaining nearby zero counts for c
   assert.match(render({ 'Gag-Up': { 'Gag-Up Sound': 0 } }), /aria-label="Gag-Up Unites"/);
 });
 
-test('Jellybeans sits below Toon-Up and fifth-place Promotions spans the layout', () => {
+test('Jellybeans uses the third column and Cartoonival and Promotions share the fourth', () => {
+  const promotions = { '100 Cogbucks': 1 };
+  const fourSections = render({ Promotions: promotions }, 'columns');
+  assert.equal((fourSections.match(/<section/g) || []).length, 4);
+  const categoryOrder = [...fourSections.matchAll(/<section[^>]*aria-label="([^"]+) Unites"/g)].map(match => match[1]);
+  assert.deepEqual(categoryOrder, ['Gag-Up', 'Toon-Up', 'Jellybeans', 'Promotions']);
+
+  const fiveSections = render({ Promotions: promotions, Cartoonival: { '25 tokens': 1 } }, 'columns');
+  assert.equal((fiveSections.match(/<section/g) || []).length, 5);
+  const columns = fiveSections.split('<div class="unite-column">').slice(1)
+    .map(column => [...column.matchAll(/<section[^>]*aria-label="([^"]+) Unites"/g)].map(match => match[1]));
+  assert.deepEqual(columns, [['Gag-Up'], ['Toon-Up'], ['Jellybeans'], ['Cartoonival', 'Promotions']]);
+});
+
+test('default layout retains the committed category arrangement and optional Promotions placement', () => {
   const promotions = { '100 Cogbucks': 1 };
   const fourSections = render({ Promotions: promotions });
-  assert.equal((fourSections.match(/<section/g) || []).length, 4);
-  assert.ok(fourSections.indexOf('aria-label="Toon-Up Unites"') < fourSections.indexOf('aria-label="Jellybeans Unites"'));
-  assert.match(fourSections, /<div class="unite-column">[\s\S]*aria-label="Gag-Up Unites"[\s\S]*aria-label="Promotions Unites"/);
-  assert.doesNotMatch(fourSections, /unite-section-full-width/);
+  assert.match(fourSections, /data-layout="default"/);
+  assert.match(fourSections, /data-align-promotions="true"/);
+  const columns = fourSections.split('<div class="unite-column">').slice(1)
+    .map(column => [...column.matchAll(/<section[^>]*aria-label="([^"]+) Unites"/g)].map(match => match[1]));
+  assert.deepEqual(columns, [['Toon-Up', 'Jellybeans'], ['Gag-Up', 'Promotions']]);
 
   const fiveSections = render({ Promotions: promotions, Cartoonival: { '25 tokens': 1 } });
-  assert.equal((fiveSections.match(/<section/g) || []).length, 5);
+  assert.doesNotMatch(fiveSections, /data-align-promotions/);
   assert.match(fiveSections, /class="unite-section unite-section-full-width" aria-label="Promotions Unites"/);
   assert.ok(fiveSections.indexOf('aria-label="Promotions Unites"') > fiveSections.indexOf('aria-label="Cartoonival Unites"'));
 });

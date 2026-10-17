@@ -15,6 +15,7 @@ export const changelog: ChangelogEntry[] = [
       'Improve role badge contrast and gag track colors in Dark Mode',
       'Improve sidebar startup and prevent navigation from staying hidden during slow loads',
       'Redesign the Shticker Book Unites page with reward icons, nearby counts, category totals and a compact responsive layout',
+      'Add a saved Columns view for Unites and tighten shared rewards panel spacing',
       'Keep all Toon-Up, Gag-Up and Jellybean Unite types visible with muted zero counts, and mute empty category headers',
       'Add Cogbucks Promotion Unites and Cartoonival token jar icons, showing these categories when rewards are held',
       'Remember the selected reward category when reopening the Shticker Book',

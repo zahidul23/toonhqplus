@@ -1,9 +1,11 @@
 import React from 'react';
 
 type UniteCategory = 'Toon-Up' | 'Jellybeans' | 'Gag-Up' | 'Promotions' | 'Cartoonival';
+export type UniteLayout = 'default' | 'columns';
 type UniteInventoryProps = {
   unites: Record<string, Record<string, number>>;
   getImageUrl: (path: string) => string;
+  layout?: UniteLayout;
 };
 type UniteItem = { name: string; count: number };
 
@@ -93,7 +95,7 @@ const UniteSection = React.memo(({ category, items, getImageUrl, fullWidth = fal
   const total = items.reduce((sum, item) => sum + item.count, 0);
 
   return (
-    <section className={`unite-section ${fullWidth ? 'unite-section-full-width' : ''}`} aria-label={`${category} Unites`}>
+    <section className={`unite-section${fullWidth ? ' unite-section-full-width' : ''}`} aria-label={`${category} Unites`}>
       <header className="unite-section-heading" data-empty={total === 0 || undefined}>
         <img src={getImageUrl(`images/${details.image}`)} alt="" className="unite-category-icon" />
         <div className="min-w-0 flex-1">
@@ -112,7 +114,7 @@ const UniteSection = React.memo(({ category, items, getImageUrl, fullWidth = fal
             title={`${name}: ${count} / ${max} held`}
           >
             <img src={getImageUrl(`images/${getUniteImage(category, name)}`)} alt="" className="unite-item-icon" />
-            <div className="min-w-0">
+            <div className="unite-item-details">
               <div className="unite-item-label">{getUniteLabel(category, name)}</div>
               <div className="unite-item-count" aria-label={`${count} of ${max} held`}>
                 {count}<span>/{max}</span>
@@ -125,7 +127,7 @@ const UniteSection = React.memo(({ category, items, getImageUrl, fullWidth = fal
   );
 });
 
-export const UniteInventory = React.memo(({ unites, getImageUrl }: UniteInventoryProps) => {
+export const UniteInventory = React.memo(({ unites, getImageUrl, layout = 'default' }: UniteInventoryProps) => {
   const section = (category: UniteCategory) => ({
     category,
     items: getUniteItems(category, unites[category] || {}),
@@ -139,21 +141,41 @@ export const UniteInventory = React.memo(({ unites, getImageUrl }: UniteInventor
   const showPromotions = promotions.items.some(item => item.count > 0);
 
   return (
-    <div className="unite-inventory">
+    <div className="unite-inventory" data-layout={layout}>
       <div className="unite-layout">
-        <div className="unite-columns" data-align-promotions={showPromotions && !showCartoonival || undefined}>
-          <div className="unite-column">
-            <UniteSection {...toonUp} getImageUrl={getImageUrl} />
-            <UniteSection {...jellybeans} getImageUrl={getImageUrl} />
+        {layout === 'columns' ? (
+          <div className="unite-columns" data-has-optional={showCartoonival || showPromotions || undefined}>
+            <div className="unite-column">
+              <UniteSection {...gagUp} getImageUrl={getImageUrl} />
+            </div>
+            <div className="unite-column">
+              <UniteSection {...toonUp} getImageUrl={getImageUrl} />
+            </div>
+            <div className="unite-column">
+              <UniteSection {...jellybeans} getImageUrl={getImageUrl} />
+            </div>
+            <div className="unite-column">
+              {showCartoonival && <UniteSection {...cartoonival} getImageUrl={getImageUrl} />}
+              {showPromotions && <UniteSection {...promotions} getImageUrl={getImageUrl} />}
+            </div>
           </div>
-          <div className="unite-column">
-            <UniteSection {...gagUp} getImageUrl={getImageUrl} />
-            {showCartoonival && <UniteSection {...cartoonival} getImageUrl={getImageUrl} />}
-            {showPromotions && !showCartoonival && <UniteSection {...promotions} getImageUrl={getImageUrl} />}
-          </div>
-        </div>
-        {showPromotions && showCartoonival && (
-          <UniteSection {...promotions} getImageUrl={getImageUrl} fullWidth />
+        ) : (
+          <>
+            <div className="unite-columns" data-align-promotions={showPromotions && !showCartoonival || undefined}>
+              <div className="unite-column">
+                <UniteSection {...toonUp} getImageUrl={getImageUrl} />
+                <UniteSection {...jellybeans} getImageUrl={getImageUrl} />
+              </div>
+              <div className="unite-column">
+                <UniteSection {...gagUp} getImageUrl={getImageUrl} />
+                {showCartoonival && <UniteSection {...cartoonival} getImageUrl={getImageUrl} />}
+                {showPromotions && !showCartoonival && <UniteSection {...promotions} getImageUrl={getImageUrl} />}
+              </div>
+            </div>
+            {showPromotions && showCartoonival && (
+              <UniteSection {...promotions} getImageUrl={getImageUrl} fullWidth />
+            )}
+          </>
         )}
       </div>
     </div>

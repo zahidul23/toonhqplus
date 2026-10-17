@@ -15,6 +15,7 @@ import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerU
 import { normalizeToonOrderSetting, orderTrackerToons } from './toonOrder';
 import { requestRewardNotificationPermissionWithFallback } from '../lib/rewardNotificationPermission';
 import { UniteInventory } from './components/UniteInventory';
+import type { UniteLayout } from './components/UniteInventory';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -140,6 +141,7 @@ const REWARD_CATEGORIES_CONFIG = [
 ] as const;
 
 const REWARD_CATEGORY_STORAGE_KEY = 'toonhqplus_shtickerbook_reward_category';
+const UNITE_LAYOUT_STORAGE_KEY = 'toonhqplus_shtickerbook_unite_layout';
 
 function isRewardCategory(value: unknown): value is RewardCategory {
   return value === 'analytics' || REWARD_CATEGORIES_CONFIG.some(category => category.id === value);
@@ -1409,6 +1411,12 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
     return 'analytics';
   });
   const [sosSortBy, setSosSortBy] = useState<SOSTableSort>('default');
+  const [uniteLayout, setUniteLayout] = useState<UniteLayout>(() => {
+    try {
+      if (localStorage.getItem(UNITE_LAYOUT_STORAGE_KEY) === 'columns') return 'columns';
+    } catch { }
+    return 'default';
+  });
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'24h' | '7d' | '30d'>('7d');
   const [isAnalyticsMenuOpen, setIsAnalyticsMenuOpen] = useState(false);
@@ -1460,6 +1468,14 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(UNITE_LAYOUT_STORAGE_KEY, uniteLayout);
+    } catch { }
+  }, [uniteLayout]);
+
+  useEffect(() => setIsSortMenuOpen(false), [activeCategory]);
 
   useEffect(() => {
     if (subView !== 'rewards_detail') return;
@@ -1857,7 +1873,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
 
     return (
       <section key="rewards-detail" className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-        <div className="flex-1 flex gap-6 overflow-hidden pr-2 pt-0 pb-0">
+        <div className="flex-1 flex gap-6 overflow-hidden pt-0 pb-0">
           <div className="w-80 flex flex-col gap-4 shrink-0 overflow-hidden pt-2">
             <ToonHeader
               isExpanded={isExpanded}
@@ -1911,7 +1927,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
             </div>
           </div>
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950/40 rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
-            <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
+            <div className="px-6 py-3 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
               <div className="flex items-center gap-3">
                 <h3 className="text-xl font-black text-white uppercase tracking-widest">{activeCategory === 'analytics' ? 'Rewards Stats' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
                 {activeCategory !== 'analytics' && <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>}
@@ -1960,10 +1976,12 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                     )}
                   </div>
                 )}
-                {activeCategory === 'sos' && (
+                {(activeCategory === 'sos' || activeCategory === 'unites') && (
                   <div className="relative inline-flex items-center" ref={sortMenuRef}>
                     <button
                       type="button"
+                      aria-label={activeCategory === 'unites' ? 'Unite layout' : 'SOS ordering'}
+                      aria-expanded={isSortMenuOpen}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -1971,8 +1989,8 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                       }}
                       className="cursor-pointer inline-flex items-center gap-2 rounded-full bg-[#081a0e] border border-emerald-500/20 px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-colors duration-200 hover:border-emerald-300/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/20"
                     >
-                      <span className="text-white/40">Sort by</span>
-                      <span>{sosSortBy === 'count' ? 'SOS Count' : 'Default'}</span>
+                      <span className="text-white/40">{activeCategory === 'unites' ? 'View' : 'Sort by'}</span>
+                      <span>{activeCategory === 'unites' ? (uniteLayout === 'columns' ? 'Columns' : 'Default') : (sosSortBy === 'count' ? 'SOS Count' : 'Default')}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/50 transition-transform ${isSortMenuOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9" /></svg>
                     </button>
                     {isSortMenuOpen && (
@@ -1980,17 +1998,17 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                         <div className="flex flex-col gap-2 p-2">
                           <button
                             type="button"
-                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setSosSortBy('default'); setIsSortMenuOpen(false); }}
-                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${sosSortBy === 'default' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); if (activeCategory === 'unites') setUniteLayout('default'); else setSosSortBy('default'); setIsSortMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${(activeCategory === 'unites' ? uniteLayout : sosSortBy) === 'default' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
                           >
                             Default
                           </button>
                           <button
                             type="button"
-                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setSosSortBy('count'); setIsSortMenuOpen(false); }}
-                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${sosSortBy === 'count' ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
+                            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); if (activeCategory === 'unites') setUniteLayout('columns'); else setSosSortBy('count'); setIsSortMenuOpen(false); }}
+                            className={`cursor-pointer w-full rounded-2xl text-left px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] ${(activeCategory === 'unites' ? uniteLayout === 'columns' : sosSortBy === 'count') ? 'bg-emerald-500/10 text-emerald-300' : 'text-white/70 hover:bg-white/10'}`}
                           >
-                            SOS Count
+                            {activeCategory === 'unites' ? 'Columns' : 'SOS Count'}
                           </button>
                         </div>
                       </div>
@@ -2010,7 +2028,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               )}
               {activeCategory === 'sos' && <SOSTableView sos={rewards.sos || {}} sortBy={sosSortBy} />}
               {activeCategory === 'unites' && (
-                <UniteInventory unites={rewards.unites || {}} getImageUrl={getExtensionImageUrl} />
+                <UniteInventory unites={rewards.unites || {}} getImageUrl={getExtensionImageUrl} layout={uniteLayout} />
               )}
               {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/100 border-b border-sky-500/10 pb-2">{type}s</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
               {activeCategory === 'summons' && <SummonsTableView summons={rewards.summons || {}} />}
