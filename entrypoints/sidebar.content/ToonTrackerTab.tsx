@@ -16,6 +16,7 @@ import { normalizeToonOrderSetting, orderTrackerToons } from './toonOrder';
 import { requestRewardNotificationPermissionWithFallback } from '../lib/rewardNotificationPermission';
 import { UniteInventory } from './components/UniteInventory';
 import type { UniteLayout } from './components/UniteInventory';
+import { RemoteInventory } from './components/RemoteInventory';
 
 function getExtensionImageUrl(path: string): string {
   const cleanPath = path.replace(/^\/+/, '');
@@ -142,6 +143,7 @@ const REWARD_CATEGORIES_CONFIG = [
 
 const REWARD_CATEGORY_STORAGE_KEY = 'toonhqplus_shtickerbook_reward_category';
 const UNITE_LAYOUT_STORAGE_KEY = 'toonhqplus_shtickerbook_unite_layout';
+let rewardHeadingFontPromise: Promise<void> | undefined;
 
 function isRewardCategory(value: unknown): value is RewardCategory {
   return value === 'analytics' || REWARD_CATEGORIES_CONFIG.some(category => category.id === value);
@@ -648,37 +650,6 @@ const PinkSlipsGridView = React.memo(({ count }: { count: number }) => {
             />
           </div>
         ))}
-      </div>
-    </div>
-  );
-});
-const RemoteCard = React.memo(({ type, level, count }: { type: string, level: string, count: number }) => {
-  return (
-    <div className={`rounded-xl border p-3 flex gap-4 transition-all hover:brightness-110 shadow-lg ${count > 0
-      ? 'bg-sky-500/90 border-sky-500/30 text-white'
-      : 'bg-black/20 border-white/5 text-white/20 opacity-40 grayscale'
-      }`}>
-      <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 p-2 flex items-center justify-center shrink-0 relative">
-        {/* Star Rating - Directly above the image card */}
-        <div className="absolute -top-2 left-1/2 -translate-x-1/2 flex justify-center gap-0.5 px-2 py-0.5 rounded-full bg-slate-950 border border-white/10 shadow-xl z-20 whitespace-nowrap">
-          {[...Array(parseInt(level) || 0)].map((_, i) => (
-            <span key={i} className="text-[10px] leading-none text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.6)]">★</span>
-          ))}
-        </div>
-
-        <img
-          src={type.includes("Healing") ? getExtensionImageUrl('images/remotesheal.webp') : getExtensionImageUrl('images/remotes.webp')}
-          className="w-full h-full object-contain filter drop-shadow-md"
-          alt={`${level} Star ${type}`}
-        />
-      </div>
-      <div className="flex-1 flex flex-col justify-between items-end min-w-0">
-        <div className={`text-2xl font-black tabular-nums ${count > 0 ? 'text-white' : ''}`}>
-          {count}<span className="text-sm opacity-50 ml-0.5">/100</span>
-        </div>
-        <div className="text-[10px] font-black uppercase tracking-widest truncate w-full text-right opacity-70">
-          {level} Star
-        </div>
       </div>
     </div>
   );
@@ -1467,6 +1438,14 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
   }, []);
 
   useEffect(() => setSubView(initialSubView), [initialSubView]);
+  useEffect(() => {
+    if (subView !== 'rewards_detail') return;
+    // Register outside the shadow root so every reward tab can use the face.
+    rewardHeadingFontPromise ??= new FontFace('ToonHQ Minnie', `url("${getExtensionImageUrl('fonts/MinnieFont.woff')}") format("woff")`)
+      .load()
+      .then(font => { document.fonts.add(font); })
+      .catch(() => { rewardHeadingFontPromise = undefined; });
+  }, [subView]);
   useEffect(() => { if (propCategory) setActiveCategory(propCategory); }, [propCategory]);
 
   useEffect(() => {
@@ -1927,9 +1906,9 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
             </div>
           </div>
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950/40 rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
-            <div className="px-6 py-3 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
+            <div className="reward-page-header px-6 py-3 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
               <div className="flex items-center gap-3">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">{activeCategory === 'analytics' ? 'Rewards Stats' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
+                <h3 className="reward-heading">{activeCategory === 'analytics' ? 'Rewards Stats' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
                 {activeCategory !== 'analytics' && <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>}
               </div>
               <div className="flex items-center gap-2">
@@ -2030,7 +2009,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
               {activeCategory === 'unites' && (
                 <UniteInventory unites={rewards.unites || {}} getImageUrl={getExtensionImageUrl} layout={uniteLayout} />
               )}
-              {activeCategory === 'remotes' && <div className="space-y-8">{Object.entries(rewards.remotes || {}).length > 0 ? Object.entries(rewards.remotes || {}).map(([type, levels]) => <div key={type} className="space-y-4"><h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/100 border-b border-sky-500/10 pb-2">{type}s</h4><div className="grid grid-cols-2 lg:grid-cols-3 gap-4">{Object.entries(levels as any).map(([level, count]) => <RemoteCard key={level} type={type} level={level} count={count as number} />)}</div></div>) : <EmptyRewardState />}</div>}
+              {activeCategory === 'remotes' && <RemoteInventory remotes={rewards.remotes || {}} getImageUrl={getExtensionImageUrl} />}
               {activeCategory === 'summons' && <SummonsTableView summons={rewards.summons || {}} />}
               {activeCategory === 'pinkslips' && <PinkSlipsGridView count={rewards.pinkslips || 0} />}
             </div>

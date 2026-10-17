@@ -117,6 +117,9 @@
 .gag-track-fill .gag-btn-base { width: 100%; }
 
 /* Keep Unite icons and quantities together as the inventory pane narrows. */
+.reward-heading { height: 36px; margin: 0; color: #fff; font-family: 'ToonHQ Minnie', 'Nunito', sans-serif; font-size: var(--reward-heading-size, 28px); font-weight: 400; line-height: 36px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-text-stroke: 2px #10152f; paint-order: stroke fill; text-shadow: 1px 2px #10152f; }
+.reward-page-header { height: 61px; min-height: 61px; flex-shrink: 0; }
+.unite-section-heading .reward-heading { --reward-heading-size: 16px; -webkit-text-stroke-width: 1px; }
 .unite-inventory { container-type: inline-size; }
 .unite-layout { display: flex; flex-direction: column; gap: 12px; }
 .unite-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
@@ -158,6 +161,29 @@
   .unite-inventory[data-layout="columns"] .unite-columns,
   .unite-inventory[data-layout="columns"] .unite-columns[data-has-optional] { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .unite-layout, .unite-column { gap: 10px; }
+}
+
+/* Native Remote Control menu: Damage and Healing rows, with stars above each tier. */
+.remote-inventory { container-type: inline-size; }
+.remote-panel { display: flex; flex-direction: column; gap: 24px; }
+.remote-category { min-width: 0; }
+.remote-category-heading { margin-bottom: 12px; }
+.remote-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.remote-slot { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 12px 12px 36px; border: 1px solid #6ee7b71f; border-radius: 14px; background: linear-gradient(135deg, #065f4666, #022c2299); }
+.remote-stars { display: flex; align-items: center; justify-content: center; gap: 3px; height: 22px; margin-bottom: 8px; }
+.remote-stars img { width: 20px; height: 20px; object-fit: contain; }
+.remote-device { width: 100%; max-width: 112px; height: 116px; object-fit: contain; filter: drop-shadow(0 3px 2px #061c2d66); }
+.remote-count { position: absolute; right: 12px; bottom: 6px; display: flex; align-items: baseline; gap: 3px; color: #fff; font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.2; text-shadow: 1px 2px #16364d; }
+.remote-count span { color: #c4dfed; font-size: 11px; font-weight: 700; }
+.remote-slot[data-empty] { opacity: 0.45; filter: grayscale(1); }
+@container (max-width: 479px) {
+  .remote-panel { gap: 20px; }
+  .remote-grid { gap: 8px; }
+  .remote-slot { padding: 10px 4px 30px; border-radius: 10px; }
+  .remote-device { height: 88px; }
+  .remote-stars { gap: 1px; }
+  .remote-stars img { width: 16px; height: 16px; }
+  .remote-count { right: 6px; font-size: 22px; }
 }
 
 /* Calculator layouts follow the space available inside the Shticker Book. */

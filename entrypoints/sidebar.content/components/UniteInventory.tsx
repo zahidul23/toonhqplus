@@ -99,7 +99,7 @@ const UniteSection = React.memo(({ category, items, getImageUrl, fullWidth = fal
       <header className="unite-section-heading" data-empty={total === 0 || undefined}>
         <img src={getImageUrl(`images/${details.image}`)} alt="" className="unite-category-icon" />
         <div className="min-w-0 flex-1">
-          <h4 className="text-[13px] font-black text-emerald-50">{category}</h4>
+          <h4 className="reward-heading">{category}</h4>
         </div>
         <span className="unite-section-total" aria-label={`${total}${details.capacity ? ` of ${details.capacity}` : ''} ${category} Unites total`}>
           {total}{details.capacity && <span className="text-[11px] font-bold text-emerald-100/50">/{details.capacity}</span>}
