@@ -1670,6 +1670,10 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
     moreLi.style.order = String(config.pinned.length + config.dropdown.length);
     moreLi.classList.toggle('toonhq-plus-more-hidden', config.dropdown.length === 0);
   }
+
+  // Release the document-start anti-flicker rule as soon as customization is
+  // complete, instead of leaving navigation hidden until its safety timeout.
+  navbarUl.setAttribute('data-toonhq-customized', '');
 }
 
 const groupsState: Record<number, any> = {};
