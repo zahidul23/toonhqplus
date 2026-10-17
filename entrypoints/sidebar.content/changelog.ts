@@ -7,21 +7,17 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.2.39',
-    date: 'Oct 15, 2026',
+    date: 'Oct 17, 2026',
     changes: [
-      'Add Toons Hit accuracy boosts to the Gag and Facilities Calculators',
-      'Improve gag and SOS card tooltips across all calculators',
+      'Add Toons Hit SOS to the Gag and Facilities Calculators',
+      'Improve tooltips across all calculators',
       'Improve calculator layouts for smaller windows and screens',
       'Improve role badge contrast and gag track colors in Dark Mode',
-      'Improve sidebar startup and prevent navigation from staying hidden during slow loads',
-      'Redesign the Shticker Book Unites page with reward icons, nearby counts, category totals and a compact responsive layout',
-      'Add a saved Columns view for Unites and tighten shared rewards panel spacing',
-      'Redesign Remote Controls with the in-game Damage and Healing rows, tier icons and star ratings',
-      'Use the in-game Minnie font for reward headings and keep reward page headers a uniform height',
-      'Keep all Toon-Up, Gag-Up and Jellybean Unite types visible with muted zero counts, and mute empty category headers',
-      'Add Cogbucks Promotion Unites and Cartoonival token jar icons, showing these categories when rewards are held',
-      'Remember the selected reward category when reopening the Shticker Book',
-      'Show district population and chat status indicators on invasion cards'
+      'Improve sidebar startup performance',
+      'Add Cogbucks Promotion Unites to Rewards Tracker',
+      'Redesign the Rewards Tracker Unites and Remote Controls pages',
+      'Show district population and chat status indicators on invasion cards',
+      'Add Setting to disable district indicators'
     ]
   },
   {

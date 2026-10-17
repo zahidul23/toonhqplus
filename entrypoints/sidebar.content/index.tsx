@@ -70,6 +70,7 @@ type DistrictPopulationSnapshot = {
 };
 
 let districtPopulation: DistrictPopulationSnapshot | null = null;
+let districtIndicatorsEnabled = false;
 let activeDistrictTooltip: HTMLElement | null = null;
 let activeDistrictTooltipAnchor: HTMLElement | null = null;
 let districtTooltipSequence = 0;
@@ -192,6 +193,12 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
 }
 
 function applyDistrictIndicators() {
+  if (!districtIndicatorsEnabled) {
+    hideDistrictTooltip();
+    document.querySelectorAll('.toonhq-plus-district-indicators').forEach(indicators => indicators.remove());
+    return;
+  }
+
   document.querySelectorAll<HTMLElement>('.groups-list-item[district-name]').forEach(groupCard => {
     const districtName = groupCard.getAttribute('district-name');
     const districtLine = groupCard.querySelectorAll<HTMLElement>('.info-card__content p')[1];
@@ -1698,6 +1705,7 @@ async function toonHQIsReachable(): Promise<boolean> {
 }
 
 const DEFAULT_SETTINGS: Record<string, any> = {
+  'district-indicators-enabled': true,
   'boss-info-enabled': true,
   'notes-enabled': true,
   'highlight-groups': false,
@@ -1967,12 +1975,27 @@ export default defineContentScript({
 
     // Now load everything into local state
     const currentSettings = await getSettings(Object.keys(DEFAULT_SETTINGS));
+    districtIndicatorsEnabled = currentSettings['district-indicators-enabled'] !== false;
+    applyDistrictIndicators();
     bossInfoEnabled = currentSettings['boss-info-enabled'] !== false;
     notesEnabled = currentSettings['notes-enabled'] !== false;
     highlightGroupsEnabled = currentSettings['highlight-groups'] !== false;
     if (currentSettings['navbar-config']) {
       applyNavbarCustomization(currentSettings['navbar-config']);
     }
+
+    // Register before mounting the sidebar or waiting for ToonHQ's APIs so
+    // indicator changes always apply immediately, even during startup.
+    const handleDistrictIndicatorsSettingChange = (event: Event) => {
+      const { store, key } = (event as CustomEvent).detail || {};
+      if (store !== 'settings' || (key && key !== 'district-indicators-enabled')) return;
+      getSetting<boolean>('district-indicators-enabled').then(enabled => {
+        districtIndicatorsEnabled = enabled !== false;
+        applyDistrictIndicators();
+      }).catch(console.error);
+    };
+    window.addEventListener('toonhqplus-db-changed', handleDistrictIndicatorsSettingChange);
+    ctx.onInvalidated(() => window.removeEventListener('toonhqplus-db-changed', handleDistrictIndicatorsSettingChange));
 
     // Show the extension before waiting for ToonHQ's API or history tracking.
     // A slow site request must not leave the sidebar missing during startup.

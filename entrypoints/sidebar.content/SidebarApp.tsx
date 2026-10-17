@@ -1435,6 +1435,7 @@ export function SidebarApp() {
     dropdown: ['field-offices', 'gardening', 'doodles'],
   });
   const [bossInfoEnabled, setBossInfoEnabled] = useState(true);
+  const [districtIndicatorsEnabled, setDistrictIndicatorsEnabled] = useState(true);
   const [notesEnabled, setNotesEnabled] = useState(true);
   const [syncNotesEnabledState, setSyncNotesEnabledState] = useState(false);
   const [syncNotesError, setSyncNotesError] = useState<string | null>(null);
@@ -2037,7 +2038,8 @@ export function SidebarApp() {
   useEffect(() => {
     initSyncNotesRemoteListener(refresh);
     refresh();
-    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left', DISPLAY_MODE_SETTING]).then(values => {
+    getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'district-indicators-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left', DISPLAY_MODE_SETTING]).then(values => {
+      setDistrictIndicatorsEnabled(values['district-indicators-enabled'] !== false);
       if (values['sidebar-open'] !== undefined) setOpen(!!values['sidebar-open']);
       if (values['active-tab'] !== undefined) setActiveTab(values['active-tab']);
       if (values['boss-info-enabled'] !== undefined) setBossInfoEnabled(!!values['boss-info-enabled']);
@@ -2098,6 +2100,7 @@ export function SidebarApp() {
         getAllNotes().then(setNotes);
       }
       if (store === 'settings') {
+        getSetting<boolean>('district-indicators-enabled').then(v => setDistrictIndicatorsEnabled(v !== false));
         getSetting<{ pinned: string[], dropdown: string[] }>('navbar-config').then(c => { if (c) setNavbarConfig(c); });
         getSetting<boolean>('boss-info-enabled').then(v => { if (v !== undefined) setBossInfoEnabled(v !== false); });
         getSetting<boolean>('notes-enabled').then(v => { if (v !== undefined) setNotesEnabled(v !== false); });
@@ -2515,7 +2518,7 @@ export function SidebarApp() {
 
               {activeTab === 'history' && (
                 <section className="flex-1 flex flex-col min-h-0">
-                  <QuickTeleport />
+                  <QuickTeleport showDistrictIndicators={hasLoadedSettings && districtIndicatorsEnabled} />
                   <div className="mb-2 ml-2 shrink-0 flex items-center justify-between gap-2">
                     <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
                     <button
@@ -2808,6 +2811,30 @@ export function SidebarApp() {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">
+                        <div className="flex flex-col flex-1 mr-4">
+                          <div id="district-indicators-label" className="text-sm font-bold text-white">Show District Indicators</div>
+                          <div id="district-indicators-description" className="text-[10px] text-green-200/50 leading-tight mt-0.5">
+                            Shows district populations and SpeedChat-only badges next to district names.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={districtIndicatorsEnabled}
+                          aria-labelledby="district-indicators-label"
+                          aria-describedby="district-indicators-description"
+                          onClick={() => {
+                            const next = !districtIndicatorsEnabled;
+                            setDistrictIndicatorsEnabled(next);
+                            setSetting('district-indicators-enabled', next).catch(console.error);
+                          }}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ring-1 ring-white/10 ${districtIndicatorsEnabled ? 'bg-emerald-600' : 'bg-white/10'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${districtIndicatorsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        </button>
                       </div>
 
                       <div className="flex items-center justify-between rounded-lg bg-black/20 p-2.5 border border-white/5">

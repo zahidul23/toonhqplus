@@ -272,7 +272,7 @@ function describeBoardingStatus(result: BoardingGroupStatus, districts: District
   return `Online in ${district}.\nPrecise location unavailable.\nNot in a boarding group.`;
 }
 
-export function QuickTeleport() {
+export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictIndicators?: boolean }) {
   const [toons, setToons] = useState<Toon[]>([]);
   const initialToonHqActiveId = useMemo(getToonHqActiveToonId, []);
   const [toonId, setToonId] = useState(initialToonHqActiveId || '');
@@ -662,7 +662,7 @@ export function QuickTeleport() {
           className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/20 px-2.5 py-2 text-left text-xs font-bold text-white transition-colors enabled:cursor-pointer enabled:hover:bg-black/30 focus:border-emerald-500/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           <span id="teleport-district-value" className={`flex min-w-0 flex-1 items-center ${selectedDistrict ? '' : 'text-white/45'}`}>
-            {selectedDistrict ? <><span className="truncate">{selectedDistrict.name}</span><DistrictIndicators district={selectedDistrict} population={populationByDistrict[selectedDistrict.name]} /></> : 'Select a district'}
+            {selectedDistrict ? <><span className="truncate">{selectedDistrict.name}</span>{showDistrictIndicators && <DistrictIndicators district={selectedDistrict} population={populationByDistrict[selectedDistrict.name]} />}</> : 'Select a district'}
           </span>
           <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-white/40 transition-transform ${districtMenuOpen ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
         </button>
@@ -681,7 +681,7 @@ export function QuickTeleport() {
                   onClick={() => { setDistrictId(value); setDistrictMenuOpen(false); }}
                   className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs font-bold transition-colors ${selected ? 'bg-emerald-500/20 text-emerald-200' : 'text-white/85 hover:bg-white/10'}`}
                 >
-                  <span className="truncate">{district.name}</span><DistrictIndicators district={district} population={populationByDistrict[district.name]} />
+                  <span className="truncate">{district.name}</span>{showDistrictIndicators && <DistrictIndicators district={district} population={populationByDistrict[district.name]} />}
                 </button>
               );
             })}
