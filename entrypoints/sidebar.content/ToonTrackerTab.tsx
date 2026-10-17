@@ -584,12 +584,12 @@ const SummonsTableView = React.memo(({ summons }: { summons: any }) => {
   };
 
   return (
-    <div className="flex flex-col gap-2 h-full overflow-y-auto custom-scrollbar pr-2">
+    <div className="flex flex-col gap-2 h-full overflow-y-auto custom-scrollbar">
       {suits.map(suitName => {
         const suitCogs = cogsData.find(s => s.name === suitName)?.ranks || [];
         const classes = suitClasses[suitName];
         return (
-          <div key={suitName} className="grid grid-cols-4 xl:grid-cols-8 gap-3">
+          <div key={suitName} className="grid grid-cols-4 xl:grid-cols-8 gap-2">
             {suitCogs.map(cogRank => {
               const summonEntry = Object.entries(summons).find(([_, s]: [string, any]) =>
                 s.name.replace(/\u0003/g, '') === cogRank.name
@@ -1997,7 +1997,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
               </div>
             </div>
-            <div className={`flex-1 ${activeCategory === 'analytics' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'} ${activeCategory === 'unites' ? 'p-3' : 'p-6'}`}>
+            <div className={`flex-1 ${activeCategory === 'analytics' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'} p-4`}>
               {activeCategory === 'analytics' && (
                 <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500">
                   <div className="w-full h-full max-w-4xl mx-auto">
