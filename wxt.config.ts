@@ -4,6 +4,16 @@ import { DEV_ADBLOCK_PATH, DEV_ADBLOCK_RULES, DEV_ADBLOCK_RULESET } from './tool
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  zip: {
+    excludeSources: [
+      'logs/**',
+      'debug/**',
+      'native-toonhq/**',
+      'docs/asset-audit/**',
+      'docs/notification-icon-webp-q85/**',
+      'docs/notification-icon-webp-q95/**',
+    ],
+  },
   manifest: {
     name: 'ToonHQ+',
     description: 'ToonHQ+ (ToonHQ Plus) is an unofficial independently created browser extension that enhances the ToonHQ experience.',
