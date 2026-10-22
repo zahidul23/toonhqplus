@@ -1,3 +1,5 @@
+import { getNativeBridge } from './nativeBridge.ts';
+
 export type ToonHqPageState = {
   user?: unknown;
   toons?: unknown;
@@ -29,8 +31,9 @@ export function getToonHqPageState(): ToonHqPageState | null {
   cachedState = null;
   return cachedState;
 }
-
 export function isToonHqAuthenticated(): boolean {
+  const live = getNativeBridge().state;
+  if (live.available) return live.authenticated;
   const accounts = getPersistedAccountsState();
   if (accounts) {
     if (accounts.user) return true;
@@ -52,6 +55,8 @@ function getPersistedAccountsState(): Record<string, unknown> | null {
 }
 
 export function getToonHqOwnedToons(): unknown[] | null {
+  const live = getNativeBridge().state;
+  if (live.available) return live.ownedToons;
   const persistedToons = getPersistedAccountsState()?.toons;
   if (Array.isArray(persistedToons)) return persistedToons;
   if (persistedToons && typeof persistedToons === 'object') return Object.values(persistedToons);
@@ -63,6 +68,8 @@ export function getToonHqOwnedToons(): unknown[] | null {
 }
 
 export function getToonHqActiveToonId(): string | null {
+  const live = getNativeBridge().state;
+  if (live.available) return live.currentToonId;
   const currentToon = getPersistedAccountsState()?.currentToon;
   return currentToon == null ? null : String(currentToon);
 }
@@ -82,12 +89,4 @@ export function getToonHqActiveTtrToonId(): number | null {
   return toon.external === true && Number(toon.game) === 1 && Number.isFinite(numericToonId)
     ? numericToonId
     : null;
-}
-
-export function takeEmbeddedSocketAuthToken(): string | null {
-  const state = getToonHqPageState();
-  const token = state?.socket_auth;
-  if (typeof token !== 'string' || !token) return null;
-  state.socket_auth = null;
-  return token;
 }

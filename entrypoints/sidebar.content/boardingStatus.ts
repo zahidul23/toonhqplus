@@ -1,5 +1,4 @@
-import { isToonHqAuthenticated } from './toonHqPageState';
-import { pageFetch } from './pageFetch';
+import { getNativeBridge } from './nativeBridge.ts';
 
 export type BoardingGroupStatus = null | {
   district?: number;
@@ -10,231 +9,60 @@ export type BoardingGroupStatus = null | {
   [key: string]: unknown;
 };
 
-type BoardingResponse = {
-  success: boolean;
-  nonce: number;
-  result: BoardingGroupStatus;
-  message?: string;
-};
-
-type PendingRequest = {
-  resolve: (result: BoardingGroupStatus) => void;
-  reject: (error: Error) => void;
-  timeout: ReturnType<typeof setTimeout>;
-};
-
-type BoardingCreatedListener = (status: Exclude<BoardingGroupStatus, null>) => void;
-
-let groupsSocketSid: string | null = null;
-let desiredSubscriptionToonId: number | null = null;
-let activeSubscription: { sid: string; toonId: number } | null = null;
-let subscriptionSync = Promise.resolve();
-const socketReadyWaiters = new Set<(sid: string) => void>();
-const boardingCreatedListeners = new Set<BoardingCreatedListener>();
-let nextNonce = 1;
-const pendingRequests = new Map<number, PendingRequest>();
-const inFlightByToon = new Map<number, Promise<BoardingGroupStatus>>();
-// Automatic checks are reused for the page session. Callers with an explicit
-// user action can force a refresh, which avoids rechecking every tab remount.
-const recentStatusByToon = new Map<number, BoardingGroupStatus>();
-const recentFailureByToon = new Map<number, { error: Error; expiresAt: number }>();
-const BOARDING_FAILURE_COOLDOWN_MS = 30_000;
-
-function getCsrfToken(): string {
-  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : '';
-}
-
-export function setBoardingGroupsSocketSid(sid: string | null): void {
-  if (groupsSocketSid !== sid) {
-    activeSubscription = null;
-  }
-  groupsSocketSid = sid;
-  if (sid) {
-    for (const resolve of socketReadyWaiters) resolve(sid);
-    socketReadyWaiters.clear();
-    queueBoardingCreationSubscriptionSync();
-  }
-}
-
-async function postBoardingSubscription(toonId: number, sid: string, request: 'subscribe' | 'unsubscribe'): Promise<void> {
-  if (!isToonHqAuthenticated()) return;
-  const csrfToken = getCsrfToken();
-  if (!csrfToken) throw new Error('Could not read ToonHQ\'s CSRF token.');
-
-  const response = await pageFetch(new URL('/api/groups/boarding_request/', window.location.origin).href, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json;charset=UTF-8',
-      'X-CSRFToken': csrfToken,
+/** Coalesce explicit checks. Native ToonHQ owns the nonce, SID, authentication,
+ * subscription and socket response. No automatic requests are made here. */
+export function createBoardingStatusService(bridge: ReturnType<typeof getNativeBridge>) {
+  const recent = new Map<number, BoardingGroupStatus>();
+  const failures = new Map<number, { error: Error; until: number }>();
+  const inFlight = new Map<number, Promise<BoardingGroupStatus>>();
+  const listeners = new Set<(status: Exclude<BoardingGroupStatus, null>) => void>();
+  let context = '', disposed = false;
+  const stopState = bridge.subscribe(update => {
+    if (context !== update.state.context || !update.state.connected) {
+      context = update.state.context; recent.clear(); failures.clear(); inFlight.clear();
+    }
+  });
+  const stopCreated = bridge.onBoardingCreated((status, toonId) => {
+    recent.set(toonId, status); failures.delete(toonId);
+    for (const listener of listeners) {
+      try { listener(status); } catch (error) { console.error('[ToonHQ+] Boarding status listener failed.', error); }
+    }
+  });
+  return {
+    getCached(toonId: number) { return recent.get(toonId); },
+    subscribe(listener: (status: Exclude<BoardingGroupStatus, null>) => void) {
+      listeners.add(listener); return () => { listeners.delete(listener); };
     },
-    body: JSON.stringify({ toon: toonId, sid, request, nonce: 0 }),
-  });
-  if (!response.ok) throw new Error(`ToonHQ returned ${response.status} while trying to ${request}.`);
+    get(toonId: number, forceRefresh = false): Promise<BoardingGroupStatus> {
+      if (disposed) return Promise.reject(new Error('The ToonHQ page bridge closed.'));
+      const existing = inFlight.get(toonId);
+      if (existing) return existing;
+      if (forceRefresh) { recent.delete(toonId); failures.delete(toonId); }
+      if (recent.has(toonId)) return Promise.resolve(recent.get(toonId)!);
+      const failure = failures.get(toonId);
+      if (failure && failure.until > Date.now()) return Promise.reject(failure.error);
+      const requestContext = context;
+      const request = bridge.requestBoarding(toonId).then(result => {
+        if (disposed || context !== requestContext) throw new Error('ToonHQ connection or active Toon changed. Try again.');
+        recent.set(toonId, result); failures.delete(toonId); return result;
+      }).catch(error => {
+        if (!disposed && context === requestContext) failures.set(toonId, { error, until: Date.now() + 30_000 });
+        throw error;
+      }).finally(() => { if (inFlight.get(toonId) === request) inFlight.delete(toonId); });
+      inFlight.set(toonId, request);
+      return request;
+    },
+    dispose() { disposed = true; stopState(); stopCreated(); recent.clear(); failures.clear(); inFlight.clear(); listeners.clear(); },
+  };
 }
-
-async function syncBoardingCreationSubscription(): Promise<void> {
-  const sid = groupsSocketSid;
-  if (!sid) return;
-  const previous = activeSubscription;
-
-  try {
-    const desiredToonId = desiredSubscriptionToonId;
-    if (desiredToonId == null && previous?.sid === sid) {
-      await postBoardingSubscription(previous.toonId, sid, 'unsubscribe');
-      activeSubscription = null;
-    }
-    if (groupsSocketSid !== sid) return;
-    if (desiredToonId != null && (activeSubscription?.sid !== sid || activeSubscription.toonId !== desiredToonId)) {
-      await postBoardingSubscription(desiredToonId, sid, 'subscribe');
-      if (groupsSocketSid !== sid) return;
-      activeSubscription = { sid, toonId: desiredToonId };
-    }
-  } catch (error) {
-    console.warn('[ToonHQ+] Could not update the boarding creation subscription:', error);
-  }
+let service: ReturnType<typeof createBoardingStatusService> | undefined;
+let serviceBridge: ReturnType<typeof getNativeBridge> | undefined;
+function getService() {
+  const bridge = getNativeBridge();
+  if (bridge !== serviceBridge) { service?.dispose(); serviceBridge = bridge; service = createBoardingStatusService(bridge); }
+  return service!;
 }
-
-function queueBoardingCreationSubscriptionSync(): void {
-  subscriptionSync = subscriptionSync.then(syncBoardingCreationSubscription, syncBoardingCreationSubscription);
-}
-
-export function setBoardingCreationSubscription(toonId: number | null): void {
-  if (toonId != null && !isToonHqAuthenticated()) toonId = null;
-  if (desiredSubscriptionToonId === toonId) return;
-  desiredSubscriptionToonId = toonId;
-  queueBoardingCreationSubscriptionSync();
-}
-
-export function onBoardingCreated(listener: BoardingCreatedListener): () => void {
-  boardingCreatedListeners.add(listener);
-  return () => boardingCreatedListeners.delete(listener);
-}
-
-export function handleBoardingCreated(status: Exclude<BoardingGroupStatus, null>): void {
-  if (desiredSubscriptionToonId == null || activeSubscription?.toonId !== desiredSubscriptionToonId) return;
-  recentStatusByToon.set(desiredSubscriptionToonId, status);
-  recentFailureByToon.delete(desiredSubscriptionToonId);
-  for (const listener of boardingCreatedListeners) listener(status);
-}
-
-export function getCachedBoardingGroupStatus(toonId: number): BoardingGroupStatus | undefined {
-  return recentStatusByToon.get(toonId);
-}
-
-function waitForGroupsSocketSid(): Promise<string> {
-  if (groupsSocketSid) return Promise.resolve(groupsSocketSid);
-
-  return new Promise((resolve, reject) => {
-    const handleReady = (sid: string) => {
-      clearTimeout(timeout);
-      socketReadyWaiters.delete(handleReady);
-      resolve(sid);
-    };
-    const timeout = setTimeout(() => {
-      socketReadyWaiters.delete(handleReady);
-      reject(new Error('Could not connect to ToonHQ groups. Refresh the page and try again.'));
-    }, 12_000);
-    socketReadyWaiters.add(handleReady);
-  });
-}
-
-export function rejectPendingBoardingRequests(message = 'The ToonHQ groups connection closed.'): void {
-  groupsSocketSid = null;
-  for (const request of pendingRequests.values()) {
-    clearTimeout(request.timeout);
-    request.reject(new Error(message));
-  }
-  pendingRequests.clear();
-}
-
-export function handleBoardingResponse(response: BoardingResponse): boolean {
-  const nonce = Number(response?.nonce);
-  const pending = pendingRequests.get(nonce);
-  if (!pending) return false;
-
-  pendingRequests.delete(nonce);
-  clearTimeout(pending.timeout);
-  if (response.success) pending.resolve(response.result);
-  else pending.reject(new Error(response.message || 'ToonHQ could not check this Toon.'));
-  return true;
-}
-
-async function requestBoardingGroupStatus(toonId: number): Promise<BoardingGroupStatus> {
-  if (!isToonHqAuthenticated()) throw new Error('You are not logged in to ToonHQ.');
-  const socketSid = await waitForGroupsSocketSid();
-
-  const csrfToken = getCsrfToken();
-  if (!csrfToken) throw new Error('Could not read ToonHQ\'s CSRF token. Refresh the page and try again.');
-
-  const nonce = nextNonce++;
-  const resultPromise = new Promise<BoardingGroupStatus>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      pendingRequests.delete(nonce);
-      reject(new Error('ToonHQ did not answer the boarding-group check in time.'));
-    }, 12_000);
-    pendingRequests.set(nonce, { resolve, reject, timeout });
-  });
-
-  try {
-    const response = await pageFetch(new URL('/api/groups/boarding_request/', window.location.origin).href, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json;charset=UTF-8',
-        'X-CSRFToken': csrfToken,
-      },
-      body: JSON.stringify({ toon: toonId, sid: socketSid, request: 'get_boarding_group', nonce }),
-    });
-
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const body = await response.json();
-        message = body?.detail || body?.error || Object.values(body || {}).flat().join(' ') || message;
-      } catch { }
-      throw new Error(message || `ToonHQ returned ${response.status}.`);
-    }
-  } catch (error) {
-    const pending = pendingRequests.get(nonce);
-    if (pending) clearTimeout(pending.timeout);
-    pendingRequests.delete(nonce);
-    throw error;
-  }
-
-  return resultPromise;
-}
-
-export function getBoardingGroupStatus(toonId: number, forceRefresh = false): Promise<BoardingGroupStatus> {
-  if (forceRefresh) {
-    recentStatusByToon.delete(toonId);
-    recentFailureByToon.delete(toonId);
-  }
-  const cached = recentStatusByToon.get(toonId);
-  if (cached !== undefined || recentStatusByToon.has(toonId)) return Promise.resolve(cached ?? null);
-
-  const recentFailure = recentFailureByToon.get(toonId);
-  if (recentFailure?.expiresAt && recentFailure.expiresAt > Date.now()) return Promise.reject(recentFailure.error);
-  if (recentFailure) recentFailureByToon.delete(toonId);
-
-  const existing = inFlightByToon.get(toonId);
-  if (existing) return existing;
-
-  const request = requestBoardingGroupStatus(toonId)
-    .then(result => {
-      recentFailureByToon.delete(toonId);
-      recentStatusByToon.set(toonId, result);
-      return result;
-    })
-    .catch(error => {
-      const normalizedError = error instanceof Error ? error : new Error(String(error));
-      recentFailureByToon.set(toonId, { error: normalizedError, expiresAt: Date.now() + BOARDING_FAILURE_COOLDOWN_MS });
-      throw normalizedError;
-    })
-    .finally(() => {
-      if (inFlightByToon.get(toonId) === request) inFlightByToon.delete(toonId);
-    });
-  inFlightByToon.set(toonId, request);
-  return request;
-}
+export function disposeBoardingStatus() { service?.dispose(); service = undefined; serviceBridge = undefined; }
+export function onBoardingCreated(listener: (status: Exclude<BoardingGroupStatus, null>) => void) { return getService().subscribe(listener); }
+export function getCachedBoardingGroupStatus(toonId: number) { return getService().getCached(toonId); }
+export function getBoardingGroupStatus(toonId: number, forceRefresh = false) { return getService().get(toonId, forceRefresh); }

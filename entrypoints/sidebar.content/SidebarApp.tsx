@@ -5,6 +5,7 @@ import { gags as gagsConfig } from './gags';
 import { cogs as cogsConfig } from './cogs';
 import { ShtickerBook } from './ShtickerBook.tsx';
 import { QuickTeleport } from './QuickTeleport';
+import { NativeConnectionStatus } from './NativeConnectionStatus';
 import {
   closeDB,
   getAllFromList,
@@ -2518,6 +2519,7 @@ export function SidebarApp() {
 
               {activeTab === 'history' && (
                 <section className="flex-1 flex flex-col min-h-0">
+                  <NativeConnectionStatus />
                   <QuickTeleport showDistrictIndicators={hasLoadedSettings && districtIndicatorsEnabled} />
                   <div className="mb-2 ml-2 shrink-0 flex items-center justify-between gap-2">
                     <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>

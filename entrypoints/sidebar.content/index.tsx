@@ -2,8 +2,9 @@ import ReactDOM from 'react-dom/client';
 import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
-import { handleBoardingCreated, handleBoardingResponse, rejectPendingBoardingRequests, setBoardingCreationSubscription, setBoardingGroupsSocketSid } from './boardingStatus';
-import { getToonHqActiveTtrToonId, getToonHqOwnedToons, isToonHqAuthenticated, takeEmbeddedSocketAuthToken } from './toonHqPageState';
+import { disposeBoardingStatus } from './boardingStatus';
+import { getNativeBridge } from './nativeBridge';
+import { createNativeGroupTracker } from './nativeGroupTracker';
 import { pageFetch } from './pageFetch';
 import './style.css';
 import { DISPLAY_MODE_SETTING } from '../lib/displayMode';
@@ -17,9 +18,7 @@ import {
   putToons,
   putGroup,
   deleteGroup,
-  putGroupMember,
   putGroupMembers,
-  markMemberLeft,
   getAllGroups,
   getAllGroupMembers,
   getGroupMembers,
@@ -31,8 +30,6 @@ import {
   getToons,
   getToonsByHashIds,
   type ToonRecord,
-  type GroupRecord,
-  type GroupMemberRecord,
 } from './db';
 
 
@@ -1679,10 +1676,6 @@ function applyNavbarCustomization(config: { pinned: string[], dropdown: string[]
 const groupsState: Record<number, any> = {};
 let toonyToonsMemory = new Set<string>();
 let stinkyToonsMemory = new Set<string>();
-/** Member id (from API/websocket) -> toon id, for resolving member_left events. */
-const memberIdToToonId: Record<number, string> = {};
-/** Group id -> set of member ids in that group; cleared on group_disbanded. */
-const groupMemberIds: Record<number, Set<number>> = {};
 const activeToons: Record<string, any> = {};
 let bossInfoEnabled = true;
 let notesEnabled = true;
@@ -1735,15 +1728,6 @@ function generateToonHash(name: string, photo: string) {
     hash |= 0; // Convert to 32bit integer
   }
   return '#' + Math.abs(hash).toString(16);
-}
-
-function applyToonHash(toon: any) {
-  if (toon.name) {
-    toon.hashId = generateToonHash(toon.name, toon.photo);
-  }
-  if (!toon.id) {
-    toon.id = toon.hashId;
-  }
 }
 
 async function applyGroupHighlights(
@@ -1898,6 +1882,36 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    // Buffer native data before database migration or React mounting.
+    const nativeBridge = getNativeBridge();
+    let releaseHistory!: () => void;
+    const historyReady = new Promise<void>(resolve => { releaseHistory = resolve; });
+    const persistWhenReady = (work: () => Promise<void>) => historyReady.then(() => {
+      if (!ctx.isInvalid) return work();
+    });
+    const historyTracker = createNativeGroupTracker({
+      groups: groupsState, ownedToons: activeToons, toons,
+      hash: generateToonHash,
+      persistence: {
+        putToons: records => persistWhenReady(() => putToons(records)),
+        putGroup: record => persistWhenReady(() => putGroup(record)),
+        putGroupMembers: records => persistWhenReady(() => putGroupMembers(records)),
+        deleteGroup: id => persistWhenReady(() => deleteGroup(id)),
+        setActiveToonIds: ids => persistWhenReady(() => setSetting('active-toon-ids', ids)),
+      },
+      onChanged: applyCurrentGroupHighlights,
+      onError: error => console.error('[ToonHQ+] Native group history update failed:', error),
+    });
+    const stopNativeHistory = nativeBridge.subscribe(update => historyTracker.apply(update));
+    const nativeScript = document.createElement('script');
+    nativeScript.src = (browser.runtime as any).getURL('native-bridge.js');
+    nativeScript.onload = () => { nativeScript.remove(); if (!ctx.isInvalid) nativeBridge.requestSnapshot(); };
+    nativeScript.onerror = () => { nativeScript.remove(); console.warn('[ToonHQ+] Could not load the native page bridge. Live history is paused.'); };
+    document.documentElement.appendChild(nativeScript);
+    ctx.onInvalidated(() => {
+      nativeScript.remove(); releaseHistory(); stopNativeHistory(); historyTracker.dispose();
+      disposeBoardingStatus(); nativeBridge.dispose();
+    });
     injectHighlightStyles();
     const cachedPopulationPromise = browser.storage.local.get(DISTRICT_POPULATION_STORAGE_KEY);
     const acceptDistrictPopulation = (snapshot: DistrictPopulationSnapshot | undefined) => {
@@ -1970,6 +1984,7 @@ export default defineContentScript({
 
     // Run migration from old local storage on first start
     await migrateFromLocalStorage();
+    if (ctx.isInvalid) return;
 
     // Ensure all default settings are persisted if they don't exist
     await Promise.all(Object.entries(DEFAULT_SETTINGS).map(async ([key, defaultValue]) => {
@@ -2119,460 +2134,23 @@ export default defineContentScript({
       window.removeEventListener('resize', hideDistrictTooltip);
     });
 
-    // 1) Load owned toons from ToonHQ's authenticated page bootstrap. Only use
-    // the API as a logged-in fallback when the server did not embed the list.
-    if (isToonHqAuthenticated()) {
-      try {
-        let toonsData = getToonHqOwnedToons();
-        if (!Array.isArray(toonsData)) {
-          const toonsResp = await fetch('https://toonhq.org/api/toons/', {
-            credentials: 'include',
-            signal: AbortSignal.timeout(10_000),
-          });
-          if (!toonsResp.ok) throw new Error(`ToonHQ returned ${toonsResp.status}.`);
-          toonsData = await toonsResp.json();
-        }
-        if (Array.isArray(toonsData)) {
-        const newToons: ToonRecord[] = toonsData.map((toon: any) => {
-          const id = String(toon.id);
-          const normalized = { ...toon, id };
-          activeToons[id] = normalized;
-          toons[id] = normalized;
-          return {
-            id,
-            name: toon.name || '',
-            species: toon.species,
-            color: toon.color,
-            laff: toon.laff,
-            level: toon.level,
-            photo: toon.photo,
-            photo_bg: toon.photo_bg,
-            ring: toon.ring,
-            toonup: toon.toonup,
-            trap: toon.trap,
-            lure: toon.lure,
-            sound: toon.sound,
-            throw: toon.throw,
-            squirt: toon.squirt,
-            drop: toon.drop,
-            prestiges: toon.prestiges,
-            organic_level: toon.organic_level,
-            sellbot: toon.sellbot,
-            cashbot: toon.cashbot,
-            lawbot: toon.lawbot,
-            bossbot: toon.bossbot,
-            lastSeen: new Date().toISOString(),
-          } as ToonRecord;
-        });
-        await putToons(newToons);
-        await setSetting('active-toon-ids', newToons.map(t => t.id));
-        }
-      } catch (e) {
-        console.error('[ToonHQ+] Failed to load active toons', e);
-      }
-    }
-
-
-    /** Update in-memory member id -> toon id mapping (and per-group sets) from a members list. */
-    const updateMemberIdMaps = (groupId: number, members: any[]) => {
-      if (!Array.isArray(members)) return;
-      if (!groupMemberIds[groupId]) groupMemberIds[groupId] = new Set();
-      for (const m of members) {
-        const memberId = m?.id != null ? Number(m.id) : undefined;
-        const toonId = m?.toon?.id != null ? String(m.toon.id) : String(generateToonHash(m.name || '', m.photo || ''));
-        if (memberId != null && toonId != null) {
-          memberIdToToonId[memberId] = toonId;
-          groupMemberIds[groupId].add(memberId);
-        }
-      }
+    if (ctx.isInvalid) return;
+    releaseHistory();
+    let cleanupDisposed = false;
+    let cleanupTimeout: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = async () => {
+      try { await cleanupToonCache(); }
+      catch (error) { console.error('[ToonHQ+] Cleanup failed:', error); }
+      if (!cleanupDisposed) cleanupTimeout = setTimeout(cleanup, 30 * 60 * 1000);
     };
-
-    const syncToonData = (members: any[]) => {
-      if (!members || !Array.isArray(members)) return;
-      const newToons: ToonRecord[] = [];
-      members.forEach((m) => {
-        const incoming = m.toon || (m.id && m.name ? m : { ...m });
-        if (!incoming?.name && !incoming?.photo) return;
-
-        const numericId = incoming.id != null && !isNaN(Number(incoming.id)) ? String(Number(incoming.id)) : null;
-        const hashId = incoming.hashId ?? incoming.toon?.hashId ?? generateToonHash(incoming.name || '', incoming.photo || '');
-
-        const id: string = numericId ?? String(hashId);
-        const rec: ToonRecord = {
-          id,
-          name: incoming.name || '',
-          species: incoming.species,
-          color: incoming.color,
-          laff: incoming.laff,
-          level: incoming.level,
-          photo: incoming.photo,
-          photo_bg: incoming.photo_bg,
-          ring: incoming.ring,
-          toonup: incoming.toonup,
-          trap: incoming.trap,
-          lure: incoming.lure,
-          sound: incoming.sound,
-          throw: incoming.throw,
-          squirt: incoming.squirt,
-          drop: incoming.drop,
-          prestiges: incoming.prestiges,
-          organic_level: incoming.organic_level,
-          sellbot: incoming.sellbot,
-          cashbot: incoming.cashbot,
-          lawbot: incoming.lawbot,
-          bossbot: incoming.bossbot,
-          lastSeen: new Date().toISOString(),
-          hashId,
-        };
-        toons[id] = rec as ToonData;
-        newToons.push(rec);
-      });
-      if (newToons.length) putToons(newToons).catch(console.error);
-    };
-
-    const cleanupToonCacheTask = async () => {
-      try {
-        await cleanupToonCache();
-      } catch (e) {
-        console.error('[ToonHQ+] Cleanup failed:', e);
-      }
-    };
-
-    const syncGroupHistory = (group: any, leavingToonId?: string) => {
-      if (!group || !Array.isArray(group.members)) return;
-
-      const groupId = Number(group.id);
-      updateMemberIdMaps(groupId, group.members);
-
-      const activeMember = group.members.find((m: any) => m.toon && activeToons[String(m.toon.id)]);
-      if (!activeMember) return;
-
-      // Persist group metadata
-      putGroup({
-        groupId,
-        type: group.type,
-        created: group.created,
-        userJoinedAt: activeMember.joined || group.created,
-        options: group.options,
-      }).catch(console.error);
-
-      // Persist all members
-      const currentMemberIds = new Set(group.members.map((m: any) => m.toon?.id).filter(Boolean));
-      const memberRecords: GroupMemberRecord[] = group.members
-        .filter((m: any) => m.toon)
-        .map((m: any) => ({
-          groupId,
-          toonId: String(m.toon.id || generateToonHash(m.toon.name || '', m.toon.photo || '')),
-          joined: m.joined || group.created,
-          left: m.left || null,
-        }));
-      if (memberRecords.length) putGroupMembers(memberRecords).catch(console.error);
-    };
-
-
-
-    // 2) Fetch current groups
-    try {
-      const resp = await fetch('https://toonhq.org/api/groups/list/1/', {
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!resp.ok) throw new Error(`ToonHQ returned ${resp.status}.`);
-      const data = await resp.json();
-      if (data && Array.isArray(data.groups)) {
-        data.groups.forEach((group: any) => {
-          group.members?.forEach((m: any) => {
-            if (m.toon) {
-              applyToonHash(m.toon);
-            }
-          });
-          groupsState[group.id] = group;
-          syncToonData(group.members);
-          syncGroupHistory(group);
-        });
-      }
-    } catch (e) {
-      console.error('[ToonHQ+] Failed to fetch initial groups list', e);
-    }
-
-    // 3) Then start websocket to listen for group changes
-    // Run cleanup on startup and every 30 minutes. Use a restartable timeout so
-    // content-script invalidation can cancel long-lived background work cleanly.
-    let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
-    let groupTrackerDisposed = false;
-    const scheduleCleanupToonCache = () => {
-      if (groupTrackerDisposed) return;
-      cleanupTimeout = setTimeout(async () => {
-        cleanupTimeout = null;
-        if (groupTrackerDisposed) return;
-        await cleanupToonCacheTask();
-        scheduleCleanupToonCache();
-      }, 30 * 60 * 1000);
-    };
-    cleanupToonCacheTask().finally(scheduleCleanupToonCache);
-
-    let isReconnecting = false;
-    let plannedSocketRestart = false;
-    let activeGroupSocket: WebSocket | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let socketRestartTimeout: ReturnType<typeof setTimeout> | null = null;
-    let nextSocketAckId = 0;
-    let pendingSocketAuthToken = takeEmbeddedSocketAuthToken();
-    let socketNamespaceReady = false;
-    let lastKnownAuthentication = isToonHqAuthenticated();
-    let lastKnownBoardingSubscriptionToonId = getToonHqActiveTtrToonId();
-    setBoardingCreationSubscription(lastKnownBoardingSubscriptionToonId);
-
-    const emitSocketEventWithAck = (ws: WebSocket, eventName: string, ...args: unknown[]) => {
-      const ackId = nextSocketAckId++;
-      ws.send(`42${ackId}${JSON.stringify([eventName, ...args])}`);
-      return ackId;
-    };
-
-    const authenticateSocket = async (ws: WebSocket) => {
-      if (!isToonHqAuthenticated()) return;
-      const csrfToken = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1];
-      try {
-        let token = pendingSocketAuthToken;
-        pendingSocketAuthToken = null;
-        if (!token) {
-          if (!csrfToken) return;
-          const response = await pageFetch(new URL('/api/accounts/socket_auth/', window.location.origin).href, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'X-CSRFToken': decodeURIComponent(csrfToken) },
-          });
-          if (!response.ok) throw new Error(`ToonHQ returned ${response.status}.`);
-          token = await response.json();
-        }
-        if (activeGroupSocket === ws && ws.readyState === WebSocket.OPEN) {
-          emitSocketEventWithAck(ws, 'auth', token);
-        }
-      } catch (error) {
-        console.warn('[ToonHQ+] Could not authenticate the groups socket:', error);
-      }
-    };
-
-    const scheduleSocketRestart = () => {
-      if (groupTrackerDisposed) return;
-      if (socketRestartTimeout) clearTimeout(socketRestartTimeout);
-      socketRestartTimeout = setTimeout(() => {
-        socketRestartTimeout = null;
-        if (groupTrackerDisposed) return;
-        if (!activeGroupSocket || activeGroupSocket.readyState === WebSocket.CLOSED) {
-          connectWebSocket();
-          return;
-        }
-        plannedSocketRestart = true;
-        activeGroupSocket.close();
-      }, 60 * 60 * 1000);
-    };
-
-    const connectWebSocket = () => {
-      if (groupTrackerDisposed) return;
-      if (activeGroupSocket && (
-        activeGroupSocket.readyState === WebSocket.CONNECTING
-        || activeGroupSocket.readyState === WebSocket.OPEN
-      )) return;
-
-      // Keep the extension-owned socket on the same ToonHQ origin as the page.
-      // This matters when ToonHQ is reached through a canonical subdomain: the
-      // Socket.IO session and its authenticated HTTP requests must share an
-      // origin for boarding requests and Quick Teleport to work together.
-      const socketUrl = new URL('/socket.io/', window.location.origin);
-      socketUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      socketUrl.searchParams.set('protocol', '3');
-      socketUrl.searchParams.set('EIO', '4');
-      socketUrl.searchParams.set('transport', 'websocket');
-
-      let ws: WebSocket;
-      try {
-        // Firefox MV2 content scripts have an expanded isolated global. Create
-        // the socket through the page window (the same route used by
-        // pageFetch) so it receives the page principal, appears in the page's
-        // Network monitor, and shares ToonHQ's authenticated socket context.
-        const pageContent = (globalThis as any).content;
-        const WebSocketConstructor = typeof pageContent?.WebSocket === 'function'
-          ? pageContent.WebSocket
-          : WebSocket;
-        ws = new WebSocketConstructor(socketUrl.href) as WebSocket;
-      } catch (error) {
-        console.warn('[ToonHQ+] Could not open the groups WebSocket:', error);
-        if (reconnectTimeout) clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(() => {
-          reconnectTimeout = null;
-          connectWebSocket();
-        }, 5000);
-        return;
-      }
-      activeGroupSocket = ws;
-
-      ws.addEventListener('open', () => {
-        if (isReconnecting) {
-          if (plannedSocketRestart) {
-            console.info('[ToonHQ+] Group tracker socket restarted.');
-            plannedSocketRestart = false;
-            isReconnecting = false;
-          } else {
-            console.info('[ToonHQ+] Reconnected! Reloading page...');
-            window.location.reload();
-            return;
-          }
-        }
-
-        if (activeGroupSocket !== ws) {
-          return;
-        }
-
-        console.info('[ToonHQ+] Direct WebSocket connection opened.');
-      });
-
-      ws.addEventListener('message', (event) => {
-        if (typeof event.data === 'string') {
-          const str = event.data;
-
-          // Handle Socket.io Ping (2)
-          if (str === '2') {
-            ws.send('3'); // send Pong
-            return;
-          }
-
-          // Wait for the Engine.IO open packet before opening the Socket.IO namespace.
-          if (str.startsWith('0')) {
-            ws.send('40');
-            return;
-          }
-
-          // Handle Event Payloads
-          const match = str.match(/^(\d+)(.*)$/);
-          if (match) {
-            const prefix = match[1];
-            const payloadString = match[2];
-
-            if (payloadString) {
-              try {
-                const payload = JSON.parse(payloadString);
-                if (prefix === '40' && payload && !Array.isArray(payload) && typeof payload.sid === 'string') {
-                  socketNamespaceReady = true;
-                  setBoardingGroupsSocketSid(payload.sid);
-                  console.info('[ToonHQ+] Groups Socket.IO session ready.');
-                  emitSocketEventWithAck(ws, 'track', 'groups', 1);
-                  void authenticateSocket(ws);
-                } else if (Array.isArray(payload) && typeof payload[0] === 'string') {
-                  const eventName = payload[0];
-                  const data = payload[1];
-                  if (eventName === 'boarding_response') {
-                    handleBoardingResponse(data);
-                  } else if (eventName === 'boarding_created') {
-                    handleBoardingCreated(data);
-                  } else if (eventName === 'group_created') {
-                    data.members?.forEach((m: any) => { if (m.toon) applyToonHash(m.toon); });
-                    groupsState[data.id] = data;
-                    syncToonData(data.members);
-                    syncGroupHistory(data);
-                  } else if (eventName === 'group_disbanded') {
-                    const gid = Number(data.id);
-                    const disbandedGroup = groupsState[gid];
-                    const activeMemberCount = Array.isArray(disbandedGroup?.members)
-                      ? disbandedGroup.members.filter((member: any) => !member.left).length
-                      : (groupMemberIds[gid]?.size ?? 0);
-                    if (activeMemberCount <= 2) {
-                      deleteGroup(gid).catch(error => console.error('[ToonHQ+] Failed to remove short-lived group from history:', error));
-                    }
-                    if (groupMemberIds[gid]) {
-                      for (const mid of groupMemberIds[gid]) delete memberIdToToonId[mid];
-                      delete groupMemberIds[gid];
-                    }
-                    delete groupsState[gid];
-                  } else if (eventName === 'member_joined') {
-                    if (groupsState[data.group]) {
-
-                      data.toon.hashId = generateToonHash(data.toon.name || '', data.toon.photo || '');
-                      if (!data.toon.id) {
-                        data.toon.id = data.toon.hashId;
-                      }
-
-                      groupsState[data.group].members.push(data);
-                      updateMemberIdMaps(Number(data.group), [data]);
-                      syncToonData([data]);
-                      syncGroupHistory(groupsState[data.group]);
-                    }
-                  } else if (eventName === 'member_left') {
-                    if (groupsState[data.group]) {
-                      const leavingToonId = memberIdToToonId[data.id];
-                      markMemberLeft(data.group, leavingToonId);
-                      groupsState[data.group].members.filter((m: any) => m.id === data.id).forEach((m: any) => {
-                        m.left = new Date().toISOString();
-                      });
-                      syncGroupHistory(groupsState[data.group]);
-                    }
-                  }
-                }
-              } catch (e) {
-                // Ignore malformed or unsupported socket messages.
-              }
-            }
-          }
-        }
-      });
-
-      ws.addEventListener('close', () => {
-        if (activeGroupSocket === ws) activeGroupSocket = null;
-        socketNamespaceReady = false;
-        rejectPendingBoardingRequests();
-        if (groupTrackerDisposed) return;
-        if (!isReconnecting) {
-          console.info(plannedSocketRestart
-            ? '[ToonHQ+] Restarting group tracker socket...'
-            : '[ToonHQ+] WebSocket closed. Attempting to reconnect...');
-          isReconnecting = true;
-        }
-        if (reconnectTimeout) clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(() => {
-          reconnectTimeout = null;
-          connectWebSocket();
-        }, plannedSocketRestart ? 250 : 5000);
-      });
-
-      ws.addEventListener('error', () => {
-        console.warn('[ToonHQ+] WebSocket error.');
-      });
-
-      scheduleSocketRestart();
-    };
-
-    connectWebSocket();
-
-    // ToonHQ login/logout happens inside the SPA without necessarily reloading
-    // the page, so mirror its account watcher for the extension-owned socket.
-    const authenticationInterval = window.setInterval(() => {
-      const boardingSubscriptionToonId = getToonHqActiveTtrToonId();
-      if (boardingSubscriptionToonId !== lastKnownBoardingSubscriptionToonId) {
-        lastKnownBoardingSubscriptionToonId = boardingSubscriptionToonId;
-        setBoardingCreationSubscription(boardingSubscriptionToonId);
-      }
-
-      const authenticated = isToonHqAuthenticated();
-      if (authenticated === lastKnownAuthentication) return;
-      lastKnownAuthentication = authenticated;
-      const ws = activeGroupSocket;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !socketNamespaceReady) return;
-      if (authenticated) void authenticateSocket(ws);
-      else ws.send(`42${JSON.stringify(['clear_auth'])}`);
-    }, 750);
-
+    void cleanup();
     ctx.onInvalidated(() => {
-      groupTrackerDisposed = true;
-      window.clearInterval(authenticationInterval);
-      if (cleanupTimeout) clearTimeout(cleanupTimeout);
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socketRestartTimeout) clearTimeout(socketRestartTimeout);
-      plannedSocketRestart = false;
-      if (activeGroupSocket) {
-        activeGroupSocket.close();
-        activeGroupSocket = null;
-      }
+      cleanupDisposed = true;
+      clearTimeout(cleanupTimeout);
     });
 
+    // Retain the existing idle-tab refresh: memory growth may be in ToonHQ
+    // itself, so sharing its socket does not replace this safeguard.
     let lastUserActivityAt = Date.now();
     const markUserActivity = () => {
       lastUserActivityAt = Date.now();
@@ -2583,7 +2161,9 @@ export default defineContentScript({
     });
 
     let reloadCheckInFlight = false;
+    let idleRefreshDisposed = false;
     const idleReloadInterval = setInterval(() => {
+      if (idleRefreshDisposed) return;
       const idleFor = Date.now() - lastUserActivityAt;
       const hasOpenDialog = !!document.querySelector('.group-details-dialog, .modal.show, .vuedal');
       if (idleFor >= IDLE_RELOAD_AFTER_MS && document.visibilityState === 'hidden' && !hasOpenDialog) {
@@ -2591,7 +2171,7 @@ export default defineContentScript({
         reloadCheckInFlight = true;
         toonHQIsReachable()
           .then((reachable) => {
-            if (reachable) window.location.reload();
+            if (reachable && !idleRefreshDisposed) window.location.reload();
           })
           .finally(() => {
             reloadCheckInFlight = false;
@@ -2600,6 +2180,7 @@ export default defineContentScript({
     }, 60 * 1000);
 
     ctx.onInvalidated(() => {
+      idleRefreshDisposed = true;
       userActivityEvents.forEach((eventName) => {
         window.removeEventListener(eventName, markUserActivity, { capture: true });
       });

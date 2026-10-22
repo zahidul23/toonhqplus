@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.0',
+    date: 'Oct 22, 2026',
+    changes: [
+      'Reduce ToonHQ server load by reusing its existing live connection for group history and Quick Teleport',
+      'Improve group history synchronization and handling of login, Toon changes, and reconnects',
+      'Check Quick Teleport status on demand instead of automatically',
+      'Preserve periodic idle-tab refreshes to help limit memory growth'
+    ]
+  },
+  {
     version: '1.2.39',
     date: 'Oct 17, 2026',
     changes: [

@@ -3,8 +3,9 @@ import { browser } from 'wxt/browser';
 import { BoardingGroupStatus, getBoardingGroupStatus, getCachedBoardingGroupStatus, onBoardingCreated } from './boardingStatus';
 import { getSettings, setSetting } from './db';
 import { getToonSuitLevel } from './toonUtils';
-import { getToonHqActiveToonId, getToonHqOwnedToons, isToonHqAuthenticated } from './toonHqPageState';
+import { getToonHqActiveToonId } from './toonHqPageState';
 import { pageFetch } from './pageFetch';
+import { getNativeBridge } from './nativeBridge';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
@@ -159,47 +160,12 @@ const DESTINATION_ROWS = [
   { label: 'Bossbot', indices: [3, 7, 11], image: getExtensionImageUrl('images/suits/Bossbot.png'), color: '#8b5b39' },
 ];
 
-let cachedToons: Toon[] | null = null;
-let cachedToonsAt = 0;
-let toonsRequest: Promise<Toon[]> | null = null;
-const TOONS_CACHE_MS = 60_000;
 const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
 const BOARDING_GROUP_COOLDOWN_SECONDS = 5 * 60;
-const AUTO_BOARDING_CHECK_COOLDOWN_MS = 60_000;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
 const AUTO_DELIST_SETTING = 'quick-teleport-auto-delist';
 const DESTINATION_SETTING = 'quick-teleport-destination';
-const LAST_AUTO_BOARDING_CHECK_KEY = 'toonhqplus-quick-teleport-last-auto-boarding-check';
 const MANUAL_REFRESH_STATUS = 'Use Refresh to check this Toon\'s current location and boarding-group status.';
-
-type PersistedAutoBoardingCheck = {
-  checkedAt: number;
-  result?: BoardingGroupStatus;
-};
-
-function getPersistedAutoBoardingCheck(toonId: string): PersistedAutoBoardingCheck | null {
-  try {
-    const rawValue = localStorage.getItem(`${LAST_AUTO_BOARDING_CHECK_KEY}:${toonId}`);
-    if (!rawValue) return null;
-    const value = JSON.parse(rawValue);
-    // Backward compatibility for timestamp-only entries.
-    if (typeof value === 'number' && Number.isFinite(value)) return { checkedAt: value };
-    if (!value || typeof value !== 'object' || !Number.isFinite(value.checkedAt)) return null;
-    const persisted: PersistedAutoBoardingCheck = { checkedAt: value.checkedAt };
-    if (Object.prototype.hasOwnProperty.call(value, 'result') && (value.result === null || typeof value.result === 'object')) {
-      persisted.result = value.result as BoardingGroupStatus;
-    }
-    return persisted;
-  } catch {
-    return null;
-  }
-}
-
-function setPersistedAutoBoardingCheck(toonId: string, value: PersistedAutoBoardingCheck): void {
-  try {
-    localStorage.setItem(`${LAST_AUTO_BOARDING_CHECK_KEY}:${toonId}`, JSON.stringify(value));
-  } catch { }
-}
 
 function HoverTooltip({ id, children, placement = 'center' }: { id: string; children: React.ReactNode; placement?: 'left' | 'center' | 'right' }) {
   const positionClass = placement === 'left'
@@ -212,32 +178,6 @@ function HoverTooltip({ id, children, placement = 'center' }: { id: string; chil
       {children}
     </div>
   );
-}
-
-async function loadTtrToons(): Promise<Toon[]> {
-  if (cachedToons && Date.now() - cachedToonsAt < TOONS_CACHE_MS) return cachedToons;
-  if (toonsRequest) return toonsRequest;
-
-  if (!isToonHqAuthenticated()) throw new Error('You are not logged in to ToonHQ.');
-
-  const availableToons = getToonHqOwnedToons();
-  if (availableToons) {
-    cachedToons = availableToons.filter((toon): toon is Toon => !!toon && typeof toon === 'object')
-      .filter(toon => toon.game == null || toon.game === 1);
-    cachedToonsAt = Date.now();
-    return cachedToons;
-  }
-
-  toonsRequest = pageFetch(new URL('/api/toons/', window.location.origin).href, { credentials: 'include' })
-    .then(async response => {
-      if (!response.ok) throw new Error(await readError(response));
-      const data = await response.json();
-      cachedToons = (Array.isArray(data) ? data : []).filter((toon: Toon) => toon.game == null || toon.game === 1);
-      cachedToonsAt = Date.now();
-      return cachedToons;
-    })
-    .finally(() => { toonsRequest = null; });
-  return toonsRequest;
 }
 
 function getCsrfToken(): string {
@@ -274,6 +214,8 @@ function describeBoardingStatus(result: BoardingGroupStatus, districts: District
 
 export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictIndicators?: boolean }) {
   const [toons, setToons] = useState<Toon[]>([]);
+  const [nativeState, setNativeState] = useState(() => getNativeBridge().state);
+  useEffect(() => getNativeBridge().subscribe(update => setNativeState(update.state)), []);
   const initialToonHqActiveId = useMemo(getToonHqActiveToonId, []);
   const [toonId, setToonId] = useState(initialToonHqActiveId || '');
   const [districtId, setDistrictId] = useState('');
@@ -397,32 +339,9 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
   }, [hasActiveBoardingGroup, toonId]);
 
   useEffect(() => {
-    const refreshToons = () => {
-      if (!isToonHqAuthenticated()) return;
-      loadTtrToons()
-        .then(result => {
-          setToons(result);
-          setStatus(current => current.startsWith('Could not load your toons:')
-            ? (getToonHqActiveToonId() ? MANUAL_REFRESH_STATUS : '')
-            : current);
-        })
-        .catch(error => setStatus(`Could not load your toons: ${error.message === "Authentication credentials were not provided." ? "You are not logged in to ToonHQ." : error.message}`));
-    };
-    refreshToons();
-    const interval = window.setInterval(refreshToons, 750);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const syncToonHqActiveToon = () => {
-      const id = getToonHqActiveToonId();
-      setToonId(current => current === (id || '') ? current : (id || ''));
-    };
-
-    syncToonHqActiveToon();
-    const interval = window.setInterval(syncToonHqActiveToon, 750);
-    return () => window.clearInterval(interval);
-  }, []);
+    setToons(nativeState.authenticated ? nativeState.ownedToons.filter(toon => toon.game === 1) as Toon[] : []);
+    setToonId(nativeState.currentToonId || '');
+  }, [nativeState]);
 
   useEffect(() => {
     if (!preferencesLoaded || !toonId) {
@@ -433,16 +352,8 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     }
 
     const cachedBoardingStatus = getCachedBoardingGroupStatus(Number(toonId));
-    const persistedCheck = getPersistedAutoBoardingCheck(toonId);
-    const hasPersistedResult = !!persistedCheck
-      && Date.now() - persistedCheck.checkedAt < AUTO_BOARDING_CHECK_COOLDOWN_MS
-      && Object.prototype.hasOwnProperty.call(persistedCheck, 'result');
-    const restoredBoardingStatus = cachedBoardingStatus !== undefined
-      ? cachedBoardingStatus
-      : hasPersistedResult
-        ? persistedCheck!.result
-        : undefined;
-    if (restoredBoardingStatus !== undefined || hasPersistedResult) {
+    const restoredBoardingStatus = cachedBoardingStatus;
+    if (restoredBoardingStatus !== undefined) {
       setBoardingStatus(restoredBoardingStatus ?? null);
       if (restoredBoardingStatus?.district != null) setDistrictId(String(restoredBoardingStatus.district));
       setStatus(describeBoardingStatus(restoredBoardingStatus ?? null, districts, coreData.locations));
@@ -452,7 +363,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     setBoardingStatus(undefined);
     setCheckingStatus(false);
     setStatus(MANUAL_REFRESH_STATUS);
-  }, [preferencesLoaded, toonId, districts, coreData.locations]);
+  }, [preferencesLoaded, toonId, districts, coreData.locations, nativeState.context]);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -463,42 +374,6 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       setStatus(describeBoardingStatus(result, districts, coreData.locations));
     });
   }, [preferencesLoaded, districts, coreData.locations]);
-
-  useEffect(() => {
-    if (!preferencesLoaded || !toonId) return;
-    const now = Date.now();
-    const persistedCheck = getPersistedAutoBoardingCheck(toonId);
-    if (now - (persistedCheck?.checkedAt ?? 0) < AUTO_BOARDING_CHECK_COOLDOWN_MS) return;
-
-    // Persist before starting the request so remounts, reloads, and failures
-    // cannot generate a burst of automatic checks.
-    setPersistedAutoBoardingCheck(toonId, {
-      checkedAt: now,
-      ...(persistedCheck && Object.prototype.hasOwnProperty.call(persistedCheck, 'result')
-        ? { result: persistedCheck.result }
-        : {}),
-    });
-    let cancelled = false;
-    setCheckingStatus(true);
-    setStatus('Checking your Toon\'s current location...');
-    getBoardingGroupStatus(Number(toonId), true)
-      .then(result => {
-        setPersistedAutoBoardingCheck(toonId, { checkedAt: now, result });
-        if (cancelled || !quickTeleportActiveRef.current) return;
-        setBoardingStatus(result);
-        if (result?.district != null) setDistrictId(String(result.district));
-        setStatus(describeBoardingStatus(result, districts, coreData.locations));
-      })
-      .catch(error => {
-        if (cancelled || !quickTeleportActiveRef.current) return;
-        setStatus(`Could not check Toon status: ${error instanceof Error ? error.message : String(error)}`);
-      })
-      .finally(() => {
-        if (!cancelled && quickTeleportActiveRef.current) setCheckingStatus(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [preferencesLoaded, toonId, districts, coreData.locations]);
 
   const selectedToon = toons.find(toon => String(toon.id) === toonId);
   const selectedDestination = DESTINATIONS[destinationIndex];
@@ -511,7 +386,9 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
   const disguiseRequirement = `Requires a Level 13 ${selectedDepartment} disguise. Current level: ${selectedSuitLevel}.`;
   const selectedDistrict = districts.find(district => String(district.id) === districtId);
   const toonIsOffline = boardingStatus === null;
-  const teleportDisabledReason = busy
+  const teleportDisabledReason = !nativeState.connected
+    ? nativeState.reason || 'Waiting for ToonHQ Groups.'
+    : busy
     ? 'Teleport is in progress.'
     : checkingStatus
       ? 'Checking your Toon’s status. Please wait.'
@@ -526,8 +403,10 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
             : !selectedDestinationEligible
               ? disguiseRequirement
               : undefined;
-  const refreshDisabled = !toonId || busy || checkingStatus || refreshCooldown > 0;
-  const refreshTooltip = refreshCooldown > 0
+  const refreshDisabled = !nativeState.connected || !toonId || busy || checkingStatus || refreshCooldown > 0;
+  const refreshTooltip = !nativeState.connected
+    ? nativeState.reason || 'Waiting for ToonHQ Groups.'
+    : refreshCooldown > 0
     ? `You can refresh again in ${refreshCooldown} second${refreshCooldown === 1 ? '' : 's'}.`
     : checkingStatus
       ? 'Your Toon’s status is already being checked.'
@@ -538,7 +417,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
           : 'Refresh your Toon’s current location.';
 
   const refreshLocation = async () => {
-    if (!toonId || busy || checkingStatus || refreshCooldown > 0) return;
+    if (!nativeState.connected || !toonId || busy || checkingStatus || refreshCooldown > 0) return;
     setRefreshCooldown(LOCATION_REFRESH_COOLDOWN_SECONDS);
     setCheckingStatus(true);
     setStatus('Refreshing location...');
