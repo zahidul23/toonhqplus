@@ -35,6 +35,32 @@ test('native bootstrap persists owned Toons, group history and members without m
   assert.equal(h.calls.find(call => call.name === 'members').value.length, 3);
 });
 
+test('long-running group history persists owned Toons and members beyond record 128', async t => {
+  const value = group(10, 134);
+  value.members.forEach((member, index) => {
+    member.toon = toon(200 + index);
+    member.left = index < 3 ? null : 'left-earlier';
+  });
+  value.members[133].toon = toon(1);
+  const h = setup(t, { groups: [value] }); await h.settle();
+  assert.equal(h.groups[10].members.length, 134);
+  assert.equal(h.calls.find(call => call.name === 'members').value[133].toonId, '1');
+  assert.equal(h.calls.find(call => call.name === 'members').value.length, 134);
+  assert.equal(h.toons['333'], undefined);
+  assert.equal(h.toons['332'].name, 'Toon 332');
+  h.commit('archiveGroup', 10, state => {
+    state.groups.groups[10].members.forEach(member => { member.left = 'closed'; });
+    state.groups.activeGroups = [];
+  });
+  await h.settle();
+  const saved = h.calls.filter(call => call.name === 'members').at(-1).value;
+  assert.equal(saved.length, 134);
+  assert.ok(saved.every(member => member.left === 'closed'));
+  assert.deepEqual(h.groups, {});
+  assert.deepEqual(h.errors, []);
+  assert.deepEqual(h.forbidden, []);
+});
+
 test('snapshot replay deduplicates persistence and keeps unfiltered groups', async t => {
   const h = setup(t); await h.settle();
   const count = h.calls.length;
@@ -56,6 +82,21 @@ test('joins, leaves and partial updates persist processed member history in orde
   assert.equal(writes.at(-2).value.at(-1).left, 'left-later');
   assert.equal(writes.at(-1).value.at(-1).left, 'left-later');
   assert.deepEqual(h.calls.filter(call => call.name === 'group').at(-1).value.options, { 3: 11 });
+});
+
+test('history keeps recording members while a group modal is open', async t => {
+  const h = setup(t); await h.settle(); const context = h.client.state.context;
+  h.target.location.pathname = '/groups/10/'; h.mutateDom(); await h.settle();
+  assert.equal(h.client.state.context, context); assert.deepEqual(Object.keys(h.groups), ['10']);
+  const member = { id: 104, group: 10, joined: 'joined-in-modal', left: null, toon: toon(4) };
+  h.commit('addOrUpdateGroupMember', { member }, state => state.groups.groups[10].members.push(member)); await h.settle();
+  assert.equal(h.calls.filter(call => call.name === 'members').at(-1).value.at(-1).joined, 'joined-in-modal');
+  h.commit('removeGroupMember', { id: 104, group: 10 }, state => { state.groups.groups[10].members.at(-1).left = 'left-in-modal'; }); await h.settle();
+  assert.equal(h.calls.filter(call => call.name === 'members').at(-1).value.at(-1).left, 'left-in-modal');
+  const count = h.calls.length;
+  h.target.location.pathname = '/groups/'; h.mutateDom(); await h.settle();
+  assert.equal(h.calls.length, count); assert.equal(h.client.state.context, context);
+  assert.equal(h.nativeRequests.length, 0); assert.equal(h.forbidden.length, 0);
 });
 
 test('anonymous public Toons are cached without creating user history', async t => {
@@ -197,4 +238,34 @@ test('disband and full resync in the same turn preserve final member leave times
   h.commit('setActiveGroups', [], state => { state.groups.activeGroups = []; });
   await h.settle(); assert.deepEqual(h.groups, {});
   assert.ok(h.calls.filter(call => call.name === 'members').at(-1).value.every(member => member.left === 'closed'));
+});
+
+test('native game closure preserves final member leave times without individual archive mutations', async t => {
+  const h = setup(t); await h.settle();
+  h.commit('updateGameOpen', false, state => {
+    state.groups.groups[10].members.forEach(member => { member.left = 'game-closed'; });
+    state.groups.activeGroups = [];
+  });
+  await h.settle();
+  assert.deepEqual(h.groups, {});
+  assert.ok(h.calls.filter(call => call.name === 'members').at(-1).value.every(member => member.left === 'game-closed'));
+});
+
+test('a temporary oversized publish does not lose the final archive history', async t => {
+  const h = setup(t, { groups: [group(10), group(20)] }); await h.settle();
+  h.commit('addOrUpdateGroup', { id: 10 }, state => {
+    state.groups.groups[10] = group(10, 300);
+    state.groups.groups[10].members.forEach(member => { member.toon.name = 'x'.repeat(16384); });
+  });
+  h.commit('archiveGroup', 20, state => {
+    state.groups.groups[20].members.forEach(member => { member.left = 'closed-during-gap'; });
+    state.groups.activeGroups = [10];
+  });
+  await h.settle();
+  assert.deepEqual(h.groups, {});
+  h.store.state.groups.groups[10] = group(10);
+  h.mutateDom(); await h.settle();
+  const saved = h.calls.filter(call => call.name === 'members' && call.value[0].groupId === 20).at(-1).value;
+  assert.ok(saved.every(member => member.left === 'closed-during-gap'));
+  assert.deepEqual(Object.keys(h.groups), ['10']);
 });

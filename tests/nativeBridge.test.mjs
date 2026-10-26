@@ -68,6 +68,38 @@ test('partial native updates, full resyncs and archive processing use the native
   assert.deepEqual(replay[0].groups, []);
 });
 
+test('long-running groups retain more than 128 member records through snapshots, updates and archives', async t => {
+  const value = group(10, 134);
+  value.members.slice(1).forEach(member => { member.left = 'left-earlier'; });
+  const h = setup(t, { groups: [value] }), updates = [];
+  h.client.subscribe(update => updates.push(update));
+  assert.equal(h.client.state.connected, true);
+  assert.equal(updates[0].groups[0].members.length, 134);
+  assert.equal(updates[0].groups[0].members[133].left, 'left-earlier');
+
+  const joined = { id: 999, group: 10, toon: toon(999), left: null };
+  h.commit('addOrUpdateGroupMember', { member: joined }, state => { state.groups.groups[10].members.push(joined); });
+  await h.flush();
+  assert.equal(updates.at(-1).full, false);
+  assert.equal(updates.at(-1).groups[0].members.length, 135);
+  assert.equal(updates.at(-1).groups[0].members[134].toon.id, 999);
+  h.client.requestSnapshot();
+  assert.equal(updates.at(-1).full, true);
+  assert.equal(updates.at(-1).groups[0].members.length, 135);
+
+  h.commit('archiveGroup', 10, state => {
+    state.groups.groups[10].members.forEach(member => { member.left = 'closed'; });
+    state.groups.activeGroups = [];
+  });
+  await h.flush();
+  assert.equal(updates.at(-1).archived[0].members.length, 135);
+  assert.ok(updates.at(-1).archived[0].members.every(member => member.left === 'closed'));
+  assert.equal(h.client.state.connected, true);
+  assert.deepEqual(h.errors, []);
+  assert.deepEqual(h.forbidden, []);
+  assert.equal(h.nativeRequests.length, 0);
+});
+
 test('disconnect, reconnect, SPA navigation, game changes and logout pause without fallback', async t => {
   const h = setup(t); const initial = h.client.state.context;
   h.commit('setSocketStatus', 'reconnecting', state => { state.socket.status = 'reconnecting'; state.socket.sid = null; });
@@ -99,6 +131,35 @@ test('root recreation, reinjection and disposal leave exactly one observer/liste
   assert.equal(h.messages.length, before);
   assert.equal(h.children.size, 0); assert.equal(h.subscribers.size, 0); assert.equal(h.watchers.size, 0);
   assert.equal(h.timers.size, 0);
+});
+
+test('group modal and deep-link routes retain the connected Groups context', async t => {
+  const h = setup(t, { pathname: '/groups/10/' }), initial = h.client.state.context, updates = [];
+  assert.equal(h.client.state.connected, true, 'initial attachment on a group deep link');
+  h.client.subscribe(update => updates.push(update));
+  for (const pathname of ['/groups/10/', '/groups/20', '/groups/ttrid/123456/', '/groups/reports/42/', '/groups/', '/groups']) {
+    h.target.location.pathname = pathname; h.mutateDom(); await h.flush();
+    assert.equal(h.client.state.connected, true, pathname);
+    assert.equal(h.client.state.context, initial, pathname);
+    assert.equal(h.client.state.reason, null, pathname);
+  }
+  assert.equal(updates.length, 1, 'dialog navigation does not reset the group snapshot');
+  assert.equal(h.nativeRequests.length, 0); assert.equal(h.forbidden.length, 0);
+  for (const pathname of ['/groups-other/', '/fishing/', '/cc/groups/10/']) {
+    h.target.location.pathname = pathname; h.mutateDom(); await h.flush();
+    assert.equal(h.client.state.connected, false, pathname);
+  }
+});
+
+test('a pending boarding request survives opening and closing a group modal', async t => {
+  const h = setup(t), pending = h.client.requestBoarding(1);
+  for (const pathname of ['/groups/10/', '/groups/20/', '/groups/']) {
+    h.target.location.pathname = pathname; h.mutateDom(); await h.flush();
+  }
+  assert.equal(h.nativeRequests.length, 1);
+  h.emit('boarding_response', { nonce: 1, success: true, result: { district: 21 } });
+  assert.deepEqual(await pending, { district: 21 });
+  assert.equal(h.forbidden.length, 0);
 });
 
 test('native schema changes pause collection and recover without opening a connection', async t => {
@@ -213,14 +274,59 @@ test('a late isolated-world consumer recovers buffered snapshots without HTTP', 
 
 test('invalid schema and oversized page data fail closed, then recover with a full snapshot', async t => {
   const h = setup(t);
-  h.commit('addOrUpdateGroup', { id: 10 }, state => { state.groups.groups[10].members = Array(129).fill(state.groups.groups[10].members[0]); });
+  h.commit('addOrUpdateGroup', { id: 10 }, state => { state.groups.groups[10].members = {}; });
   await h.flush(); assert.equal(h.client.state.available, false);
   assert.equal(h.client.state.connected, false);
   h.commit('setActiveGroups', [], state => { state.groups.groups[10] = group(); });
   await h.flush(); assert.equal(h.client.state.connected, true);
+  h.commit('addOrUpdateGroup', { id: 10 }, state => {
+    const oversized = group(10, 300);
+    oversized.members.forEach(member => { member.toon.name = 'x'.repeat(16384); });
+    state.groups.groups[10] = oversized;
+  });
+  await h.flush(); assert.equal(h.client.state.available, false);
+  assert.match(h.client.state.reason, /size/);
+  h.commit('addOrUpdateGroup', { id: 10 }, state => { state.groups.groups[10] = group(); });
+  await h.flush(); assert.equal(h.client.state.connected, true);
+  const replay = []; h.client.subscribe(update => replay.push(update));
+  assert.equal(replay[0].full, true);
+  assert.equal(replay[0].groups[0].members.length, 3);
   h.target.dispatchEvent(new CustomEvent('toonhqplus-native-message', { detail: 'x'.repeat(4_000_001) }));
   assert.equal(h.client.state.connected, true);
   assert.equal(h.forbidden.length, 0);
+});
+
+test('an oversized publish recovers on a local flush with the complete active snapshot and pending archive', async t => {
+  const h = setup(t, { groups: [group(10), group(20)] }), updates = [];
+  h.client.subscribe(update => updates.push(update));
+  h.commit('addOrUpdateGroup', { id: 10 }, state => {
+    state.groups.groups[10] = group(10, 300);
+    state.groups.groups[10].members.forEach(member => { member.toon.name = 'x'.repeat(16384); });
+  });
+  h.commit('archiveGroup', 20, state => {
+    state.groups.groups[20].members.forEach(member => { member.left = 'closed'; });
+    state.groups.activeGroups = [10];
+  });
+  await h.flush();
+  assert.equal(h.client.state.available, false);
+  // Repair the data without another group mutation or an explicit resync.
+  h.store.state.groups.groups[10] = group(10);
+  h.mutateDom(); await h.flush();
+  assert.equal(h.client.state.connected, true);
+  assert.equal(updates.at(-1).full, true);
+  assert.deepEqual(updates.at(-1).groups.map(value => value.id), [10]);
+  assert.deepEqual(updates.at(-1).archived.map(value => value.id), [20]);
+  assert.equal(h.nativeRequests.length, 0);
+  assert.deepEqual(h.forbidden, []);
+});
+
+test('unlinking a Toon rejects its pending check and stale response without changing the active Toon', async t => {
+  const h = setup(t), pending = assert.rejects(h.client.requestBoarding(2), /changed/);
+  h.commit('updateToon', 2, state => { state.accounts.toons[2].external = false; });
+  await h.flush(); await pending;
+  h.emit('boarding_response', { nonce: 1, success: true, result: { district: 99 } });
+  await h.flush();
+  await assert.rejects(h.client.requestBoarding(2), /not available/);
 });
 
 test('one failing extension callback cannot stop other native state consumers', async t => {
@@ -262,11 +368,11 @@ test('repeated injection and 1000 native updates keep one listener owner and bou
   h.client.dispose(); assert.equal(h.children.size, 0); assert.equal(h.timers.size, 0);
 });
 
-test('runtime passive paths contain no ToonHQ socket, bootstrap fetch or automatic status checks', () => {
+test('runtime paths contain no duplicate ToonHQ socket, bootstrap fetch or owned-Toon polling', () => {
   const index = readFileSync(new URL('../entrypoints/sidebar.content/index.tsx', import.meta.url), 'utf8');
   const boarding = readFileSync(new URL('../entrypoints/sidebar.content/boardingStatus.ts', import.meta.url), 'utf8');
   const quickTeleport = readFileSync(new URL('../entrypoints/sidebar.content/QuickTeleport.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(index, /WebSocket|socket_auth|api\/groups\/list/);
   assert.doesNotMatch(boarding, /pageFetch|fetch\(|WebSocket|boarding_request|nextNonce/);
-  assert.doesNotMatch(quickTeleport, /api\/toons\/|AUTO_BOARDING_CHECK|loadTtrToons/);
+  assert.doesNotMatch(quickTeleport, /api\/toons\/|loadTtrToons/);
 });

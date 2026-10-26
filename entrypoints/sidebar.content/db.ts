@@ -1,3 +1,4 @@
+import { getSafeToonAliases, SAVED_RECORD_META_KEY, SAVED_RECOVERY_KEY, savedRecordKey, completeSavedVersions, mergeSavedToonSnapshots, savedSnapshotValues, type SavedRecordVersions, type SavedRecordMeta, type SavedRecordKind } from './savedToonRecords.ts';
 /**
  * db.ts -- ToonHQ+ IndexedDB wrapper
  *
@@ -181,11 +182,15 @@ function promisifyRequest<T>(req: IDBRequest<T>): Promise<T> {
 }
 
 function promisifyTx(t: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
+  const completion = new Promise<void>((resolve, reject) => {
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
   });
+  // A request may fail before its caller reaches the transaction await.
+  // Mark it handled now; awaiting completion still reports the original error.
+  void completion.catch(() => {});
+  return completion;
 }
 
 /** Dispatch a lightweight change event so listeners can refresh. */
@@ -226,12 +231,18 @@ async function resolveHashIdInStore(id: string, store: IDBObjectStore): Promise<
   if (!id.startsWith('#')) return id;
   const index = store.index('hashId');
   const candidates = await promisifyRequest<any[]>(index.getAll(IDBKeyRange.only(id)));
-  const preferred = preferCanonicalToonRecord(candidates);
-  return preferred ? String(preferred.id) : id;
+  return getSafeToonAliases(candidates).get(id) ?? id;
 }
 
 function preferCanonicalToonRecord(candidates: any[]): any | undefined {
-  return candidates.find(candidate => !String(candidate.id).startsWith('#')) ?? candidates[0];
+  const canonical = candidates.filter(candidate => !String(candidate.id).startsWith('#'));
+  const ids = new Set(canonical.map(candidate => String(candidate.id)));
+  if (ids.size === 1) {
+    const synthetic = candidates.find(candidate => String(candidate.id).startsWith('#'));
+    if (synthetic && !getSafeToonAliases(candidates).has(String(synthetic.id))) return synthetic;
+    return canonical[0];
+  }
+  return candidates.find(candidate => String(candidate.id).startsWith('#'));
 }
 
 export async function resolveToonId(id: ToonId): Promise<ToonId> {
@@ -301,10 +312,10 @@ export async function searchToons(query: string, page: number, pageSize: number)
   const db = await openDB();
   const store = tx(db, 'toons').objectStore('toons');
   const lowerQuery = query.toLowerCase();
-  
+
   // We have to scan because there's no name index, but we can at least avoid loading all into memory
   const allMatches: ToonRecord[] = [];
-  
+
   return new Promise((resolve, reject) => {
     const req = store.openCursor();
     req.onsuccess = (event) => {
@@ -332,24 +343,60 @@ export async function searchToons(query: string, page: number, pageSize: number)
 const toonWriteBuffer = new Map<string, ToonRecord>();
 let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
-export async function flushToonWriteBuffer() {
-  if (toonWriteBuffer.size === 0) return;
-  const toonsToSave = Array.from(toonWriteBuffer.values());
-  toonWriteBuffer.clear();
-  flushTimeout = null;
-
-  try {
+let flushInFlight: Promise<void> | null = null;
+let retryDelay = 1000;
+function scheduleToonFlush(delay = 1000) {
+  if (flushTimeout || !toonWriteBuffer.size) return;
+  flushTimeout = setTimeout(() => {
+    flushTimeout = null;
+    void flushToonWriteBuffer().catch(error => console.error('[ToonHQ+] Cache write will be retried:', error));
+  }, delay);
+}
+function mergeToonDetails(previous: any, incoming: ToonRecord): ToonRecord {
+  const defined = Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== undefined));
+  if ((!incoming.name || incoming.detailsUnavailable) && previous?.name && !previous.detailsUnavailable) delete defined.name;
+  if (incoming.detailsUnavailable && previous && !previous.detailsUnavailable) delete defined.detailsUnavailable;
+  const newer = (Date.parse(previous?.lastSeen || '') || 0) > (Date.parse(incoming.lastSeen || '') || 0);
+  const result = newer ? { ...defined, ...previous } : { ...previous, ...defined };
+  if (!incoming.detailsUnavailable && incoming.name && !newer) delete result.detailsUnavailable;
+  return { ...result, id: String(incoming.id) } as ToonRecord;
+}
+async function existingToon(store: IDBObjectStore, id: string): Promise<ToonRecord | undefined> {
+  const legacy = legacyNumericKeyCandidate(id);
+  const [direct, numeric] = await Promise.all([
+    promisifyRequest<ToonRecord | undefined>(store.get(id)),
+    legacy == null ? undefined : promisifyRequest<ToonRecord | undefined>(store.get(legacy)),
+  ]);
+  return direct || numeric;
+}
+async function abortSavedTransaction(t: IDBTransaction, done: Promise<void>, error: unknown): Promise<never> {
+  try { t.abort(); } catch { /* It may already have aborted. */ }
+  await done.catch(() => {});
+  throw error;
+}
+export async function flushToonWriteBuffer(): Promise<void> {
+  if (flushInFlight) { await flushInFlight; if (toonWriteBuffer.size) return flushToonWriteBuffer(); return; }
+  if (flushTimeout) { clearTimeout(flushTimeout); flushTimeout = null; }
+  if (!toonWriteBuffer.size) return;
+  const batch = new Map(toonWriteBuffer);
+  flushInFlight = (async () => {
     const db = await openDB();
     const t = tx(db, 'toons', 'readwrite');
-    const store = t.objectStore('toons');
-    toonsToSave.forEach(toon => {
-      store.put(toon);
-    });
-    await promisifyTx(t);
+    const done = promisifyTx(t), store = t.objectStore('toons');
+    try {
+      await Promise.all([...batch].map(async ([id, toon]) => {
+        const previous = await existingToon(store, id);
+        store.put(mergeToonDetails(previous, toon));
+      }));
+      await done;
+    } catch (error) { await abortSavedTransaction(t, done, error); }
+    for (const [id, toon] of batch) if (toonWriteBuffer.get(id) === toon) toonWriteBuffer.delete(id);
+    retryDelay = 1000;
     notifyChanged('toons');
-  } catch (e) {
-    console.error('[ToonHQ+] Batch write failed:', e);
-  }
+  })();
+  try { await flushInFlight; }
+  catch (error) { retryDelay = Math.min(60_000, retryDelay * 2); throw error; }
+  finally { flushInFlight = null; scheduleToonFlush(retryDelay); }
 }
 
 export async function putToon(toon: ToonRecord): Promise<void> {
@@ -361,12 +408,10 @@ export async function putToon(toon: ToonRecord): Promise<void> {
     const store = tx(db, 'toons').objectStore('toons');
     id = await resolveHashIdInStore(id, store);
   }
-  
+
   toonWriteBuffer.set(id, { ...toon, id });
-  
-  if (!flushTimeout) {
-    flushTimeout = setTimeout(flushToonWriteBuffer, 1000);
-  }
+
+  scheduleToonFlush();
 }
 
 export async function putToons(toons: ToonRecord[]): Promise<void> {
@@ -385,9 +430,7 @@ export async function putToons(toons: ToonRecord[]): Promise<void> {
     }
   }
 
-  if (hasValid && !flushTimeout) {
-    flushTimeout = setTimeout(flushToonWriteBuffer, 1000);
-  }
+  if (hasValid) scheduleToonFlush();
 }
 
 export async function getAllToons(): Promise<ToonRecord[]> {
@@ -408,17 +451,22 @@ export async function getToons(ids: ToonId[]): Promise<ToonRecord[]> {
   // transaction. Hash IDs used by in-game memberships may have since been
   // consolidated into numeric Toon records, so fall back to the hashId index.
   const directRequests = validIds.map((id) => promisifyRequest<any>(store.get(id)));
+  const numericRequests = validIds.map(id => {
+    const legacy = legacyNumericKeyCandidate(id);
+    return legacy == null ? Promise.resolve(undefined) : promisifyRequest<any>(store.get(legacy));
+  });
   const hashIds = validIds.filter((id) => id.startsWith('#'));
   const hashRequests = hashIds
     .map((id) => promisifyRequest<any[]>(hashIndex.getAll(IDBKeyRange.only(id))));
-  const [directResults, hashResults] = await Promise.all([
+  const [directResults, hashResults, numericResults] = await Promise.all([
     Promise.all(directRequests),
     Promise.all(hashRequests),
+    Promise.all(numericRequests),
   ]);
 
   const unique = new Map<string, ToonRecord>();
   const preferredHashResults = hashResults.map(preferCanonicalToonRecord).filter(Boolean);
-  [...directResults, ...preferredHashResults].filter(Boolean).forEach((record) => {
+  [...numericResults, ...preferredHashResults, ...directResults].filter(Boolean).forEach((record) => {
     const normalized = normalizeToonRecord(record);
     unique.set(normalized.id, normalized);
   });
@@ -437,45 +485,91 @@ export async function getAllFromList(store: ListStore): Promise<ToonId[]> {
     .filter((id): id is ToonId => id !== null);
 }
 
-export async function addToList(store: ListStore, toonId: ToonId): Promise<void> {
-  let id = normalizeToonId(toonId);
-  if (!id) return;
-  const db = await openDB();
-  
-  // Resolve hash ID if possible
-  if (id.startsWith('#')) {
-    const toonStore = tx(db, 'toons').objectStore('toons');
-    id = await resolveHashIdInStore(id, toonStore);
-  }
-
-  const t = tx(db, [store, 'toons'], 'readwrite');
-  const os = t.objectStore(store);
-  os.put({ toonId: id });
-  const legacy = legacyNumericKeyCandidate(id);
-  if (legacy != null) os.delete(legacy);
-  await promisifyTx(t);
-  notifyChanged(store, id);
+async function stampSavedChanges(t: IDBTransaction, changes: { kind: SavedRecordKind; id: string; deleted: boolean }[]) {
+  if (!changes.length) return;
+  const settings = t.objectStore('settings');
+  const saved = await promisifyRequest<any>(settings.get(SAVED_RECORD_META_KEY));
+  const meta: SavedRecordMeta = saved?.value || { writer: crypto.randomUUID(), counter: 0, versions: {} };
+  meta.writer = crypto.randomUUID(); // Unique operation ID, even after a device backup is cloned.
+  meta.counter = Object.values(meta.versions).reduce((counter, version) => Math.max(counter, version.counter), meta.counter) + 1;
+  if (!Number.isSafeInteger(meta.counter)) throw new Error('Saved Toon revision limit reached. Export a backup before continuing.');
+  for (const change of changes) meta.versions[savedRecordKey(change.kind, change.id)] = { counter: meta.counter, writer: meta.writer, deleted: change.deleted };
+  settings.put({ key: SAVED_RECORD_META_KEY, value: meta });
 }
-
+function deleteBothKeys(store: IDBObjectStore, id: string) {
+  store.delete(id);
+  const legacy = legacyNumericKeyCandidate(id);
+  if (legacy != null) store.delete(legacy);
+}
+export async function addToList(store: ListStore, toonId: ToonId): Promise<void> {
+  const id = normalizeToonId(toonId);
+  if (!id) throw new Error('A valid Toon ID is required.');
+  const t = tx(await openDB(), [store, 'settings'], 'readwrite'), done = promisifyTx(t);
+  await stampSavedChanges(t, [{ kind: store === 'toony_toons' ? 'toony' : 'stinky', id, deleted: false }]);
+  deleteBothKeys(t.objectStore(store), id); t.objectStore(store).put({ toonId: id });
+  await done; notifyChanged(store, id);
+}
 export async function removeFromList(store: ListStore, toonId: ToonId): Promise<void> {
   const id = normalizeToonId(toonId);
-  if (!id) return;
-  const db = await openDB();
-  const t = tx(db, store, 'readwrite');
-  const os = t.objectStore(store);
-  os.delete(id);
-  const legacy = legacyNumericKeyCandidate(id);
-  if (legacy != null) os.delete(legacy);
-  await promisifyTx(t);
-  notifyChanged(store, id);
+  if (!id) throw new Error('A valid Toon ID is required.');
+  const t = tx(await openDB(), [store, 'settings'], 'readwrite'), done = promisifyTx(t);
+  await stampSavedChanges(t, [{ kind: store === 'toony_toons' ? 'toony' : 'stinky', id, deleted: true }]);
+  deleteBothKeys(t.objectStore(store), id);
+  await done; notifyChanged(store, id);
+}
+export async function clearList(store: ListStore): Promise<void> {
+  const t = tx(await openDB(), [store, 'settings'], 'readwrite'), done = promisifyTx(t);
+  const records = await promisifyRequest<any[]>(t.objectStore(store).getAll());
+  await stampSavedChanges(t, records.map(record => ({ kind: store === 'toony_toons' ? 'toony' : 'stinky', id: String(record.toonId), deleted: true })));
+  t.objectStore(store).clear(); await done; notifyChanged(store);
 }
 
-export async function clearList(store: ListStore): Promise<void> {
-  const db = await openDB();
-  const t = tx(db, store, 'readwrite');
-  t.objectStore(store).clear();
-  await promisifyTx(t);
-  notifyChanged(store);
+/** User saves commit membership, metadata, notes and revisions together. */
+export async function saveToonToList(store: ListStore, toon: ToonRecord, action: 'add' | 'move' | 'remove', note?: string): Promise<void> {
+  structuredClone(toon); // Reject invalid metadata before opening the transaction.
+  const id = normalizeToonId(toon.id);
+  if (!id) throw new Error('A valid Toon ID is required.');
+  const other: ListStore = store === 'toony_toons' ? 'stinky_toons' : 'toony_toons';
+  const t = tx(await openDB(), ['toons', 'toony_toons', 'stinky_toons', 'notes', 'settings'], 'readwrite');
+  const done = promisifyTx(t), cached = toonWriteBuffer.get(id);
+  try {
+    const previous = await existingToon(t.objectStore('toons'), id);
+    const changes: { kind: SavedRecordKind; id: string; deleted: boolean }[] = [
+      { kind: store === 'toony_toons' ? 'toony' : 'stinky', id, deleted: action === 'remove' },
+    ];
+    if (action !== 'remove') {
+      changes.push({ kind: other === 'toony_toons' ? 'toony' : 'stinky', id, deleted: true });
+      if (note !== undefined) changes.push({ kind: 'note', id, deleted: !note.trim() });
+    }
+    await stampSavedChanges(t, changes);
+    deleteBothKeys(t.objectStore(store), id);
+    if (action !== 'remove') {
+      t.objectStore(store).put({ toonId: id }); deleteBothKeys(t.objectStore(other), id);
+      t.objectStore('toons').put(mergeToonDetails(previous || cached, { ...toon, id }));
+      if (note !== undefined) {
+        deleteBothKeys(t.objectStore('notes'), id);
+        if (note.trim()) t.objectStore('notes').put({ toonId: id, text: note.trim() });
+      }
+    }
+    await done;
+  } catch (error) { await abortSavedTransaction(t, done, error); }
+  if (toonWriteBuffer.get(id) === cached) toonWriteBuffer.delete(id);
+  notifyChanged('toons', id); notifyChanged(store, id); notifyChanged(other, id); notifyChanged('notes', id);
+}
+export async function saveToonNote(toon: ToonRecord, text: string): Promise<void> {
+  structuredClone(toon);
+  const id = normalizeToonId(toon.id);
+  if (!id) throw new Error('A valid Toon ID is required.');
+  const t = tx(await openDB(), ['toons', 'notes', 'settings'], 'readwrite'), done = promisifyTx(t);
+  try {
+    const previous = await existingToon(t.objectStore('toons'), id);
+    await stampSavedChanges(t, [{ kind: 'note', id, deleted: !text.trim() }]);
+    t.objectStore('toons').put(mergeToonDetails(previous, { ...toon, id }));
+    deleteBothKeys(t.objectStore('notes'), id);
+    if (text.trim()) t.objectStore('notes').put({ toonId: id, text: text.trim() });
+    await done;
+  } catch (error) { await abortSavedTransaction(t, done, error); }
+  notifyChanged('toons', id); notifyChanged('notes', id);
 }
 
 // --- Notes --------------------------------------------------------------------
@@ -496,30 +590,13 @@ export async function getNote(toonId: ToonId): Promise<string | undefined> {
 }
 
 export async function setNote(toonId: ToonId, text: string): Promise<void> {
-  let id = normalizeToonId(toonId);
-  if (!id) return;
-  const db = await openDB();
-
-  // Resolve hash ID if possible
-  if (id.startsWith('#')) {
-    const toonStore = tx(db, 'toons').objectStore('toons');
-    id = await resolveHashIdInStore(id, toonStore);
-  }
-
-  const t = tx(db, ['notes', 'toons'], 'readwrite');
-  const store = t.objectStore('notes');
-  const legacy = legacyNumericKeyCandidate(id);
-
-  if (text.trim()) {
-    store.put({ toonId: id, text: text.trim() });
-    if (legacy != null) store.delete(legacy);
-  } else {
-    store.delete(id);
-    if (legacy != null) store.delete(legacy);
-  }
-
-  await promisifyTx(t);
-  notifyChanged('notes', id);
+  const id = normalizeToonId(toonId);
+  if (!id) throw new Error('A valid Toon ID is required.');
+  const t = tx(await openDB(), ['notes', 'settings'], 'readwrite'), done = promisifyTx(t);
+  await stampSavedChanges(t, [{ kind: 'note', id, deleted: !text.trim() }]);
+  deleteBothKeys(t.objectStore('notes'), id);
+  if (text.trim()) t.objectStore('notes').put({ toonId: id, text: text.trim() });
+  await done; notifyChanged('notes', id);
 }
 
 export async function getAllNotes(): Promise<Record<string, string>> {
@@ -527,17 +604,14 @@ export async function getAllNotes(): Promise<Record<string, string>> {
   const records: NoteRecord[] = await promisifyRequest(
     tx(db, 'notes').objectStore('notes').getAll()
   );
-  const out: Record<string, string> = {};
-  for (const r of records) out[String(r.toonId)] = r.text;
-  return out;
+  return Object.fromEntries(records.map(record => [String(record.toonId), record.text]));
 }
 
 export async function clearNotes(): Promise<void> {
-  const db = await openDB();
-  const t = tx(db, 'notes', 'readwrite');
-  t.objectStore('notes').clear();
-  await promisifyTx(t);
-  notifyChanged('notes');
+  const t = tx(await openDB(), ['notes', 'settings'], 'readwrite'), done = promisifyTx(t);
+  const notes = await promisifyRequest<NoteRecord[]>(t.objectStore('notes').getAll());
+  await stampSavedChanges(t, notes.map(note => ({ kind: 'note', id: String(note.toonId), deleted: true })));
+  t.objectStore('notes').clear(); await done; notifyChanged('notes');
 }
 
 export interface SavedToonDataSnapshot {
@@ -545,55 +619,74 @@ export interface SavedToonDataSnapshot {
   toonyToonIds: ToonId[];
   stinkyToonIds: ToonId[];
   notes: Record<string, string>;
+  recordVersions?: SavedRecordVersions;
 }
 
+const SAVED_STORES = ['toons', 'toony_toons', 'stinky_toons', 'notes', 'settings'];
+async function readSavedSnapshot(t: IDBTransaction): Promise<SavedToonDataSnapshot> {
+  const [toons, toony, stinky, notes, meta] = await Promise.all([
+    promisifyRequest<ToonRecord[]>(t.objectStore('toons').getAll()),
+    promisifyRequest<any[]>(t.objectStore('toony_toons').getAll()),
+    promisifyRequest<any[]>(t.objectStore('stinky_toons').getAll()),
+    promisifyRequest<NoteRecord[]>(t.objectStore('notes').getAll()),
+    promisifyRequest<any>(t.objectStore('settings').get(SAVED_RECORD_META_KEY)),
+  ]);
+  const toonyToonIds = [...new Set(toony.map(record => String(record.toonId)))];
+  const stinkyToonIds = [...new Set(stinky.map(record => String(record.toonId)))];
+  const noteMap = Object.fromEntries(notes.map(record => [String(record.toonId), record.text]));
+  const referenced = new Set([...toonyToonIds, ...stinkyToonIds, ...Object.keys(noteMap)]);
+  return { toons: toons.filter(toon => referenced.has(String(toon.id)) || !!toon.hashId && referenced.has(toon.hashId)).map(normalizeToonRecord),
+    toonyToonIds, stinkyToonIds, notes: noteMap, recordVersions: meta?.value?.versions || {} };
+}
 export async function exportSavedToonData(): Promise<SavedToonDataSnapshot> {
   await flushToonWriteBuffer();
-  const [toonyToonIds, stinkyToonIds, notes] = await Promise.all([
-    getAllFromList('toony_toons'),
-    getAllFromList('stinky_toons'),
-    getAllNotes(),
-  ]);
-  const referencedIds = [...new Set([...toonyToonIds, ...stinkyToonIds, ...Object.keys(notes)])];
-  const toons = await getToons(referencedIds);
-  return { toons, toonyToonIds, stinkyToonIds, notes };
+  const t = tx(await openDB(), SAVED_STORES), done = promisifyTx(t);
+  const snapshot = await readSavedSnapshot(t); await done;
+  return { ...snapshot, recordVersions: completeSavedVersions(snapshot) };
 }
-
-export async function replaceSavedToonData(snapshot: SavedToonDataSnapshot): Promise<void> {
-  const db = await openDB();
-  const t = tx(db, ['toons', 'toony_toons', 'stinky_toons', 'notes'], 'readwrite');
-  const toonStore = t.objectStore('toons');
-  const toonyStore = t.objectStore('toony_toons');
-  const stinkyStore = t.objectStore('stinky_toons');
-  const notesStore = t.objectStore('notes');
-
-  toonyStore.clear();
-  stinkyStore.clear();
-  notesStore.clear();
-
-  for (const toon of snapshot.toons) {
-    const id = normalizeToonId(toon.id);
-    if (id) toonStore.put({ ...toon, id });
-  }
-  for (const toonId of snapshot.toonyToonIds) {
-    const id = normalizeToonId(toonId);
-    if (id) toonyStore.put({ toonId: id });
-  }
-  for (const toonId of snapshot.stinkyToonIds) {
-    const id = normalizeToonId(toonId);
-    if (id) stinkyStore.put({ toonId: id });
-  }
-  for (const [toonId, text] of Object.entries(snapshot.notes)) {
-    const id = normalizeToonId(toonId);
-    if (id && text.trim()) notesStore.put({ toonId: id, text: text.trim() });
-  }
-
-  await promisifyTx(t);
-  notifyChanged('toons');
-  notifyChanged('toony_toons');
-  notifyChanged('stinky_toons');
-  notifyChanged('notes');
+export async function applySavedToonData(snapshot: SavedToonDataSnapshot, replace = false): Promise<void> {
+  structuredClone(snapshot);
+  const t = tx(await openDB(), SAVED_STORES, 'readwrite'), done = promisifyTx(t);
+  try {
+    const before = await readSavedSnapshot(t);
+    const merged = replace ? { ...snapshot } : mergeSavedToonSnapshots(before, snapshot);
+    if (replace) {
+      const incoming = savedSnapshotValues(snapshot), existing = savedSnapshotValues(before);
+      await stampSavedChanges(t, [...new Set([...existing.keys(), ...incoming.keys(), ...Object.keys(snapshot.recordVersions || {})])].map(key => {
+        const colon = key.indexOf(':');
+        return { kind: key.slice(0, colon) as SavedRecordKind, id: decodeURIComponent(key.slice(colon + 1)), deleted: !incoming.has(key) };
+      }));
+    } else {
+      const settings = t.objectStore('settings');
+      const saved = await promisifyRequest<any>(settings.get(SAVED_RECORD_META_KEY));
+      const meta: SavedRecordMeta = saved?.value || { writer: crypto.randomUUID(), counter: 0, versions: {} };
+      meta.versions = merged.recordVersions || {};
+      meta.counter = Object.values(meta.versions).reduce((counter, version) => Math.max(counter, version.counter), meta.counter);
+      settings.put({ key: SAVED_RECORD_META_KEY, value: meta });
+    }
+    const changed = JSON.stringify([before.toonyToonIds, before.stinkyToonIds, before.notes]) !== JSON.stringify([merged.toonyToonIds, merged.stinkyToonIds, merged.notes]);
+    if (changed) {
+      const settings = t.objectStore('settings');
+      const previous = await promisifyRequest<any>(settings.get(SAVED_RECOVERY_KEY));
+      settings.put({ key: SAVED_RECOVERY_KEY, value: [{ savedAt: new Date().toISOString(), snapshot: before }, ...(previous?.value || [])].slice(0, 3) });
+    }
+    for (const name of ['toony_toons', 'stinky_toons', 'notes']) t.objectStore(name).clear();
+    for (const toon of merged.toons) {
+      const id = normalizeToonId(toon.id);
+      if (id) {
+        const previous = await existingToon(t.objectStore('toons'), id);
+        t.objectStore('toons').put(mergeToonDetails(previous, { ...toon, id }));
+      }
+    }
+    merged.toonyToonIds.forEach(id => t.objectStore('toony_toons').put({ toonId: String(id) }));
+    merged.stinkyToonIds.forEach(id => t.objectStore('stinky_toons').put({ toonId: String(id) }));
+    Object.entries(merged.notes).forEach(([toonId, text]) => { if (text.trim()) t.objectStore('notes').put({ toonId, text: text.trim() }); });
+    await done;
+  } catch (error) { await abortSavedTransaction(t, done, error); }
+  ['toons', 'toony_toons', 'stinky_toons', 'notes'].forEach(name => notifyChanged(name));
 }
+export async function replaceSavedToonData(snapshot: SavedToonDataSnapshot): Promise<void> { await applySavedToonData(snapshot, true); }
+export async function clearSavedToonData(): Promise<void> { await replaceSavedToonData({ toons: [], toonyToonIds: [], stinkyToonIds: [], notes: {} }); }
 
 // --- Groups -------------------------------------------------------------------
 
@@ -801,119 +894,115 @@ export async function cleanupToonCache(): Promise<void> {
   }
 
   const db = await openDB();
-  const stores = ['toons', 'toony_toons', 'stinky_toons', 'notes', 'group_members'];
+  const stores = ['toons', 'toony_toons', 'stinky_toons', 'notes', 'group_members', 'settings'];
   const t = tx(db, stores, 'readwrite');
+  const done = promisifyTx(t);
+  let aliasesMerged = 0, deletedCount = 0;
+  try {
 
-  const toonStore = t.objectStore('toons');
-  const toonyStore = t.objectStore('toony_toons');
-  const stinkyStore = t.objectStore('stinky_toons');
-  const notesStore = t.objectStore('notes');
-  const membersStore = t.objectStore('group_members');
+    const toonStore = t.objectStore('toons');
+    const toonyStore = t.objectStore('toony_toons');
+    const stinkyStore = t.objectStore('stinky_toons');
+    const notesStore = t.objectStore('notes');
+    const membersStore = t.objectStore('group_members');
 
-  const [toons, toonyRecl, stinkyRecl, notesRecl, membersRecl] = await Promise.all([
-    promisifyRequest<ToonRecord[]>(toonStore.getAll()),
-    promisifyRequest<any[]>(toonyStore.getAll()),
-    promisifyRequest<any[]>(stinkyStore.getAll()),
-    promisifyRequest<any[]>(notesStore.getAll()),
-    promisifyRequest<any[]>(membersStore.getAll()),
-  ]);
+    const [toons, toonyRecl, stinkyRecl, notesRecl, membersRecl] = await Promise.all([
+      promisifyRequest<ToonRecord[]>(toonStore.getAll()),
+      promisifyRequest<any[]>(toonyStore.getAll()),
+      promisifyRequest<any[]>(stinkyStore.getAll()),
+      promisifyRequest<any[]>(notesStore.getAll()),
+      promisifyRequest<any[]>(membersStore.getAll()),
+    ]);
 
-  // 2. Identification of duplicates (hash ID vs numeric ID)
-  const realIdsByHash = new Map<string, string>(); // hashId -> numeric ID string
-  toons.forEach(tn => {
-    const sid = String(tn.id);
-    if (!sid.startsWith('#') && tn.hashId) {
-      realIdsByHash.set(tn.hashId, sid);
-    }
-  });
-
-  const hashToReal = new Map<string, string>(); // hash-ID string -> real ID string
-  toons.forEach(tn => {
-    const sid = String(tn.id);
-    if (sid.startsWith('#') && tn.hashId && realIdsByHash.has(tn.hashId)) {
-      hashToReal.set(sid, realIdsByHash.get(tn.hashId)!);
-    }
-  });
-
-  // 3. Consolidate Lists and Notes (from hash ID to real ID)
-  for (const [hashId, realId] of hashToReal.entries()) {
-    // Notes
-    const hashNote = notesRecl.find(n => String(n.toonId) === hashId);
-    if (hashNote) {
-      const realNoteExist = notesRecl.some(n => String(n.toonId) === realId);
-      if (!realNoteExist) {
-        notesStore.put({ toonId: realId, text: hashNote.text });
+    const hashToReal = getSafeToonAliases(toons);
+    const aliasChanges: { kind: SavedRecordKind; id: string; deleted: boolean }[] = [];
+    // 3. Consolidate Lists and Notes (from hash ID to real ID)
+    for (const [hashId, realId] of hashToReal.entries()) {
+      // Notes
+      const hashNote = notesRecl.find(n => String(n.toonId) === hashId);
+      const canonicalNote = notesRecl.find(n => String(n.toonId) === realId);
+      if (hashNote && canonicalNote && hashNote.text !== canonicalNote.text) { hashToReal.delete(hashId); continue; }
+      if (hashNote) {
+        aliasChanges.push({ kind: 'note', id: hashId, deleted: true }, { kind: 'note', id: realId, deleted: false });
+        const realNoteExist = notesRecl.some(n => String(n.toonId) === realId);
+        if (!realNoteExist) {
+          notesStore.put({ toonId: realId, text: hashNote.text });
+        }
+        notesStore.delete(hashId);
       }
-      notesStore.delete(hashId);
-    }
 
-    // Toony
-    if (toonyRecl.some(r => String(r.toonId) === hashId)) {
-      if (!toonyRecl.some(r => String(r.toonId) === realId)) {
-        toonyStore.put({ toonId: realId });
+      // Toony
+      if (toonyRecl.some(r => String(r.toonId) === hashId)) {
+        aliasChanges.push({ kind: 'toony', id: hashId, deleted: true }, { kind: 'toony', id: realId, deleted: false });
+        if (!toonyRecl.some(r => String(r.toonId) === realId)) {
+          toonyStore.put({ toonId: realId });
+        }
+        toonyStore.delete(hashId);
       }
-      toonyStore.delete(hashId);
-    }
 
-    // Stinky
-    if (stinkyRecl.some(r => String(r.toonId) === hashId)) {
-      if (!stinkyRecl.some(r => String(r.toonId) === realId)) {
-        stinkyStore.put({ toonId: realId });
+      // Stinky
+      if (stinkyRecl.some(r => String(r.toonId) === hashId)) {
+        aliasChanges.push({ kind: 'stinky', id: hashId, deleted: true }, { kind: 'stinky', id: realId, deleted: false });
+        if (!stinkyRecl.some(r => String(r.toonId) === realId)) {
+          stinkyStore.put({ toonId: realId });
+        }
+        stinkyStore.delete(hashId);
       }
-      stinkyStore.delete(hashId);
-    }
 
-    // Update group memberships
-    const hashMembers = membersRecl.filter(m => String(m.toonId) === hashId);
-    for (const m of hashMembers) {
-      const realExists = membersRecl.some(mr => mr.groupId === m.groupId && String(mr.toonId) === realId);
-      if (!realExists) {
-        membersStore.put({ ...m, toonId: realId });
+      // Update group memberships
+      const hashMembers = membersRecl.filter(m => String(m.toonId) === hashId);
+      for (const m of hashMembers) {
+        const realExists = membersRecl.some(mr => mr.groupId === m.groupId && String(mr.toonId) === realId);
+        if (!realExists) {
+          membersStore.put({ ...m, toonId: realId });
+        }
+        // Note: primary key for group_members is [groupId, toonId]
+        membersStore.delete([m.groupId, hashId]);
       }
-      // Note: primary key for group_members is [groupId, toonId]
-      membersStore.delete([m.groupId, hashId]);
+
+      // Finally, remove the duplicate hash toon record
+      toonStore.delete(hashId);
     }
 
-    // Finally, remove the duplicate hash toon record
-    toonStore.delete(hashId);
-  }
+    await stampSavedChanges(t, aliasChanges);
 
-  // 4. Standard cleanup of remaining unused/old toons
-  const keepIds = new Set<string>();
-  
-  // Re-collect keepIds to account for the merges we just performed
-  const [updatedToony, updatedStinky, updatedNotes, updatedMembers] = await Promise.all([
-    promisifyRequest<any[]>(toonyStore.getAll()),
-    promisifyRequest<any[]>(stinkyStore.getAll()),
-    promisifyRequest<any[]>(notesStore.getAll()),
-    promisifyRequest<any[]>(membersStore.getAll()),
-  ]);
+    // 4. Standard cleanup of remaining unused/old toons
+    const keepIds = new Set<string>();
 
-  updatedToony.forEach(r => keepIds.add(String(r.toonId)));
-  updatedStinky.forEach(r => keepIds.add(String(r.toonId)));
-  updatedNotes.forEach(r => keepIds.add(String(r.toonId)));
-  updatedMembers.forEach(r => keepIds.add(String(r.toonId)));
+    // Re-collect keepIds to account for the merges we just performed
+    const [updatedToony, updatedStinky, updatedNotes, updatedMembers] = await Promise.all([
+      promisifyRequest<any[]>(toonyStore.getAll()),
+      promisifyRequest<any[]>(stinkyStore.getAll()),
+      promisifyRequest<any[]>(notesStore.getAll()),
+      promisifyRequest<any[]>(membersStore.getAll()),
+    ]);
 
-  const fiveDaysAgo = new Date();
-  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    updatedToony.forEach(r => keepIds.add(String(r.toonId)));
+    updatedStinky.forEach(r => keepIds.add(String(r.toonId)));
+    updatedNotes.forEach(r => keepIds.add(String(r.toonId)));
+    updatedMembers.forEach(r => keepIds.add(String(r.toonId)));
 
-  let deletedCount = 0;
-  const remainingToons = await promisifyRequest<ToonRecord[]>(toonStore.getAll());
-  for (const toon of remainingToons) {
-    if (keepIds.has(String(toon.id))) continue;
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
-    const lastSeen = toon.lastSeen ? new Date(toon.lastSeen) : new Date(0);
-    if (lastSeen < fiveDaysAgo) {
-      toonStore.delete(toon.id);
-      deletedCount++;
+    const remainingToons = await promisifyRequest<ToonRecord[]>(toonStore.getAll());
+    for (const toon of remainingToons) {
+      if (keepIds.has(String(toon.id))) continue;
+
+      const lastSeen = toon.lastSeen ? new Date(toon.lastSeen) : new Date(0);
+      if (lastSeen < fiveDaysAgo) {
+        toonStore.delete(toon.id);
+        deletedCount++;
+      }
     }
-  }
 
-  await promisifyTx(t);
-  if (hashToReal.size > 0 || deletedCount > 0) {
-    console.info(`[ToonHQ+] Cleaned up ${deletedCount} old toons; de-duplicated ${hashToReal.size} toons.`);
+    aliasesMerged = hashToReal.size;
+    await done;
+  } catch (error) { await abortSavedTransaction(t, done, error); }
+  if (aliasesMerged > 0 || deletedCount > 0) {
+    console.info(`[ToonHQ+] Cleaned up ${deletedCount} old toons; de-duplicated ${aliasesMerged} toons.`);
     notifyChanged('toons');
-    if (hashToReal.size > 0) {
+    if (aliasesMerged > 0) {
       notifyChanged('toony_toons');
       notifyChanged('stinky_toons');
       notifyChanged('notes');

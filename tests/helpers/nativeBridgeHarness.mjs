@@ -10,9 +10,9 @@ export const group = (id = 10, count = 3) => ({ id, game: 1, type: 3, created: '
     joined: '2026-10-22T12:00:00Z', left: null, owner: index === 0, toon: toon(index + 1) })),
 });
 
-export function harness({ mounted = true, groups = [group()], authenticated = true } = {}) {
+export function harness({ mounted = true, groups = [group()], authenticated = true, pathname = '/groups/' } = {}) {
   const target = new EventTarget();
-  target.location = { pathname: '/groups/' };
+  target.location = { pathname };
   const bus = new Map(), children = new Set(), subscribers = new Set(), watchers = new Set();
   const timers = new Map();
   let nextTimer = 0, present = mounted, observerCallback, dispatchImpl, nonce = 0, disconnectedObservers = 0;

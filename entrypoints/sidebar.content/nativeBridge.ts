@@ -23,8 +23,10 @@ const unavailable = (reason: string): NativePageState => ({
 });
 const id = (value: unknown) => Number.isSafeInteger(value) && Number(value) > 0;
 const record = (value: any) => !!value && typeof value === 'object' && !Array.isArray(value);
+// Member history can grow beyond the group's player capacity. The transport's
+// message-size limit bounds these arrays without truncating legitimate history.
 const group = (value: any) => record(value) && id(value.id) && value.game === 1 &&
-  Array.isArray(value.members) && value.members.length <= 128 && value.members.every((member: any) =>
+  Array.isArray(value.members) && value.members.every((member: any) =>
     record(member) && (member.toon == null || record(member.toon)));
 const stateMessage = (message: any) => {
   const candidate = message.state;

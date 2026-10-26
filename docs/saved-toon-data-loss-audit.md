@@ -1,8 +1,24 @@
 # Saved Toony / Stinky Toon data-loss audit
 
-Reviewed October 21, 2026, at repository HEAD `42e961e` (manifest version 1.2.39).
+Original reproductions: October 21, 2026, at `42e961e` (1.2.39). Reassessed October 22 after native connection reuse was committed as `ccdb532` (1.3.0). Line references below describe the original audit baseline; current implementation uses named functions/modules instead.
 
-Several code paths can explain the reports. Some actually remove list membership; others leave membership stored but hide the row because its Toon details cannot be loaded. This review establishes reproducible failure mechanisms, not which mechanism affected a particular user. Production code was not changed.
+Several code paths can explain the reports. Some remove list membership; others leave membership stored but hide rows whose Toon details cannot be loaded. The original review established reproducible mechanisms, not which mechanism affected an individual user. Its original diagnostic harness remains historical evidence; regression tests for the fixes must assert preservation rather than reproduce loss.
+
+## Effect of the native WebSocket changes
+
+The extension now consumes copied Vuex state through `nativeBridge.ts` and `nativeGroupTracker.ts`. It no longer fetches a second groups list, authenticates another socket or subscribes to a background TTR room. Tracking pauses outside the native TTR groups feed. Those changes do not fix the database/sync failures below. They also mean an orphaned saved entry must not depend on seeing the Toon again to become visible.
+
+`nativeGroupTracker` serializes history/cache writes, but `putToons` still buffers metadata in memory. The retained hourly idle refresh must wait for accepted history writes and flush buffered metadata before reloading. Explicit user saves must commit list membership, Toon details and optional notes atomically; they must not rely on that background buffer or on a later native event.
+
+## Repair scope after reassessment
+
+1. Keep local saved edits after cloud failures, report pending sync, and serialize sync/import workflows across same-origin tabs. Do not restore a stale full snapshot after an upload error.
+2. Reconcile automatic sync per record with durable revisions and explicit deletion markers. Legacy snapshots without markers must not delete omitted local entries. Create a durable recovery snapshot before an explicit replacement. Browser sync has no cross-device compare-and-swap; local durable state and reconciliation on later sync are required for recovery from competing uploads.
+3. Commit user list moves/saves/details/notes in one transaction; retain failed background cache batches for retry. Flush pending native history/cache work before the preserved idle refresh.
+4. Add numeric-key fallback to batch readers and show identifiable fallback rows for saved IDs without details. Do not fetch missing details from ToonHQ automatically.
+5. Preserve ambiguous hash identities. Resolve only unique canonical candidates; require matching full name/photo before cleanup moves saved flags or notes. Keep conflicting notes/recovery data rather than deleting them.
+
+The historical findings follow. Final implementation/validation results are recorded at the end of this document.
 
 ## 1. Failed sync rollback can erase a different successful save — high priority
 
@@ -72,6 +88,40 @@ Repair: preserve ambiguous records and require an unambiguous canonical identity
 
 Seven isolated browser scenarios completed in Microsoft Edge `155.0.4283.62`, using the repository's actual TypeScript database/sync modules transpiled without behavioral changes. IndexedDB was real; browser sync was an in-memory simulation with controlled failures. Six checks reproduced the issues above; the control confirmed that ordinary five-day cleanup retains an old saved Toon while deleting an old unsaved Toon. Routine age pruning is therefore not the leading explanation when membership and details have matching IDs.
 
-Generated harness and machine-readable evidence are in the ignored directory `debug/storage-audit/`: `build.mjs`, `scenarios.js`, `run.mjs`, and `results.json`. The headless browser used dedicated profiles inside that directory; no user's browser profile or saved extension data was accessed. These are diagnostic reproductions of current behavior, not passing regression tests for a fix.
+Generated harness and machine-readable evidence are in the ignored directory `debug/storage-audit/`: `build.mjs`, `scenarios.js`, `run.mjs`, and `results.json`. The headless browser used dedicated profiles inside that directory; no user's browser profile or saved extension data was accessed. These are diagnostic reproductions of the historical baseline, not passing regression tests for a fix.
 
 For an affected user's exported backup, compare list membership IDs against Toon records, including numeric versus string keys and hash aliases. That distinguishes hidden records from actual membership loss. Whether Sync Notes was enabled, whether multiple ToonHQ tabs/devices were active, and whether disappearance followed saving, reopening, or reconnecting would help rank these mechanisms.
+
+## Implemented repairs — October 22, 2026
+
+The native connection/release work was committed first as `ccdb532`. The following repairs build on that implementation and retain extension version 1.3.0, with an additional saved-data changelog entry.
+
+| Finding | Implemented behavior |
+| --- | --- |
+| Failed cloud upload rolls back another save | `mutateSavedToons` commits locally first. Cloud failures keep the edit, record a persistent pending-sync message, and offer Retry sync in the Saved Toons and History views. Startup and reconnect reconciliation retry pending uploads. Same-origin workflows use Web Locks, with a module queue fallback; database revisions are allocated inside transactions. |
+| Stale whole snapshots delete newer records | `savedToonRecords.ts` merges each list flag and note using a logical counter and unique operation ID. Missing records carry no deletion meaning; explicit tombstones propagate removals. A deterministic tie break resolves simultaneous edits of the same field. Moves stamp both list categories. Timestamps are informational, not conflict guards. |
+| Saved membership survives missing metadata | `saveToonToList` and `saveToonNote` commit details, list changes, notes and revisions together. Synchronous write failures explicitly abort the transaction. Background cache batches stay queued after failure, retry with backoff, and retain newer entries received during a flush. Older cache data cannot overwrite newer durable details. |
+| Numeric keys or orphaned details hide saved entries | Batch reads and user-save merges include legacy numeric-key fallback. The sidebar builds fallback rows named `Saved Toon <ID>` with the original saved ID, so the user can still identify, edit and remove the entry. This makes no automatic ToonHQ request. |
+| Weak synthetic identity moves saved data | Readers avoid choosing among multiple numeric candidates. Cleanup requires exactly one candidate plus equal full name and photo; conflicting notes prevent consolidation. Successful consolidation stamps old-ID tombstones and new-ID revisions in the same transaction. Portable backup normalization preserves saved IDs with their revision keys instead of independently rewriting them. |
+
+Before a merge or replacement changes saved contents, the database retains up to three prior snapshots in the `settings` record `saved-toon-recovery`, in the same transaction as the change. This is recovery evidence included in full storage backups, not an automatic rollback or a dedicated restore interface. Explicit backup imports remain serialized; their chosen contents are restamped after restoring old database/settings metadata. A subsequent cloud failure cannot undo the successful local import.
+
+Sync writes use schema 2 and immutable generation-specific chunks. Reads verify the manifest again after loading/decompressing chunks, validate data/revision consistency, and reject incomplete or mixed generations. Schema 1 payloads and their original unversioned chunks remain readable. The explicit schema change prevents older clients from interpreting a new manifest alongside leftover legacy chunks. New writers prune only the previous generation they read, rather than deleting a competing writer's new chunks.
+
+The existing hidden-tab refresh still checks hourly inactivity, open dialogs, visibility and ToonHQ reachability. Before reload it waits for accepted native history work and cache persistence; a persistence error postpones reload for retry, and extension disposal cancels late reloads. This preserves the memory-growth safeguard without depending on whether growth originates in ToonHQ or the extension.
+
+## Regression validation
+
+`npm test` passes **180 tests**: the prior 141 plus **36 saved-data regressions** and **3 additional idle-refresh regressions**. TypeScript checking (`npm run compile`) and both production builds (`npm run build`, Chrome MV3; `npm run build:firefox`, Firefox MV2) pass. Both generated manifests report version 1.3.0. `git diff --check` passes.
+
+`tests/savedToonData.test.mjs` executes the actual database/sync modules with `fake-indexeddb` and controlled browser-sync storage. It covers reopen durability; atomic moves and aborted writes; stale, legacy and malformed remote payloads; deletion propagation; concurrent database connections and sync module instances; Web Lock serialization/release; merge order and simultaneous opposite moves; pending first-upload recovery; listener cleanup; generation changes/missing chunks; retryable cache writes; legacy numeric records; orphan visibility; ambiguous identities; safe consolidation; and the actual sidebar backup-import workflow, including cloud failure after a successful local import. `tests/idleRefresh.test.mjs` verifies persistence ordering, retry after failure, and cancellation while persistence is pending, alongside the retained idle/reachability checks.
+
+These regressions use an IndexedDB implementation in Node and simulated browser sync. They do not establish real browser-service replication timing, live cross-device convergence, or the cause of historical user reports. The earlier native-feed replay and bridge tests remain in the suite; authenticated live ToonHQ behavior has not been revalidated by these storage tests.
+
+## Remaining limits
+
+- Browser sync offers no cross-device lock or compare-and-swap. Competing cloud writes can temporarily omit a device's edits; durable local revisions permit reconciliation when that device next starts, reconnects or syncs. If a device's local storage is erased before reconciliation, those unpublished edits cannot be recovered from the cloud.
+- Tombstones are retained to prevent stale resurrection. They and generation chunks consume browser sync quota; failures leave local edits intact with pending sync. Concurrent generation writes can leave orphan chunks or temporarily require space for two generations. There is no automatic compaction without an agreed device-revision frontier.
+- Older extension versions still have their original whole-snapshot behavior. Reading legacy data is supported; safe behavior on every device requires updating every writer. Deletions made by a legacy client without tombstones cannot be inferred safely from omissions.
+- Concurrent edits of the same note use a deterministic winner; the losing local value can be present in a retained recovery snapshot. Separate records are preserved. Matching full appearance/name evidence reduces mistaken alias merges but is not an account-identity proof.
+- These repairs prevent the reproduced mechanisms and expose missing-detail entries. They cannot reconstruct metadata or memberships already erased from all local storage, sync data and backups.

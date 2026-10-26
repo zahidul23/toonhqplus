@@ -1,39 +1,43 @@
 import {
   exportSavedToonData,
   replaceSavedToonData,
+  applySavedToonData,
   getSetting,
   setSetting,
   type SavedToonDataSnapshot,
-} from './db';
+} from './db.ts';
+import { completeSavedVersions, savedSnapshotValues, validSavedVersions, withSavedToonLock } from './savedToonRecords.ts';
 
 export const SYNC_NOTES_SETTING_KEY = 'sync-notes-enabled';
 
 const SYNC_META_KEY = 'toonhqplus-sync-notes-meta';
 const SYNC_CHUNK_PREFIX = 'toonhqplus-sync-notes-chunk-';
+export const SYNC_PENDING_KEY = 'sync-notes-pending-error';
 const SYNC_LAST_APPLIED_UPDATED_AT_KEY = 'sync-notes-last-applied-updated-at';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const CHUNK_SIZE = 7000;
 const MAX_TOTAL_BYTES = 100 * 1024;
 
 export interface SyncNotesPayload extends SavedToonDataSnapshot {
   app: 'toonhqplus';
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   updatedAt: string;
 }
 
 interface SyncNotesMeta {
   app: 'toonhqplus';
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   updatedAt: string;
   chunkCount: number;
   compression: 'gzip-base64';
+  generation?: string;
 }
 
 interface WriteSyncNotesOptions {
   allowRemoteOverwrite?: boolean;
 }
 
-let lastLocalWriteUpdatedAt: string | null = null;
+let lastLocalGeneration: string | null = null;
 let listenerInitialized = false;
 let importTimer: ReturnType<typeof setTimeout> | null = null;
 let remoteImportInFlight: Promise<void> | null = null;
@@ -80,23 +84,8 @@ function assertOnlineForSync(): void {
   }
 }
 
-function parseTimestamp(value: string | null | undefined): number {
-  if (!value) return 0;
-  const time = new Date(value).getTime();
-  return Number.isFinite(time) ? time : 0;
-}
-
-async function getLastAppliedSyncUpdatedAt(): Promise<string | null> {
-  return (await getSetting<string>(SYNC_LAST_APPLIED_UPDATED_AT_KEY)) || null;
-}
-
 async function setLastAppliedSyncUpdatedAt(updatedAt: string): Promise<void> {
   if (updatedAt) await setSetting(SYNC_LAST_APPLIED_UPDATED_AT_KEY, updatedAt);
-}
-
-function hasUnappliedRemoteUpdate(meta: SyncNotesMeta | undefined, lastAppliedUpdatedAt: string | null): boolean {
-  if (!meta?.updatedAt || meta.updatedAt === lastLocalWriteUpdatedAt) return false;
-  return parseTimestamp(meta.updatedAt) > parseTimestamp(lastAppliedUpdatedAt);
 }
 
 function normalizePayload(value: SyncNotesPayload): SyncNotesPayload {
@@ -108,6 +97,7 @@ function normalizePayload(value: SyncNotesPayload): SyncNotesPayload {
     toonyToonIds: Array.isArray(value.toonyToonIds) ? value.toonyToonIds.map(String) : [],
     stinkyToonIds: Array.isArray(value.stinkyToonIds) ? value.stinkyToonIds.map(String) : [],
     notes: value.notes && typeof value.notes === 'object' ? value.notes : {},
+    recordVersions: value.recordVersions || {},
   };
 }
 
@@ -128,11 +118,12 @@ export async function createLocalSyncNotesPayload(updatedAt = new Date().toISOSt
 export async function readSyncNotesPayload(): Promise<SyncNotesPayload | null> {
   const result = await browser.storage.sync.get(SYNC_META_KEY);
   const meta = result[SYNC_META_KEY] as SyncNotesMeta | undefined;
-  if (!meta || meta.app !== 'toonhqplus' || meta.schemaVersion !== SCHEMA_VERSION || meta.compression !== 'gzip-base64') {
-    return null;
-  }
+  if (!meta) return null;
+  if (meta.app !== 'toonhqplus' || ![1, SCHEMA_VERSION].includes(meta.schemaVersion) || meta.compression !== 'gzip-base64') throw new Error('Synced Notes data uses an unsupported format.');
 
-  const chunkKeys = Array.from({ length: meta.chunkCount }, (_, index) => `${SYNC_CHUNK_PREFIX}${index}`);
+  if (!Number.isSafeInteger(meta.chunkCount) || meta.chunkCount < 1 || meta.chunkCount > 64 || (meta.generation !== undefined && !/^[a-zA-Z0-9-]{1,100}$/.test(meta.generation))) throw new Error('Invalid Sync Notes metadata.');
+  const prefix = meta.generation ? SYNC_CHUNK_PREFIX + meta.generation + '-' : SYNC_CHUNK_PREFIX;
+  const chunkKeys = Array.from({ length: meta.chunkCount }, (_, index) => prefix + index);
   const chunks = await browser.storage.sync.get(chunkKeys);
   const encoded = chunkKeys.map((key) => {
     const chunk = chunks[key];
@@ -142,72 +133,94 @@ export async function readSyncNotesPayload(): Promise<SyncNotesPayload | null> {
 
   const raw = await decompressToString(base64ToBytes(encoded));
   const parsed = JSON.parse(raw) as SyncNotesPayload;
-  if (parsed.app !== 'toonhqplus' || parsed.schemaVersion !== SCHEMA_VERSION) {
+  if (!parsed || parsed.app !== 'toonhqplus' || parsed.schemaVersion !== meta.schemaVersion) {
     throw new Error('Synced Notes data uses an unsupported format.');
   }
+  if (!Array.isArray(parsed.toons) || !parsed.toons.every(toon => toon && (typeof toon.id === 'string' || Number.isSafeInteger(toon.id)) && typeof toon.name === 'string') ||
+      !Array.isArray(parsed.toonyToonIds) || !Array.isArray(parsed.stinkyToonIds) || ![...parsed.toonyToonIds, ...parsed.stinkyToonIds].every(id => typeof id === 'string' && id.length > 0 || typeof id === 'number' && Number.isSafeInteger(id)) || !parsed.notes || typeof parsed.notes !== 'object' || Array.isArray(parsed.notes) ||
+      !Object.values(parsed.notes).every(text => typeof text === 'string') || (parsed.recordVersions !== undefined && !validSavedVersions(parsed.recordVersions))) throw new Error('Invalid saved Toon data. Local data was preserved.');
+  const present = savedSnapshotValues(parsed);
+  if (Object.entries(parsed.recordVersions || {}).some(([key, version]) => version.deleted === present.has(key))) throw new Error('Inconsistent saved Toon revisions. Local data was preserved.');
+  const latest = (await browser.storage.sync.get(SYNC_META_KEY))[SYNC_META_KEY] as SyncNotesMeta | undefined;
+  if (JSON.stringify(latest) !== JSON.stringify(meta)) throw new Error('Sync Notes changed while reading. Try again.');
   return normalizePayload({ ...parsed, updatedAt: meta.updatedAt });
 }
 
-export async function writeSyncNotesPayload(payload: SyncNotesPayload, options: WriteSyncNotesOptions = {}): Promise<void> {
+function dataSignature(snapshot: SavedToonDataSnapshot): string {
+  return JSON.stringify([[...savedSnapshotValues(snapshot)].sort(), Object.entries(completeSavedVersions(snapshot)).sort()]);
+}
+async function publish(payload: SyncNotesPayload): Promise<void> {
   assertOnlineForSync();
   const normalized = normalizePayload(payload);
-  const compressed = await compressString(JSON.stringify(normalized));
-  const encoded = bytesToBase64(compressed);
+  const encoded = bytesToBase64(await compressString(JSON.stringify(normalized)));
+  const generation = crypto.randomUUID();
   const chunkCount = Math.max(1, Math.ceil(encoded.length / CHUNK_SIZE));
   const chunks: Record<string, string> = {};
-  for (let index = 0; index < chunkCount; index += 1) {
-    chunks[`${SYNC_CHUNK_PREFIX}${index}`] = encoded.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
-  }
-
-  const meta: SyncNotesMeta = {
-    app: 'toonhqplus',
-    schemaVersion: SCHEMA_VERSION,
-    updatedAt: normalized.updatedAt,
-    chunkCount,
-    compression: 'gzip-base64',
-  };
+  for (let index = 0; index < chunkCount; index++) chunks[SYNC_CHUNK_PREFIX + generation + '-' + index] = encoded.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
+  const meta: SyncNotesMeta = { app: 'toonhqplus', schemaVersion: SCHEMA_VERSION, updatedAt: normalized.updatedAt, chunkCount, compression: 'gzip-base64', generation };
   const update = { ...chunks, [SYNC_META_KEY]: meta };
-  const totalBytes = measureBytes(JSON.stringify(update));
-  if (totalBytes > MAX_TOTAL_BYTES) {
-    throw new Error('Sync Notes data is too large for browser sync storage. Remove saved toon notes or saved toons, then try again.');
-  }
-
-  const existing = await browser.storage.sync.get(SYNC_META_KEY);
-  const existingMeta = existing[SYNC_META_KEY] as SyncNotesMeta | undefined;
-  if (!options.allowRemoteOverwrite && hasUnappliedRemoteUpdate(existingMeta, await getLastAppliedSyncUpdatedAt())) {
-    throw new Error('Newer synced toon notes are available from another device. Open Sync Notes and use the synced data before saving local changes.');
-  }
-
-  const oldChunkCount = Math.max(0, Number(existingMeta?.chunkCount || 0));
+  if (measureBytes(JSON.stringify(update)) > MAX_TOTAL_BYTES) throw new Error('Sync Notes exceeds browser sync storage capacity. Your changes are saved on this device.');
+  const existing = (await browser.storage.sync.get(SYNC_META_KEY))[SYNC_META_KEY] as SyncNotesMeta | undefined;
   await browser.storage.sync.set(update);
-  lastLocalWriteUpdatedAt = normalized.updatedAt;
+  lastLocalGeneration = generation;
   await setLastAppliedSyncUpdatedAt(normalized.updatedAt);
-
-  const staleKeys: string[] = [];
-  for (let index = chunkCount; index < oldChunkCount; index += 1) staleKeys.push(`${SYNC_CHUNK_PREFIX}${index}`);
-  if (staleKeys.length) await browser.storage.sync.remove(staleKeys);
+  await setSetting(SYNC_PENDING_KEY, null);
+  // Only remove the generation this writer read. Never remove a competing
+  // writer's newly published chunks. Versioned names prevent mixed payloads.
+  if (existing && existing.generation !== generation && Number.isSafeInteger(existing.chunkCount) && existing.chunkCount <= 64) {
+    const oldPrefix = existing.generation ? SYNC_CHUNK_PREFIX + existing.generation + '-' : SYNC_CHUNK_PREFIX;
+    try { await browser.storage.sync.remove(Array.from({ length: existing.chunkCount }, (_, index) => oldPrefix + index)); }
+    catch (error) { console.warn('[ToonHQ+] Could not prune old sync chunks.', error); }
+  }
 }
-
-export async function writeCurrentSavedToonsToSync(): Promise<void> {
-  await writeSyncNotesPayload(await createLocalSyncNotesPayload());
+async function writeUnlocked(payload?: SyncNotesPayload, replaceRemote = false): Promise<void> {
+  const local = await exportSavedToonData();
+  const remote = await readSyncNotesPayload();
+  if (replaceRemote) {
+    const desired = payload || local;
+    // Observe the remote logical clock before an intentional replacement so
+    // tombstones supersede even records absent from this device's snapshot.
+    if (remote) await applySavedToonData(remote);
+    await replaceSavedToonData(desired);
+  } else {
+    if (payload) await applySavedToonData(payload);
+    if (remote) await applySavedToonData(remote);
+  }
+  const current = await exportSavedToonData();
+  await publish({ app: 'toonhqplus', schemaVersion: SCHEMA_VERSION, updatedAt: new Date().toISOString(), ...current });
 }
-
-export async function importSyncNotesPayload(payload: SyncNotesPayload): Promise<void> {
-  await replaceSavedToonData(payload);
-  await setLastAppliedSyncUpdatedAt(payload.updatedAt);
+export async function writeSyncNotesPayload(payload: SyncNotesPayload, options: WriteSyncNotesOptions = {}): Promise<void> {
+  return withSavedToonLock(() => writeUnlocked(payload, options.allowRemoteOverwrite));
 }
-
-async function importLatestRemoteSyncNotesIfNewer(onImported?: () => void): Promise<void> {
-  if (!(await isSyncNotesEnabled())) return;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-
-  const payload = await readSyncNotesPayload();
-  if (!payload) return;
-  if (payload.updatedAt === lastLocalWriteUpdatedAt) return;
-  if (parseTimestamp(payload.updatedAt) <= parseTimestamp(await getLastAppliedSyncUpdatedAt())) return;
-
-  await importSyncNotesPayload(payload);
-  onImported?.();
+export async function writeCurrentSavedToonsToSync(replaceRemote = false): Promise<void> {
+  return withSavedToonLock(() => writeUnlocked(undefined, replaceRemote));
+}
+export async function importSyncNotesPayload(payload: SyncNotesPayload, options: { replace?: boolean } = {}): Promise<void> {
+  await withSavedToonLock(async () => {
+    if (options.replace) {
+      // Import revisions first, then stamp the explicit user's replacement.
+      const desired = normalizePayload(payload);
+      await applySavedToonData(payload); await replaceSavedToonData(desired);
+    } else await applySavedToonData(payload);
+    await setLastAppliedSyncUpdatedAt(payload.updatedAt);
+  });
+}
+export async function reconcileSyncNotes(onImported?: () => void): Promise<void> {
+  if (!(await isSyncNotesEnabled()) || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  await withSavedToonLock(async () => {
+    const payload = await readSyncNotesPayload();
+    if (!payload) {
+      if (await getSetting(SYNC_PENDING_KEY)) await writeUnlocked();
+      return;
+    }
+    await applySavedToonData(payload);
+    const current = await exportSavedToonData();
+    // A competing snapshot cannot erase this device's durable edits. Republish
+    // the reconciled state when it contains records/markers missing remotely.
+    if (dataSignature(current) !== dataSignature(payload)) await publish({ app: 'toonhqplus', schemaVersion: SCHEMA_VERSION, updatedAt: new Date().toISOString(), ...current });
+    else await setSetting(SYNC_PENDING_KEY, null);
+    onImported?.();
+  });
 }
 
 function scheduleRemoteSyncNotesImport(onImported?: () => void, delayMs = 250): void {
@@ -218,13 +231,13 @@ function scheduleRemoteSyncNotesImport(onImported?: () => void, delayMs = 250): 
       remoteImportPending = true;
       return;
     }
-    remoteImportInFlight = importLatestRemoteSyncNotesIfNewer(onImported)
-      .catch((error) => console.warn('[ToonHQ+] Failed to import Sync Notes update.', error))
+    remoteImportInFlight = reconcileSyncNotes(onImported)
+      .catch(markPending)
       .finally(() => {
         const shouldImportPendingUpdate = remoteImportPending;
         remoteImportPending = false;
         remoteImportInFlight = null;
-        if (shouldImportPendingUpdate) scheduleRemoteSyncNotesImport(onImported, 0);
+        if (shouldImportPendingUpdate && listenerInitialized) scheduleRemoteSyncNotesImport(onImported, 0);
       });
   }, delayMs);
 }
@@ -233,46 +246,46 @@ export async function setSyncNotesEnabled(enabled: boolean): Promise<void> {
   await setSetting(SYNC_NOTES_SETTING_KEY, enabled);
 }
 
+async function markPending(error: unknown): Promise<void> {
+  const message = 'Saved on this device; sync is pending. ' + (error instanceof Error ? error.message : String(error));
+  await setSetting(SYNC_PENDING_KEY, message);
+  console.warn('[ToonHQ+] ' + message);
+}
 export async function syncSavedToonsAfterLocalMutation(): Promise<void> {
-  if (await isSyncNotesEnabled()) {
-    await writeCurrentSavedToonsToSync();
-  }
+  if (!(await isSyncNotesEnabled())) return;
+  try { await writeCurrentSavedToonsToSync(); } catch (error) { await markPending(error); }
+}
+export async function mutateSavedToons(mutation: () => Promise<void>): Promise<void> {
+  await withSavedToonLock(async () => {
+    await mutation();
+    if (await isSyncNotesEnabled()) {
+      try { await writeUnlocked(); } catch (error) { await markPending(error); }
+    }
+  });
 }
 
-export async function mutateSavedToonsWithSyncRollback(mutation: () => Promise<void>): Promise<void> {
-  if (!(await isSyncNotesEnabled())) {
-    await mutation();
-    return;
-  }
-
-  assertOnlineForSync();
-  const before = await exportSavedToonData();
-  try {
-    await mutation();
-    await writeCurrentSavedToonsToSync();
-  } catch (error) {
-    await replaceSavedToonData(before);
-    throw error;
-  }
-}
-
-export function initSyncNotesRemoteListener(onImported?: () => void): void {
-  if (listenerInitialized || !browser.storage?.onChanged) return;
+export function initSyncNotesRemoteListener(onImported?: () => void): () => void {
+  if (listenerInitialized || !browser.storage?.onChanged) return () => {};
   listenerInitialized = true;
 
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', () => {
-      scheduleRemoteSyncNotesImport(onImported, 0);
-    });
-  }
+  const online = () => scheduleRemoteSyncNotesImport(onImported, 0);
+  if (typeof window !== 'undefined') window.addEventListener('online', online);
   scheduleRemoteSyncNotesImport(onImported, 0);
 
-  browser.storage.onChanged.addListener((changes, areaName) => {
+  const changed: Parameters<typeof browser.storage.onChanged.addListener>[0] = (changes, areaName) => {
     if (areaName !== 'sync' || !Object.keys(changes).some(isSyncKey)) return;
     const nextMeta = changes[SYNC_META_KEY]?.newValue as SyncNotesMeta | undefined;
-    if (nextMeta?.updatedAt && nextMeta.updatedAt === lastLocalWriteUpdatedAt) {
+    if (nextMeta?.generation && nextMeta.generation === lastLocalGeneration) {
       return;
     }
     scheduleRemoteSyncNotesImport(onImported);
-  });
+  };
+  browser.storage.onChanged.addListener(changed);
+  return () => {
+    listenerInitialized = false;
+    if (importTimer) clearTimeout(importTimer);
+    importTimer = null; remoteImportPending = false;
+    browser.storage.onChanged.removeListener(changed);
+    if (typeof window !== 'undefined') window.removeEventListener('online', online);
+  };
 }

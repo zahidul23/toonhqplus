@@ -27,6 +27,7 @@ import {
   setSetting,
   getAllNotes,
   cleanupToonCache,
+  flushToonWriteBuffer,
   getToons,
   getToonsByHashIds,
   type ToonRecord,
@@ -2170,9 +2171,13 @@ export default defineContentScript({
         if (reloadCheckInFlight) return;
         reloadCheckInFlight = true;
         toonHQIsReachable()
-          .then((reachable) => {
-            if (reachable && !idleRefreshDisposed) window.location.reload();
+          .then(async (reachable) => {
+            if (!reachable || idleRefreshDisposed) return;
+            await historyTracker.settled();
+            await flushToonWriteBuffer();
+            if (!idleRefreshDisposed) window.location.reload();
           })
+          .catch(error => console.warn('[ToonHQ+] Idle refresh postponed until pending Toon data can be saved:', error))
           .finally(() => {
             reloadCheckInFlight = false;
           });

@@ -1,3 +1,4 @@
+import { getSafeToonAliases } from '../sidebar.content/savedToonRecords.ts';
 export interface IndexedDbIndexSnapshot {
   keyPath: string | string[] | null;
   unique: boolean;
@@ -357,12 +358,13 @@ function normalizeToonIdentityDatabase(database: IndexedDbDatabaseSnapshot): Ind
   const toonsStore = database.stores.toons;
   if (!toonsStore) return database;
 
-  const canonicalIdByHash = new Map<string, string>();
-  for (const toon of toonsStore.records) {
-    const id = toon?.id == null ? '' : String(toon.id);
-    const hashId = toon?.hashId == null ? '' : String(toon.hashId);
-    if (id && hashId && !id.startsWith('#')) canonicalIdByHash.set(hashId, id);
-  }
+  const canonicalIdByHash = getSafeToonAliases(toonsStore.records);
+  // Backups must keep saved IDs and their revision markers together. Saved
+  // aliases are migrated by cleanupToonCache in a transaction that stamps both
+  // identities; a transfer normalization cannot perform that migration.
+  const savedIds = new Set(['toony_toons', 'stinky_toons', 'notes'].flatMap(name =>
+    (database.stores[name]?.records || []).map(record => String(record.toonId))));
+  for (const hash of canonicalIdByHash.keys()) if (savedIds.has(hash)) canonicalIdByHash.delete(hash);
 
   if (canonicalIdByHash.size === 0) return database;
 

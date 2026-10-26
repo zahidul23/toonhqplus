@@ -9,20 +9,22 @@ export type BoardingGroupStatus = null | {
   [key: string]: unknown;
 };
 
-/** Coalesce explicit checks. Native ToonHQ owns the nonce, SID, authentication,
- * subscription and socket response. No automatic requests are made here. */
+/** Coalesce callers' checks. Native ToonHQ owns the nonce, SID, authentication,
+ * subscription and socket response. Scheduling/cooldowns belong to the caller. */
 export function createBoardingStatusService(bridge: ReturnType<typeof getNativeBridge>) {
   const recent = new Map<number, BoardingGroupStatus>();
   const failures = new Map<number, { error: Error; until: number }>();
   const inFlight = new Map<number, Promise<BoardingGroupStatus>>();
+  const createdVersions = new Map<number, number>();
   const listeners = new Set<(status: Exclude<BoardingGroupStatus, null>) => void>();
   let context = '', disposed = false;
   const stopState = bridge.subscribe(update => {
     if (context !== update.state.context || !update.state.connected) {
-      context = update.state.context; recent.clear(); failures.clear(); inFlight.clear();
+      context = update.state.context; recent.clear(); failures.clear(); inFlight.clear(); createdVersions.clear();
     }
   });
   const stopCreated = bridge.onBoardingCreated((status, toonId) => {
+    createdVersions.set(toonId, (createdVersions.get(toonId) || 0) + 1);
     recent.set(toonId, status); failures.delete(toonId);
     for (const listener of listeners) {
       try { listener(status); } catch (error) { console.error('[ToonHQ+] Boarding status listener failed.', error); }
@@ -42,17 +44,22 @@ export function createBoardingStatusService(bridge: ReturnType<typeof getNativeB
       const failure = failures.get(toonId);
       if (failure && failure.until > Date.now()) return Promise.reject(failure.error);
       const requestContext = context;
+      const createdVersion = createdVersions.get(toonId);
       const request = bridge.requestBoarding(toonId).then(result => {
         if (disposed || context !== requestContext) throw new Error('ToonHQ connection or active Toon changed. Try again.');
+        if (createdVersions.get(toonId) !== createdVersion) return recent.get(toonId)!;
         recent.set(toonId, result); failures.delete(toonId); return result;
       }).catch(error => {
-        if (!disposed && context === requestContext) failures.set(toonId, { error, until: Date.now() + 30_000 });
+        if (!disposed && context === requestContext) {
+          if (createdVersions.get(toonId) !== createdVersion) return recent.get(toonId)!;
+          failures.set(toonId, { error, until: Date.now() + 30_000 });
+        }
         throw error;
       }).finally(() => { if (inFlight.get(toonId) === request) inFlight.delete(toonId); });
       inFlight.set(toonId, request);
       return request;
     },
-    dispose() { disposed = true; stopState(); stopCreated(); recent.clear(); failures.clear(); inFlight.clear(); listeners.clear(); },
+    dispose() { disposed = true; stopState(); stopCreated(); recent.clear(); failures.clear(); inFlight.clear(); createdVersions.clear(); listeners.clear(); },
   };
 }
 let service: ReturnType<typeof createBoardingStatusService> | undefined;

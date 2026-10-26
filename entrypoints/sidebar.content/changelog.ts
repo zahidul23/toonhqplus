@@ -11,8 +11,9 @@ export const changelog: ChangelogEntry[] = [
     changes: [
       'Reduce ToonHQ server load by reusing its existing live connection for group history and Quick Teleport',
       'Improve group history synchronization and handling of login, Toon changes, and reconnects',
-      'Check Quick Teleport status on demand instead of automatically',
-      'Preserve periodic idle-tab refreshes to help limit memory growth'
+      'Keep automatic Quick Teleport status checks with the existing 60-second per-Toon cooldown',
+      'Preserve periodic idle-tab refreshes to help limit memory growth',
+      'Protect saved Toons and notes from sync failures and stale device data, and keep entries visible when details are missing'
     ]
   },
   {

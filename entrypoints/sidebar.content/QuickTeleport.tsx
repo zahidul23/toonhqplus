@@ -5,7 +5,7 @@ import { getSettings, setSetting } from './db';
 import { getToonSuitLevel } from './toonUtils';
 import { getToonHqActiveToonId } from './toonHqPageState';
 import { pageFetch } from './pageFetch';
-import { getNativeBridge } from './nativeBridge';
+import { getNativeBridge, validBoardingStatus } from './nativeBridge';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
@@ -162,10 +162,32 @@ const DESTINATION_ROWS = [
 
 const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
 const BOARDING_GROUP_COOLDOWN_SECONDS = 5 * 60;
+const AUTO_BOARDING_CHECK_COOLDOWN_MS = 60_000;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
 const AUTO_DELIST_SETTING = 'quick-teleport-auto-delist';
 const DESTINATION_SETTING = 'quick-teleport-destination';
+const LAST_AUTO_BOARDING_CHECK_KEY = 'toonhqplus-quick-teleport-last-auto-boarding-check';
 const MANUAL_REFRESH_STATUS = 'Use Refresh to check this Toon\'s current location and boarding-group status.';
+
+type PersistedAutoBoardingCheck = { checkedAt: number; result?: BoardingGroupStatus };
+
+function getPersistedAutoBoardingCheck(toonId: string): PersistedAutoBoardingCheck | null {
+  try {
+    const raw = localStorage.getItem(`${LAST_AUTO_BOARDING_CHECK_KEY}:${toonId}`);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    // Preserve cooldowns saved by earlier versions, including timestamp-only entries.
+    if (typeof value === 'number' && Number.isFinite(value)) return { checkedAt: value };
+    if (!value || typeof value !== 'object' || !Number.isFinite(value.checkedAt)) return null;
+    const persisted: PersistedAutoBoardingCheck = { checkedAt: value.checkedAt };
+    if (Object.prototype.hasOwnProperty.call(value, 'result') && validBoardingStatus(value.result)) persisted.result = value.result;
+    return persisted;
+  } catch { return null; }
+}
+
+function setPersistedAutoBoardingCheck(toonId: string, value: PersistedAutoBoardingCheck): void {
+  try { localStorage.setItem(`${LAST_AUTO_BOARDING_CHECK_KEY}:${toonId}`, JSON.stringify(value)); } catch { }
+}
 
 function HoverTooltip({ id, children, placement = 'center' }: { id: string; children: React.ReactNode; placement?: 'left' | 'center' | 'right' }) {
   const positionClass = placement === 'left'
@@ -343,6 +365,9 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     setToonId(nativeState.currentToonId || '');
   }, [nativeState]);
 
+  const boardingCheckReady = nativeState.connected && nativeState.authenticated && nativeState.gameId === 1
+    && nativeState.currentToonId === toonId && nativeState.ownedToons.some(toon => String(toon.id) === toonId && toon.game === 1);
+
   useEffect(() => {
     if (!preferencesLoaded || !toonId) {
       setBoardingStatus(undefined);
@@ -350,9 +375,19 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       setStatus('');
       return;
     }
+    if (!boardingCheckReady) {
+      setBoardingStatus(undefined);
+      setCheckingStatus(false);
+      setStatus(nativeState.reason || 'Waiting for ToonHQ Groups.');
+      return;
+    }
 
     const cachedBoardingStatus = getCachedBoardingGroupStatus(Number(toonId));
-    const restoredBoardingStatus = cachedBoardingStatus;
+    const persistedCheck = getPersistedAutoBoardingCheck(toonId);
+    const hasPersistedResult = !!persistedCheck && Date.now() - persistedCheck.checkedAt < AUTO_BOARDING_CHECK_COOLDOWN_MS
+      && Object.prototype.hasOwnProperty.call(persistedCheck, 'result');
+    const restoredBoardingStatus = cachedBoardingStatus !== undefined ? cachedBoardingStatus
+      : hasPersistedResult ? persistedCheck!.result : undefined;
     if (restoredBoardingStatus !== undefined) {
       setBoardingStatus(restoredBoardingStatus ?? null);
       if (restoredBoardingStatus?.district != null) setDistrictId(String(restoredBoardingStatus.district));
@@ -363,7 +398,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     setBoardingStatus(undefined);
     setCheckingStatus(false);
     setStatus(MANUAL_REFRESH_STATUS);
-  }, [preferencesLoaded, toonId, districts, coreData.locations, nativeState.context]);
+  }, [preferencesLoaded, toonId, districts, coreData.locations, nativeState.context, boardingCheckReady, nativeState.reason]);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -374,6 +409,36 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       setStatus(describeBoardingStatus(result, districts, coreData.locations));
     });
   }, [preferencesLoaded, districts, coreData.locations]);
+
+  useEffect(() => {
+    if (!preferencesLoaded || !toonId || !boardingCheckReady) return;
+    const now = Date.now();
+    const persistedCheck = getPersistedAutoBoardingCheck(toonId);
+    if (persistedCheck && now - persistedCheck.checkedAt < AUTO_BOARDING_CHECK_COOLDOWN_MS) return;
+
+    // Reserve the original per-Toon cooldown before requesting. No interval is
+    // started: remounts, reloads, Toon switches and reconnects share this limit.
+    setPersistedAutoBoardingCheck(toonId, { checkedAt: now });
+    let cancelled = false;
+    setCheckingStatus(true);
+    setStatus('Checking your Toon\'s current location...');
+    getBoardingGroupStatus(Number(toonId), true)
+      .then(result => {
+        setPersistedAutoBoardingCheck(toonId, { checkedAt: now, result });
+        if (cancelled || !quickTeleportActiveRef.current) return;
+        setBoardingStatus(result);
+        if (result?.district != null) setDistrictId(String(result.district));
+        setStatus(describeBoardingStatus(result, districts, coreData.locations));
+      })
+      .catch(error => {
+        if (cancelled || !quickTeleportActiveRef.current) return;
+        setStatus(`Could not check Toon status: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => {
+        if (!cancelled && quickTeleportActiveRef.current) setCheckingStatus(false);
+      });
+    return () => { cancelled = true; };
+  }, [preferencesLoaded, toonId, districts, coreData.locations, nativeState.context, boardingCheckReady]);
 
   const selectedToon = toons.find(toon => String(toon.id) === toonId);
   const selectedDestination = DESTINATIONS[destinationIndex];
@@ -416,25 +481,34 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
           ? 'Select an active Toon first.'
           : 'Refresh your Toon’s current location.';
 
+  const isCurrentToonContext = (context: string) => {
+    const live = getNativeBridge().state;
+    return quickTeleportActiveRef.current && live.connected && live.context === context && live.currentToonId === toonId;
+  };
+
   const refreshLocation = async () => {
-    if (!nativeState.connected || !toonId || busy || checkingStatus || refreshCooldown > 0) return;
+    const requestContext = nativeState.context;
+    if (!isCurrentToonContext(requestContext) || !toonId || busy || checkingStatus || refreshCooldown > 0) return;
     setRefreshCooldown(LOCATION_REFRESH_COOLDOWN_SECONDS);
     setCheckingStatus(true);
     setStatus('Refreshing location...');
     try {
       const result = await getBoardingGroupStatus(Number(toonId), true);
+      if (!isCurrentToonContext(requestContext)) return;
       setBoardingStatus(result);
       if (result?.district != null) setDistrictId(String(result.district));
       setStatus(describeBoardingStatus(result, districts, coreData.locations));
     } catch (error) {
+      if (!isCurrentToonContext(requestContext)) return;
       setStatus(`Could not refresh Toon status: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setCheckingStatus(false);
+      if (isCurrentToonContext(requestContext)) setCheckingStatus(false);
     }
   };
 
   const teleport = async () => {
-    if (!toonId || !districtId || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup) return;
+    const requestContext = nativeState.context;
+    if (!isCurrentToonContext(requestContext) || !toonId || !districtId || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup) return;
     const destination = DESTINATIONS[destinationIndex];
     const destinationFullName = getDestinationFullName(destination);
     const suitLevel = getToonSuitLevel(selectedToon?.[destination.suitKey]);
@@ -483,18 +557,20 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
         if (!leaveResponse.ok) throw new Error(`Teleport was requested, but the group could not be delisted: ${await readError(leaveResponse)}`);
       }
 
+      if (!isCurrentToonContext(requestContext)) return;
       setStatus('Teleport requested. Checking the in-game boarding group in 10 seconds...');
       await new Promise(resolve => window.setTimeout(resolve, TELEPORT_VERIFICATION_DELAY_MS));
-      if (!quickTeleportActiveRef.current) return;
+      if (!isCurrentToonContext(requestContext)) return;
 
       setStatus('Verifying the in-game boarding group...');
       const verifiedStatus = await getBoardingGroupStatus(Number(toonId), true);
-      if (!quickTeleportActiveRef.current) return;
+      if (!isCurrentToonContext(requestContext)) return;
       if (!verifiedStatus?.type) throw new Error('Something went wrong. We were not able to create a boarding group.');
 
       setBoardingStatus(verifiedStatus);
       setStatus(`Teleport requested to ${destinationFullName}.\nThe in-game boarding group is active${autoDelist ? ' and the ToonHQ listing was removed' : ''}.`);
     } catch (error) {
+      if (!isCurrentToonContext(requestContext)) return;
       setStatus(error instanceof Error && error.message.startsWith('Teleport was requested, but')
         ? error.message
         : 'Something went wrong. We were not able to create a boarding group.');

@@ -18,6 +18,7 @@
   let root = null, store = null, listener = null, unsubscribe = null, unwatch = null;
   let observer, timer = null, attempts = 0, scheduled = false, forceFull = true;
   let fingerprint = null, lastAccounts = null, publishedState = null;
+  let activeSnapshot = new Set();
   const changed = new Set(), archived = new Set(), inFlight = new Map(), requestTimers = new Set();
 
   function safeCopy(value, depth) {
@@ -40,7 +41,9 @@
   }
   function validId(id) { return Number.isSafeInteger(id) && id > 0; }
   function copyGroup(group) {
-    if (!group || !validId(group.id) || group.game !== 1 || !Array.isArray(group.members) || group.members.length > 128) return null;
+    // Native members include past joins/leaves, so long-running groups can
+    // exceed 128 entries. Bound the serialized message in send(), not history.
+    if (!group || !validId(group.id) || group.game !== 1 || !Array.isArray(group.members)) return null;
     const result = pick(group, groupFields);
     result.members = group.members.filter(member => member && typeof member === 'object').map(member => {
       const copy = pick(member, ['id', 'group', 'joined', 'left', 'owner', 'name', 'photo', 'num_players']);
@@ -50,34 +53,42 @@
     return result;
   }
   function send(message) {
-    if (disposed || !client) return;
+    if (disposed || !client) return false;
     try {
       const detail = JSON.stringify(Object.assign({ version: 1, client, session, sequence: sequence + 1 }, message));
       if (detail.length > 4_000_000) {
         send({ type: 'unavailable', reason: 'Native group data exceeds the supported size.' });
-        return;
+        return false;
       }
       sequence++;
       window.dispatchEvent(new CustomEvent(MESSAGE, { detail }));
+      return true;
     } catch (error) { console.warn('[ToonHQ+] Could not copy native page state.', error); }
+    return false;
   }
   function context() {
     const state = store.state, getters = store.getters, accounts = state.accounts;
     const gameId = Number(getters.gameId), socket = state.socket, room = socket.rooms && socket.rooms.groups;
     const pathname = window.location.pathname.replace(/\/+$/, '');
-    const onGroups = pathname === '/groups';
+    const onGroups = pathname === '/groups' || pathname.startsWith('/groups/');
+    // Group details/report dialogs use nested routes on the same Groups page.
+    // Opening or closing one must not reset the feed or pending boarding checks.
+    const pageContext = onGroups ? '/groups' : pathname;
     const ready = onGroups && gameId === 1 && getters.socketActive === true &&
       getters.roomConnectedToGame('groups', 1) === true && state.groups.groups !== null &&
       typeof state.groups.groups === 'object' && !Array.isArray(state.groups.groups);
+    const ownedToons = Object.values(accounts.toons || {}).slice(0, 256)
+      .filter(toon => toon && validId(toon.id)).map(toon => pick(toon, toonFields));
     return {
-      signature: JSON.stringify([pathname, gameId, socket.status, socket.sid, room && room.game,
-        room && room.status, accounts.user && accounts.user.id, accounts.currentToon]),
+      signature: JSON.stringify([pageContext, gameId, socket.status, socket.sid, room && room.game,
+        room && room.status, accounts.user && accounts.user.id, accounts.currentToon, ready,
+        ownedToons.map(toon => [toon.id, toon.game, toon.external])]),
       state: {
         available: true, connected: ready, gameId: Number.isFinite(gameId) ? gameId : null,
         authenticated: !!accounts.user,
         currentToonId: accounts.currentToon == null ? null : String(accounts.currentToon),
         subscriptionToonId: validId(state.groups.toonBoardingGroupSubscription) ? state.groups.toonBoardingGroupSubscription : null,
-        ownedToons: Object.values(accounts.toons || {}).slice(0, 256).filter(toon => toon && validId(toon.id)).map(toon => pick(toon, toonFields)),
+        ownedToons,
         reason: ready ? null : gameId !== 1 ? 'Live history is paused outside Toontown Rewritten.'
           : !onGroups ? 'Open ToonHQ Groups to enable live history and boarding checks.'
             : 'Waiting for ToonHQ\'s groups connection.',
@@ -111,13 +122,29 @@
       const upserts = ids.filter(id => active.has(id)).map(requiredGroup);
       // Native state retains archived groups for dialogs and late events. Never
       // repopulate the extension's active map from those retained records.
-      const archives = state.connected ? Array.from(archived).filter(id => !active.has(id)).map(requiredGroup) : [];
+      const archiveIds = new Set(archived);
+      // updateGameOpen(false) closes all members and clears the active list
+      // without emitting archiveGroup. Resyncs alone do not prove a closure.
+      if (state.connected) activeSnapshot.forEach(id => {
+        const group = groups.groups[id];
+        if (!active.has(id) && group && Array.isArray(group.members) &&
+            group.members.length && group.members.every(member => member && member.left)) archiveIds.add(id);
+      });
+      if (archiveIds.size > 5000) throw new Error('Unsupported native archive count');
+      const archives = state.connected ? Array.from(archiveIds).filter(id => !active.has(id)).map(requiredGroup) : [];
+      const pendingChanged = Array.from(changed), pendingArchived = Array.from(archived);
       publishedState = state;
       forceFull = false;
       changed.clear(); archived.clear();
       if (full || accountSignature !== lastAccounts || upserts.length || archives.length) {
         lastAccounts = accountSignature;
-        send({ type: 'state', full, state, groups: upserts, archived: archives });
+        if (!send({ type: 'state', full, state, groups: upserts, archived: archives })) {
+          // An unavailable notification is not an acknowledgement of this state.
+          // Retry locally with a full snapshot and preserve unsent final events.
+          publishedState = lastAccounts = null; forceFull = true;
+          pendingChanged.forEach(id => changed.add(id));
+          pendingArchived.forEach(id => archived.add(id));
+        } else activeSnapshot = state.connected ? active : new Set();
       }
     } catch (error) {
       publishedState = null; forceFull = true;
@@ -136,6 +163,7 @@
     if (listener) listener.$destroy();
     unsubscribe = unwatch = listener = root = store = null;
     fingerprint = lastAccounts = publishedState = null;
+    activeSnapshot.clear();
     changed.clear(); archived.clear(); inFlight.clear(); forceFull = true;
   }
   function compatible(vue) {

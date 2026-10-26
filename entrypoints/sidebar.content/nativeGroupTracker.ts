@@ -22,6 +22,9 @@ export function createNativeGroupTracker(options: {
 }) {
   const { groups, ownedToons, toons, persistence, hash } = options;
   const signatures = new Map<number, string>();
+  // Keep only counts across temporary unavailability so a retried archive can
+  // finish saved history after the public active map has been cleared.
+  const archiveMemberCounts = new Map<number, number>();
   let ownedSignature = '', disposed = false, writes = Promise.resolve();
   const clear = (object: Record<string, any>) => Object.keys(object).forEach(key => { delete object[key]; });
   const enqueue = (work: () => Promise<void>) => {
@@ -73,20 +76,22 @@ export function createNativeGroupTracker(options: {
         });
       }
       if (!update.state.connected || update.state.gameId !== 1) {
-        clear(groups); signatures.clear(); options.onChanged(); return;
+        clear(groups); signatures.clear(); archiveMemberCounts.clear(); options.onChanged(); return;
       }
       for (const value of update.archived) {
-        const previous = groups[value.id];
-        if (!previous) continue;
-        const count = previous.members.filter((member: any) => !member.left).length;
+        const count = archiveMemberCounts.get(value.id);
+        if (count === undefined) continue;
         if (count <= 2) enqueue(() => persistence.deleteGroup(value.id));
         else { const copy = copyGroup(value); cache(copy); history(copy); }
-        delete groups[value.id]; signatures.delete(value.id);
+        delete groups[value.id]; signatures.delete(value.id); archiveMemberCounts.delete(value.id);
       }
       if (update.full) {
         const active = new Set(update.groups.map(value => value.id));
         for (const key of Object.keys(groups)) {
           if (!active.has(Number(key))) { delete groups[Number(key)]; signatures.delete(Number(key)); }
+        }
+        for (const id of archiveMemberCounts.keys()) {
+          if (!active.has(id)) archiveMemberCounts.delete(id);
         }
       }
       if (ownershipChanged) {
@@ -94,6 +99,7 @@ export function createNativeGroupTracker(options: {
         Object.values(groups).forEach(value => { if (!touched.has(value.id)) history(value); });
       }
       for (const value of update.groups) {
+        archiveMemberCounts.set(value.id, value.members.filter((member: any) => !member.left).length);
         const signature = JSON.stringify(value);
         if (signatures.get(value.id) === signature) {
           if (ownershipChanged) history(groups[value.id]);
@@ -107,6 +113,6 @@ export function createNativeGroupTracker(options: {
       options.onChanged();
     },
     settled() { return writes; },
-    dispose() { disposed = true; clear(groups); clear(ownedToons); signatures.clear(); },
+    dispose() { disposed = true; clear(groups); clear(ownedToons); signatures.clear(); archiveMemberCounts.clear(); },
   };
 }

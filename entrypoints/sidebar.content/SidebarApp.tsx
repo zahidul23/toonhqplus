@@ -9,20 +9,17 @@ import { NativeConnectionStatus } from './NativeConnectionStatus';
 import {
   closeDB,
   getAllFromList,
-  addToList,
-  removeFromList,
-  clearList,
+  saveToonToList,
+  saveToonNote,
+  clearSavedToonData,
   getToon,
   getToons,
   searchToons,
-  putToon,
   getAllGroups,
   getGroupMembers,
   getAllGroupMembers,
   getAllNotes,
   getNote,
-  setNote,
-  clearNotes,
   getSetting,
   getSettings,
   setSetting,
@@ -30,24 +27,26 @@ import {
   clearAllGroups,
   cleanupToonCache,
   exportSavedToonData,
+  applySavedToonData,
   replaceSavedToonData,
   type ToonRecord,
   type ToonId,
   type SavedToonDataSnapshot,
 } from './db';
 import { DARK_MODE_NOTICE_DISMISSED_KEY, DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
+import { buildSavedToonMap, withSavedToonLock } from './savedToonRecords';
+import { SavedToonSyncStatus } from './SavedToonSyncStatus';
 import { useSystemDisplayMode } from '../lib/useSystemDisplayMode';
 
 import {
-  createLocalSyncNotesPayload,
   importSyncNotesPayload,
   initSyncNotesRemoteListener,
   isSyncNotesEnabled,
-  mutateSavedToonsWithSyncRollback,
+  mutateSavedToons,
+  writeCurrentSavedToonsToSync,
   readSyncNotesPayload,
   setSyncNotesEnabled,
   syncSavedToonsAfterLocalMutation,
-  writeSyncNotesPayload,
   type SyncNotesPayload,
 } from './syncNotes';
 import {
@@ -379,47 +378,7 @@ async function updateToonList(
 ) {
   const toonStore: 'toony_toons' | 'stinky_toons' =
     listKey === STORAGE_KEYS.FAVORITES ? 'toony_toons' : 'stinky_toons';
-  const otherStore: 'toony_toons' | 'stinky_toons' =
-    toonStore === 'toony_toons' ? 'stinky_toons' : 'toony_toons';
-  const toonId = toon.id;
-
-  await mutateSavedToonsWithSyncRollback(async () => {
-    if (type === 'remove') {
-      await removeFromList(toonStore, toonId);
-    } else {
-      await addToList(toonStore, toonId);
-      await removeFromList(otherStore, toonId);
-      await putToon({
-        id: toonId,
-        name: toon.name || '',
-        species: toon.species,
-        color: toon.color,
-        laff: toon.laff,
-        level: toon.level,
-        photo: toon.photo,
-        photo_bg: toon.photo_bg,
-        ring: toon.ring,
-        toonup: toon.toonup,
-        trap: toon.trap,
-        lure: toon.lure,
-        sound: toon.sound,
-        throw: toon.throw,
-        squirt: toon.squirt,
-        drop: toon.drop,
-        prestiges: toon.prestiges,
-        organic_level: toon.organic_level,
-        sellbot: toon.sellbot,
-        cashbot: toon.cashbot,
-        lawbot: toon.lawbot,
-        bossbot: toon.bossbot,
-        lastSeen: new Date().toISOString(),
-      });
-
-      if (note !== undefined) {
-        await setNote(toonId, note);
-      }
-    }
-  });
+  await mutateSavedToons(() => saveToonToList(toonStore, { ...toon, lastSeen: new Date().toISOString() }, type, note));
 }
 
 async function exportAllData(includeFullToonCache: boolean): Promise<{ json: string; totalBytes: number; rawBytes: number; fileName: string }> {
@@ -626,29 +585,6 @@ function mergeSavedToonSnapshots(
   };
 }
 
-async function stageSyncNotesForImport(
-  snapshot: TransferSnapshot,
-  options: { mode: ImportMode; conflictPolicy: ImportConflictPolicy },
-  currentSavedToons: SavedToonDataSnapshot
-): Promise<boolean> {
-  if (!(await isSyncNotesEnabled())) return false;
-
-  const incomingSavedToons = getSavedToonSnapshotFromIndexedDb(snapshot.origins.site.indexedDB?.toonhqplus);
-  const stagedSavedToons = options.mode === 'replace'
-    ? incomingSavedToons
-    : mergeSavedToonSnapshots(currentSavedToons, incomingSavedToons, options.conflictPolicy);
-
-  const payload: SyncNotesPayload = {
-    app: 'toonhqplus',
-    schemaVersion: 1,
-    updatedAt: new Date().toISOString(),
-    ...stagedSavedToons,
-  };
-
-  await writeSyncNotesPayload(payload, { allowRemoteOverwrite: true });
-  return true;
-}
-
 async function importAllData(text: string, options: { mode: ImportMode; conflictPolicy: ImportConflictPolicy; parsedSnapshot?: TransferSnapshot }): Promise<void> {
   const parsedSnapshot = options.parsedSnapshot ?? await parseTransferDocument(text);
   const snapshot: TransferSnapshot = {
@@ -665,64 +601,60 @@ async function importAllData(text: string, options: { mode: ImportMode; conflict
       },
     },
   };
-  const savedToonRollback = await exportSavedToonData();
-  const syncStaged = await stageSyncNotesForImport(snapshot, options, savedToonRollback);
+  await withSavedToonLock(async () => {
+    const savedToonRollback = await exportSavedToonData();
+    const incomingSavedToons = getSavedToonSnapshotFromIndexedDb(snapshot.origins.site.indexedDB?.toonhqplus);
+    const desiredSavedToons = options.mode === 'replace' ? incomingSavedToons
+      : mergeSavedToonSnapshots(savedToonRollback, incomingSavedToons, options.conflictPolicy);
 
-  // Sync Notes defaults to disabled when its setting is absent. Materialize that
-  // effective local value so a merge using Keep Local treats an imported value as
-  // a conflict instead of adding it as a new setting.
-  if (options.mode === 'merge' && options.conflictPolicy === 'keep-local') {
-    await setSyncNotesEnabled(await isSyncNotesEnabled());
-  }
-
-  try {
-    const extensionResponse = await browser.runtime.sendMessage({
-      type: 'IMPORT_EXTENSION_STORAGE',
-      snapshot: snapshot.origins.extension,
-      mode: options.mode,
-      conflictPolicy: options.conflictPolicy,
-    });
-
-    if (extensionResponse?.error) {
-      throw new Error(extensionResponse.error);
+    // Sync Notes defaults to disabled when its setting is absent. Materialize that
+    // effective local value so a merge using Keep Local treats an imported value as
+    // a conflict instead of adding it as a new setting.
+    if (options.mode === 'merge' && options.conflictPolicy === 'keep-local') {
+      await setSyncNotesEnabled(await isSyncNotesEnabled());
     }
 
-    closeDB();
-    if (options.mode === 'replace') {
-      restoreLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {});
-      await restoreIndexedDatabases(snapshot.origins.site.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
-    } else {
-      mergeLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {}, {
+    try {
+      const extensionResponse = await browser.runtime.sendMessage({
+        type: 'IMPORT_EXTENSION_STORAGE',
+        snapshot: snapshot.origins.extension,
+        mode: options.mode,
         conflictPolicy: options.conflictPolicy,
       });
-      await mergeIndexedDatabases(snapshot.origins.site.indexedDB || {}, {
-        conflictPolicy: options.conflictPolicy,
-      });
-    }
 
-    // Normalize any pre-existing local hash records left behind by a merge and
-    // enforce the same history limits used by portable exports.
-    await cleanupToonCache();
-
-    if (!syncStaged) {
-      await syncSavedToonsAfterLocalMutation();
-    }
-  } catch (error) {
-    await replaceSavedToonData(savedToonRollback);
-    if (syncStaged) {
-      try {
-        await writeSyncNotesPayload({
-          app: 'toonhqplus',
-          schemaVersion: 1,
-          updatedAt: new Date().toISOString(),
-          ...savedToonRollback,
-        }, { allowRemoteOverwrite: true });
-      } catch (rollbackError) {
-        console.warn('[ToonHQ+] Failed to roll back staged Sync Notes import.', rollbackError);
+      if (extensionResponse?.error) {
+        throw new Error(extensionResponse.error);
       }
+
+      closeDB();
+      if (options.mode === 'replace') {
+        restoreLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {});
+        await restoreIndexedDatabases(snapshot.origins.site.indexedDB || {}, { fallbackNames: ['toonhqplus'] });
+      } else {
+        mergeLocalStorage(window.localStorage, snapshot.origins.site.localStorage || {}, {
+          conflictPolicy: options.conflictPolicy,
+        });
+        await mergeIndexedDatabases(snapshot.origins.site.indexedDB || {}, {
+          conflictPolicy: options.conflictPolicy,
+        });
+      }
+
+      // Generic database restore also restores old settings/revision metadata.
+      // Observe the pre-import revisions, then stamp the user's chosen contents
+      // as a new operation so stale markers cannot undo the import later.
+      await applySavedToonData(savedToonRollback);
+      await replaceSavedToonData(desiredSavedToons);
+
+      // Normalize any pre-existing local hash records left behind by a merge and
+      // enforce the same history limits used by portable exports.
+      await cleanupToonCache();
+
+    } catch (error) {
+      await replaceSavedToonData(savedToonRollback);
+      throw error;
     }
-    throw error;
-  }
+  });
+  await syncSavedToonsAfterLocalMutation();
 }
 
 // GAG_TRACKS is replaced by gagsConfig from gags.ts
@@ -967,7 +899,7 @@ const ToonRow = memo(({
 
   const saveNote = () => {
     setNoteError(null);
-    mutateSavedToonsWithSyncRollback(() => setNote(toon.id, noteDraft))
+    mutateSavedToons(() => saveToonNote(toon, noteDraft))
       .then(() => {
         refresh();
         setIsEditing(false);
@@ -1123,7 +1055,7 @@ const ToonRow = memo(({
             <button
               onClick={() => {
                 setNoteError(null);
-                mutateSavedToonsWithSyncRollback(() => setNote(toon.id, ''))
+                mutateSavedToons(() => saveToonNote(toon, ''))
                   .then(() => {
                     refresh();
                     setIsEditing(false);
@@ -1568,13 +1500,7 @@ export function SidebarApp() {
 
     const toonsArr = await getToons(Array.from(visibleIds));
 
-    const toonsMap: Record<ToonId, ToonData> = {};
-    for (const t of toonsArr) {
-      toonsMap[t.id] = t;
-      // Group memberships created from in-game data can retain a synthetic
-      // hash ID after the Toon record is consolidated under a numeric ID.
-      if (t.hashId) toonsMap[t.hashId] = t;
-    }
+    const toonsMap = buildSavedToonMap(toonsArr, Array.from(visibleIds), [...f, ...b, ...Object.keys(allNotes)]);
     setHistoryToons(toonsMap);
 
     const groupsMap: Record<number, any> = {};
@@ -1605,8 +1531,7 @@ export function SidebarApp() {
   }, []);
 
   const enableSyncNotesWithThisDevice = useCallback(async () => {
-    const payload = await createLocalSyncNotesPayload();
-    await writeSyncNotesPayload(payload, { allowRemoteOverwrite: true });
+    await writeCurrentSavedToonsToSync(true);
     await setSyncNotesEnabled(true);
     setSyncNotesEnabledState(true);
     setSyncNotesChoiceDialog(null);
@@ -1642,7 +1567,7 @@ export function SidebarApp() {
     if (!payload) return;
     setSyncNotesChoiceDialog((current) => current ? { ...current, isBusy: true, error: undefined } : current);
     try {
-      await importSyncNotesPayload(payload);
+      await importSyncNotesPayload(payload, { replace: true });
       await setSyncNotesEnabled(true);
       setSyncNotesEnabledState(true);
       setSyncNotesChoiceDialog(null);
@@ -1862,12 +1787,8 @@ export function SidebarApp() {
       }
 
       if (savedToons) {
-        await mutateSavedToonsWithSyncRollback(async () => {
-          await Promise.all([
-            clearList('toony_toons'),
-            clearList('stinky_toons'),
-            clearNotes(),
-          ]);
+        await mutateSavedToons(async () => {
+          await clearSavedToonData();
         });
         setFavorites([]);
         setBlocked([]);
@@ -2037,7 +1958,7 @@ export function SidebarApp() {
 
 
   useEffect(() => {
-    initSyncNotesRemoteListener(refresh);
+    const stopSyncListener = initSyncNotesRemoteListener(refresh);
     refresh();
     getSettings(['sidebar-open', 'active-tab', 'boss-info-enabled', 'district-indicators-enabled', 'notes-enabled', 'sync-notes-enabled', 'highlight-groups', 'toony-collapsed', 'stinky-collapsed', 'neutral-collapsed', 'tracker-enabled', 'sidebar-on-left', DISPLAY_MODE_SETTING]).then(values => {
       setDistrictIndicatorsEnabled(values['district-indicators-enabled'] !== false);
@@ -2139,6 +2060,7 @@ export function SidebarApp() {
     window.addEventListener('toonhqplus-db-changed', handleDbChange);
     browser.runtime.onMessage.addListener(handleMessage);
     return () => {
+      stopSyncListener();
       window.removeEventListener('toonhqplus-db-changed', handleDbChange);
       browser.runtime.onMessage.removeListener(handleMessage);
     };
@@ -2316,6 +2238,7 @@ export function SidebarApp() {
 
               {activeTab === 'toons' && (
                 <>
+                  <SavedToonSyncStatus />
                   <div className="mb-3 shrink-0 relative">
                     <input
                       type="text"
@@ -2520,6 +2443,7 @@ export function SidebarApp() {
               {activeTab === 'history' && (
                 <section className="flex-1 flex flex-col min-h-0">
                   <NativeConnectionStatus />
+                  <SavedToonSyncStatus />
                   <QuickTeleport showDistrictIndicators={hasLoadedSettings && districtIndicatorsEnabled} />
                   <div className="mb-2 ml-2 shrink-0 flex items-center justify-between gap-2">
                     <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>

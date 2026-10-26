@@ -56,3 +56,31 @@ test('native creation notifications populate the cache and dispose removes subsc
   assert.equal(h.service.getCached(1), undefined);
   await assert.rejects(h.service.get(1), /closed/);
 });
+
+test('a newer creation notification wins over an older in-flight status response', async t => {
+  const h = setup(t), pending = h.service.get(1);
+  const created = { district: 30, type: 3 };
+  h.emit('boarding_created', created);
+  h.emit('boarding_response', { nonce: 1, success: true, result: null });
+  assert.deepEqual(await pending, created);
+  assert.deepEqual(h.service.getCached(1), created);
+});
+
+test('a late status error cannot replace a newer creation notification with a failure cooldown', async t => {
+  const h = setup(t), pending = h.service.get(1);
+  const created = { district: 30, type: 3 };
+  h.emit('boarding_created', created);
+  h.emit('boarding_response', { nonce: 1, success: false, message: 'old request failed' });
+  assert.deepEqual(await pending, created);
+  assert.deepEqual(await h.service.get(1), created);
+});
+
+test('removing an owned Toon clears cached boarding status even when the active Toon stays unchanged', async t => {
+  const h = setup(t), pending = h.service.get(2);
+  h.emit('boarding_response', { nonce: 1, success: true, result: { district: 21 } });
+  await pending;
+  h.commit('removeToon', 2, state => { delete state.accounts.toons[2]; });
+  await h.flush();
+  assert.equal(h.service.getCached(2), undefined);
+  await assert.rejects(h.service.get(2), /not available/);
+});

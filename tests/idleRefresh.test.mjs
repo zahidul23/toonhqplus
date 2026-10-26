@@ -11,7 +11,7 @@ const compiled = ts.transpileModule(helper + '\n' + lifecycle, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function setup() {
+function setup({ settled = async () => {}, flush = async () => {} } = {}) {
   let now = 0, reloads = 0, fetches = 0, fetchResult = Promise.resolve({ ok: true });
   const listeners = new Map(), timers = new Map(), cleanup = [];
   let nextTimer = 0;
@@ -24,6 +24,9 @@ function setup() {
   const navigator = { onLine: true };
   const context = {
     window, document, navigator, AbortController,
+    historyTracker: { settled },
+    flushToonWriteBuffer: flush,
+    console,
     Date: { now: () => now },
     fetch: () => { fetches++; return fetchResult; },
     setTimeout(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; },
@@ -49,6 +52,32 @@ test('the hourly idle hidden-tab refresh remains enabled with its reachability g
   h.advance(60 * 60 * 1000 - 1); await h.check(); assert.equal(h.reloads, 0);
   h.advance(1); await h.check(); assert.equal(h.fetches, 1); assert.equal(h.reloads, 1);
   h.close(); assert.equal(h.listeners.size, 0); assert.equal(h.timers.size, 0);
+});
+
+test('idle refresh waits for native history then cache persistence before reloading', async () => {
+  let finishHistory, finishCache;
+  const steps = [];
+  const h = setup({ settled: () => { steps.push('history'); return new Promise(resolve => { finishHistory = resolve; }); },
+    flush: () => { steps.push('cache'); return new Promise(resolve => { finishCache = resolve; }); } });
+  h.advance(61 * 60 * 1000); await h.check();
+  assert.deepEqual(steps, ['history']); assert.equal(h.reloads, 0);
+  finishHistory(); await h.check(); assert.deepEqual(steps, ['history', 'cache']); assert.equal(h.reloads, 0);
+  finishCache(); await h.check(); assert.equal(h.reloads, 1); h.close();
+});
+
+test('failed cache persistence postpones idle refresh and the next interval retries', async () => {
+  let fail = true;
+  const h = setup({ flush: async () => { if (fail) throw new Error('simulated database failure'); } });
+  h.advance(61 * 60 * 1000); await h.check(); assert.equal(h.reloads, 0);
+  fail = false; await h.check(); assert.equal(h.reloads, 1); h.close();
+});
+
+test('invalidation while cache persistence is pending prevents a late reload', async () => {
+  let finish;
+  const h = setup({ flush: () => new Promise(resolve => { finish = resolve; }) });
+  h.advance(61 * 60 * 1000); await h.check(); h.close(); finish();
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  assert.equal(h.reloads, 0);
 });
 
 test('visible tabs, open dialogs and recent activity postpone the memory refresh', async () => {
