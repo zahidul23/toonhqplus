@@ -9,11 +9,10 @@ export const changelog: ChangelogEntry[] = [
     version: '1.3.0',
     date: 'Oct 22, 2026',
     changes: [
-      'Reduce ToonHQ server load by reusing its existing live connection for group history and Quick Teleport',
+      'Reduce ToonHQ server load by reusing its existing data feed',
       'Improve group history synchronization and handling of login, Toon changes, and reconnects',
-      'Keep automatic Quick Teleport status checks with the existing 60-second per-Toon cooldown',
-      'Preserve periodic idle-tab refreshes to help limit memory growth',
-      'Protect saved Toons and notes from sync failures and stale device data, and keep entries visible when details are missing'
+      'Protect saved Toons and notes from sync failures and stale device data',
+      'Keep Toon data entries visible when details are missing'
     ]
   },
   {
