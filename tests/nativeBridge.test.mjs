@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { harness, group, toon, clone } from './helpers/nativeBridgeHarness.mjs';
-import { createNativeBridgeClient } from '../entrypoints/sidebar.content/nativeBridge.ts';
+import { createNativeBridgeClient, GROUPS_PAGE_LINK_TEXT } from '../entrypoints/sidebar.content/nativeBridge.ts';
 
 function setup(t, options) { const h = harness(options); t.after(() => h.close()); return h; }
 
@@ -108,6 +108,7 @@ test('disconnect, reconnect, SPA navigation, game changes and logout pause witho
   await h.flush(); assert.equal(h.client.state.connected, true); assert.notEqual(h.client.state.context, initial);
   h.target.location.pathname = '/fishing/'; h.mutateDom(); await h.flush();
   assert.equal(h.client.state.connected, false); assert.match(h.client.state.reason, /Open the ToonHQ Groups page/);
+  assert.ok(h.client.state.reason.includes(GROUPS_PAGE_LINK_TEXT), 'the sidebar links this phrase');
   h.target.location.pathname = '/cc/groups/';
   h.commit('gameChanged', 2, state => { state.core.game = 2; state.socket.rooms.groups.game = 2; });
   await h.flush(); assert.equal(h.client.state.connected, false); assert.equal(h.client.state.gameId, 2);

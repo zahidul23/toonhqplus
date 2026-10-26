@@ -6,6 +6,7 @@ import { getToonSuitLevel } from './toonUtils';
 import { getToonHqActiveToonId } from './toonHqPageState';
 import { pageFetch } from './pageFetch';
 import { getNativeBridge, validBoardingStatus } from './nativeBridge';
+import { NativeStatusText } from './NativeConnectionStatus';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
 type Toon = { id: number; name: string; game?: number; photo?: string; sellbot?: unknown; cashbot?: unknown; lawbot?: unknown; bossbot?: unknown };
@@ -710,7 +711,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       {status && (
         <div className="flex items-center gap-2 px-1">
           <div role="status" className="min-w-0 flex-1 text-[10px] leading-snug text-green-100/75">
-            {status.split('\n').map((line, index) => <div key={`${index}:${line}`}>{line}</div>)}
+            {status.split('\n').map((line, index) => <div key={`${index}:${line}`}><NativeStatusText text={line} /></div>)}
           </div>
           <div className="group relative shrink-0" tabIndex={refreshDisabled ? 0 : -1}>
             <button

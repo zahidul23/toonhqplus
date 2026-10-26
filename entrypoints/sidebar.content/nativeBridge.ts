@@ -15,6 +15,9 @@ export type NativeUpdate = {
   groups: any[];
   archived: any[];
 };
+/** Phrase in public/native-bridge.js reasons that the sidebar turns into a link. */
+export const GROUPS_PAGE_LINK_TEXT = 'ToonHQ Groups page';
+export const GROUPS_PAGE_PATH = '/groups';
 const REQUEST = 'toonhqplus-native-request';
 const MESSAGE = 'toonhqplus-native-message';
 const unavailable = (reason: string): NativePageState => ({
