@@ -361,13 +361,19 @@ function mergeToonDetails(previous: any, incoming: ToonRecord): ToonRecord {
   if (!incoming.detailsUnavailable && incoming.name && !newer) delete result.detailsUnavailable;
   return { ...result, id: String(incoming.id) } as ToonRecord;
 }
-async function existingToon(store: IDBObjectStore, id: string): Promise<ToonRecord | undefined> {
+/** Merge into the stored Toon and rewrite it under its string key. `pending`
+ * is unflushed cache data the caller is about to discard from the buffer. */
+async function putMergedToon(store: IDBObjectStore, id: string, incoming: ToonRecord, pending?: ToonRecord): Promise<void> {
   const legacy = legacyNumericKeyCandidate(id);
   const [direct, numeric] = await Promise.all([
     promisifyRequest<ToonRecord | undefined>(store.get(id)),
     legacy == null ? undefined : promisifyRequest<ToonRecord | undefined>(store.get(legacy)),
   ]);
-  return direct || numeric;
+  let previous: ToonRecord | undefined = direct || numeric;
+  if (pending) previous = mergeToonDetails(previous, { ...pending, id });
+  store.put(mergeToonDetails(previous, { ...incoming, id }));
+  // Older databases keyed Toons by number; drop that copy once migrated.
+  if (numeric && legacy != null) store.delete(legacy);
 }
 async function abortSavedTransaction(t: IDBTransaction, done: Promise<void>, error: unknown): Promise<never> {
   try { t.abort(); } catch { /* It may already have aborted. */ }
@@ -384,10 +390,7 @@ export async function flushToonWriteBuffer(): Promise<void> {
     const t = tx(db, 'toons', 'readwrite');
     const done = promisifyTx(t), store = t.objectStore('toons');
     try {
-      await Promise.all([...batch].map(async ([id, toon]) => {
-        const previous = await existingToon(store, id);
-        store.put(mergeToonDetails(previous, toon));
-      }));
+      await Promise.all([...batch].map(([id, toon]) => putMergedToon(store, id, toon)));
       await done;
     } catch (error) { await abortSavedTransaction(t, done, error); }
     for (const [id, toon] of batch) if (toonWriteBuffer.get(id) === toon) toonWriteBuffer.delete(id);
@@ -533,7 +536,6 @@ export async function saveToonToList(store: ListStore, toon: ToonRecord, action:
   const t = tx(await openDB(), ['toons', 'toony_toons', 'stinky_toons', 'notes', 'settings'], 'readwrite');
   const done = promisifyTx(t), cached = toonWriteBuffer.get(id);
   try {
-    const previous = await existingToon(t.objectStore('toons'), id);
     const changes: { kind: SavedRecordKind; id: string; deleted: boolean }[] = [
       { kind: store === 'toony_toons' ? 'toony' : 'stinky', id, deleted: action === 'remove' },
     ];
@@ -545,7 +547,7 @@ export async function saveToonToList(store: ListStore, toon: ToonRecord, action:
     deleteBothKeys(t.objectStore(store), id);
     if (action !== 'remove') {
       t.objectStore(store).put({ toonId: id }); deleteBothKeys(t.objectStore(other), id);
-      t.objectStore('toons').put(mergeToonDetails(previous || cached, { ...toon, id }));
+      await putMergedToon(t.objectStore('toons'), id, toon, cached);
       if (note !== undefined) {
         deleteBothKeys(t.objectStore('notes'), id);
         if (note.trim()) t.objectStore('notes').put({ toonId: id, text: note.trim() });
@@ -553,7 +555,8 @@ export async function saveToonToList(store: ListStore, toon: ToonRecord, action:
     }
     await done;
   } catch (error) { await abortSavedTransaction(t, done, error); }
-  if (toonWriteBuffer.get(id) === cached) toonWriteBuffer.delete(id);
+  // The buffered entry was merged into this write; a removal leaves it to flush.
+  if (action !== 'remove' && cached && toonWriteBuffer.get(id) === cached) toonWriteBuffer.delete(id);
   notifyChanged('toons', id); notifyChanged(store, id); notifyChanged(other, id); notifyChanged('notes', id);
 }
 export async function saveToonNote(toon: ToonRecord, text: string): Promise<void> {
@@ -562,9 +565,8 @@ export async function saveToonNote(toon: ToonRecord, text: string): Promise<void
   if (!id) throw new Error('A valid Toon ID is required.');
   const t = tx(await openDB(), ['toons', 'notes', 'settings'], 'readwrite'), done = promisifyTx(t);
   try {
-    const previous = await existingToon(t.objectStore('toons'), id);
     await stampSavedChanges(t, [{ kind: 'note', id, deleted: !text.trim() }]);
-    t.objectStore('toons').put(mergeToonDetails(previous, { ...toon, id }));
+    await putMergedToon(t.objectStore('toons'), id, toon);
     deleteBothKeys(t.objectStore('notes'), id);
     if (text.trim()) t.objectStore('notes').put({ toonId: id, text: text.trim() });
     await done;
@@ -673,10 +675,7 @@ export async function applySavedToonData(snapshot: SavedToonDataSnapshot, replac
     for (const name of ['toony_toons', 'stinky_toons', 'notes']) t.objectStore(name).clear();
     for (const toon of merged.toons) {
       const id = normalizeToonId(toon.id);
-      if (id) {
-        const previous = await existingToon(t.objectStore('toons'), id);
-        t.objectStore('toons').put(mergeToonDetails(previous, { ...toon, id }));
-      }
+      if (id) await putMergedToon(t.objectStore('toons'), id, toon);
     }
     merged.toonyToonIds.forEach(id => t.objectStore('toony_toons').put({ toonId: String(id) }));
     merged.stinkyToonIds.forEach(id => t.objectStore('stinky_toons').put({ toonId: String(id) }));

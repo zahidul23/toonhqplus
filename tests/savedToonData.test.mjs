@@ -419,6 +419,33 @@ test('old buffered cache data cannot overwrite a newer durable user save', async
   assert.equal((await db.getToon('101')).laff, 140);
 });
 
+test('a user save keeps fields from unflushed cache data it replaces', async t => {
+  await setup(t); await rawPut('toons', toon(101, { laff: 100 }));
+  await db.putToon(toon(101, { organic_level: 5, lastSeen: '2026-10-22T11:00:00Z' }));
+  await db.saveToonToList('toony_toons', toon(101, { laff: 140, lastSeen: '2026-10-22T12:00:00Z' }), 'add');
+  await db.flushToonWriteBuffer();
+  const result = await db.getToon('101'); assert.equal(result.laff, 140); assert.equal(result.organic_level, 5);
+});
+
+test('removing a saved Toon leaves unflushed cache data queued', async t => {
+  await setup(t); await db.saveToonToList('toony_toons', toon(101), 'add');
+  await db.putToon(toon(101, { laff: 150, lastSeen: '2026-10-22T11:00:00Z' }));
+  await db.saveToonToList('toony_toons', toon(101), 'remove'); await db.flushToonWriteBuffer();
+  assert.equal((await db.getToon('101')).laff, 150);
+});
+
+test('rewriting a legacy numeric-key Toon removes the numeric copy', async t => {
+  await setup(t);
+  await rawPut('toons', { ...toon(42, { laff: 120 }), id: 42 }); await rawPut('toons', { ...toon(43), id: 43 });
+  await db.saveToonToList('toony_toons', toon(42), 'add');
+  await db.putToon(toon(43, { laff: 90 })); await db.flushToonWriteBuffer();
+  const t2 = (await db.openDB()).transaction('toons'), done = txDone(t2);
+  const ids = await new Promise(resolve => { t2.objectStore('toons').getAllKeys().onsuccess = e => resolve(e.target.result); });
+  await done;
+  assert.deepEqual(ids, ['42', '43']);
+  assert.equal((await db.getToon('42')).laff, 120); assert.equal((await db.getToon('43')).laff, 90);
+});
+
 test('legacy unversioned sync chunks are readable and new uploads use an explicit v2 generation', async t => {
   const h = await setup(t), legacy = cloudPayload({ ...empty(), toonyToonIds: ['101'] });
   delete legacy['toonhqplus-sync-notes-meta'].generation;
