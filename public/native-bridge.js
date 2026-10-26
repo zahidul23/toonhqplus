@@ -57,7 +57,7 @@
     try {
       const detail = JSON.stringify(Object.assign({ version: 1, client, session, sequence: sequence + 1 }, message));
       if (detail.length > 4_000_000) {
-        send({ type: 'unavailable', reason: 'Native group data exceeds the supported size.' });
+        send({ type: 'unavailable', reason: 'Live history is paused because ToonHQ has too many groups to copy.' });
         return false;
       }
       sequence++;
@@ -89,9 +89,9 @@
         currentToonId: accounts.currentToon == null ? null : String(accounts.currentToon),
         subscriptionToonId: validId(state.groups.toonBoardingGroupSubscription) ? state.groups.toonBoardingGroupSubscription : null,
         ownedToons,
-        reason: ready ? null : gameId !== 1 ? 'Live history is paused outside Toontown Rewritten.'
-          : !onGroups ? 'Open ToonHQ Groups to enable live history and boarding checks.'
-            : 'Waiting for ToonHQ\'s groups connection.',
+        reason: ready ? null : gameId !== 1 ? 'Live history only works for Toontown Rewritten. Switch ToonHQ to Toontown Rewritten to resume.'
+          : !onGroups ? 'Open the ToonHQ Groups page to turn on live history and Quick Teleport status checks.'
+            : 'Connecting to ToonHQ Groups…',
       },
     };
   }
@@ -187,7 +187,7 @@
       if (candidate) { vue = candidate; break; }
     }
     if (store && root && !root._isDestroyed && vue && vue.$store === store && compatible(root)) return;
-    if (store) { detach(); send({ type: 'unavailable', reason: 'Waiting for ToonHQ\'s page state.' }); }
+    if (store) { detach(); send({ type: 'unavailable', reason: 'Connecting to ToonHQ…' }); }
     if (!compatible(vue)) return;
     try {
       root = vue.$root; store = vue.$store;
@@ -233,7 +233,7 @@
     const reply = data => { if (!disposed && client === owner) send(Object.assign({ type: 'boarding-result', id: request.id }, data)); };
     if (!state || !state.connected || !state.authenticated || !state.ownedToons.some(toon => toon.id === toonId && toon.external === true && toon.game === 1) ||
         !store._actions || !store._actions.loadExistingBoardingGroup) {
-      reply({ error: state && state.reason || 'ToonHQ\'s boarding checks are unavailable for this Toon.' }); return;
+      reply({ error: state && state.reason || 'Quick Teleport status checks are unavailable for this Toon.' }); return;
     }
     const requestContext = state.context;
     const key = requestContext + ':' + toonId;
@@ -268,7 +268,7 @@
     if (!request || request.version !== 1 || typeof request.client !== 'string' || request.client.length > 100) return;
     if (request.type === 'snapshot') {
       client = request.client; forceFull = true; discover(); flush();
-      if (!store) send({ type: 'unavailable', reason: 'Waiting for ToonHQ\'s native page state. Live history is paused.' });
+      if (!store) send({ type: 'unavailable', reason: 'Connecting to ToonHQ…' });
     } else if (request.client === client && request.type === 'boarding' &&
         typeof request.id === 'string' && request.id.length <= 100 && validId(request.toonId)) {
       void boarding(request);

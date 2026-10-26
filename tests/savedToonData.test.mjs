@@ -374,7 +374,7 @@ test('backup merge keeps a successful local save when its later cloud upload fai
   h.failCloud(); await runBackupImport(h, site);
   assert.deepEqual(await db.getAllFromList('toony_toons'), ['101', '202']);
   assert.equal(await db.getNote('101'), 'local note'); assert.equal(await db.getNote('202'), 'imported note');
-  assert.match(await db.getSetting(h.sync.SYNC_PENDING_KEY), /sync is pending/);
+  assert.equal(await db.getSetting(h.sync.SYNC_PENDING_KEY), 'Saved on this device, but Sync Notes couldn’t update.');
 });
 
 test('backup replacement restamps imported IDs and deletion markers after restoring old metadata', async t => {

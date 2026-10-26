@@ -49,7 +49,7 @@ export function validBoardingStatus(value: any): boolean {
 
 /** Local DOM transport only; deliberately has no fetch/WebSocket fallback. */
 export function createNativeBridgeClient(target: Window, clientId = crypto.randomUUID()) {
-  let state = unavailable('Waiting for ToonHQ\'s native page state.');
+  let state = unavailable('Connecting to ToonHQ…');
   let disposed = false, sequence = 0, nextRequest = 0, session = '';
   const retiredSessions = new Set<string>();
   const groups = new Map<number, any>();
@@ -83,7 +83,7 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
       if (retiredSessions.has(message.session) || !(message.type === 'state' && message.full || message.type === 'unavailable')) return;
       if (session) retiredSessions.add(session);
       session = message.session; sequence = 0;
-      rejectPending('The ToonHQ page bridge restarted. Try again.');
+      rejectPending('The connection to ToonHQ restarted. Try again.');
     }
     if (message.sequence <= sequence) return;
     // Every update is ordered. A missed delta requires only a local snapshot.
@@ -135,8 +135,8 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
       return () => { boardingListeners.delete(listener); };
     },
     requestBoarding(toonId: number, timeoutMs = 12_000): Promise<any> {
-      if (disposed || !state.connected || !state.authenticated || !id(toonId)) return Promise.reject(new Error(state.reason || 'ToonHQ\'s boarding checks are unavailable.'));
-      if (!state.ownedToons.some(toon => toon.id === toonId && toon.game === 1 && toon.external === true)) return Promise.reject(new Error('This Toon is not available for boarding checks.'));
+      if (disposed || !state.connected || !state.authenticated || !id(toonId)) return Promise.reject(new Error(state.reason || 'Quick Teleport status checks are unavailable right now.'));
+      if (!state.ownedToons.some(toon => toon.id === toonId && toon.game === 1 && toon.external === true)) return Promise.reject(new Error('Only Toontown Rewritten Toons linked to your ToonHQ account can be checked.'));
       const requestId = `${clientId}:${++nextRequest}`;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { pending.delete(requestId); reject(new Error('ToonHQ did not answer the boarding check in time.')); }, timeoutMs);
@@ -148,7 +148,7 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
       if (disposed) return;
       send({ type: 'dispose' }); disposed = true;
       target.removeEventListener(MESSAGE, receive);
-      rejectPending('The ToonHQ page bridge closed.');
+      rejectPending('The connection to ToonHQ closed.');
       updates.clear(); boardingListeners.clear(); groups.clear();
     },
   };

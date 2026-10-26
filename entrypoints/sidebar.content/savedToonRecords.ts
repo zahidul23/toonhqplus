@@ -94,7 +94,7 @@ export function buildSavedToonMap(records: { id: string; name: string; hashId?: 
   }
   const saved = new Set(savedIds);
   for (const [hash, ids] of aliases) if (!map[hash] && !saved.has(hash) && ids.size === 1) map[hash] = map[[...ids][0]];
-  for (const id of referencedIds) if (!map[id]) map[id] = { id, name: `Saved Toon ${id}`, detailsUnavailable: true };
+  for (const id of referencedIds) if (!map[id]) map[id] = { id, name: `Unknown Toon (${id})`, detailsUnavailable: true };
   return map;
 }
 

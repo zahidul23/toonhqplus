@@ -378,7 +378,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     if (!boardingCheckReady) {
       setBoardingStatus(undefined);
       setCheckingStatus(false);
-      setStatus(nativeState.reason || 'Waiting for ToonHQ Groups.');
+      setStatus(nativeState.reason || 'Connecting to ToonHQ Groups…');
       return;
     }
 
@@ -421,7 +421,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     setPersistedAutoBoardingCheck(toonId, { checkedAt: now });
     let cancelled = false;
     setCheckingStatus(true);
-    setStatus('Checking your Toon\'s current location...');
+    setStatus('Checking your Toon’s current location…');
     getBoardingGroupStatus(Number(toonId), true)
       .then(result => {
         setPersistedAutoBoardingCheck(toonId, { checkedAt: now, result });
@@ -452,7 +452,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
   const selectedDistrict = districts.find(district => String(district.id) === districtId);
   const toonIsOffline = boardingStatus === null;
   const teleportDisabledReason = !nativeState.connected
-    ? nativeState.reason || 'Waiting for ToonHQ Groups.'
+    ? nativeState.reason || 'Connecting to ToonHQ Groups…'
     : busy
     ? 'Teleport is in progress.'
     : checkingStatus
@@ -470,7 +470,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
               : undefined;
   const refreshDisabled = !nativeState.connected || !toonId || busy || checkingStatus || refreshCooldown > 0;
   const refreshTooltip = !nativeState.connected
-    ? nativeState.reason || 'Waiting for ToonHQ Groups.'
+    ? nativeState.reason || 'Connecting to ToonHQ Groups…'
     : refreshCooldown > 0
     ? `You can refresh again in ${refreshCooldown} second${refreshCooldown === 1 ? '' : 's'}.`
     : checkingStatus
@@ -491,7 +491,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     if (!isCurrentToonContext(requestContext) || !toonId || busy || checkingStatus || refreshCooldown > 0) return;
     setRefreshCooldown(LOCATION_REFRESH_COOLDOWN_SECONDS);
     setCheckingStatus(true);
-    setStatus('Refreshing location...');
+    setStatus('Refreshing location…');
     try {
       const result = await getBoardingGroupStatus(Number(toonId), true);
       if (!isCurrentToonContext(requestContext)) return;
@@ -524,7 +524,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     }
 
     setBusy(true);
-    setStatus(`Creating a temporary group for ${destinationFullName}...`);
+    setStatus(`Creating a temporary group for ${destinationFullName}…`);
     try {
       const createResponse = await pageFetch(new URL('/api/groups/create/', window.location.origin).href, {
         method: 'POST',
@@ -558,11 +558,11 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       }
 
       if (!isCurrentToonContext(requestContext)) return;
-      setStatus('Teleport requested. Checking the in-game boarding group in 10 seconds...');
+      setStatus('Teleport requested. Checking the in-game boarding group in 10 seconds…');
       await new Promise(resolve => window.setTimeout(resolve, TELEPORT_VERIFICATION_DELAY_MS));
       if (!isCurrentToonContext(requestContext)) return;
 
-      setStatus('Verifying the in-game boarding group...');
+      setStatus('Verifying the in-game boarding group…');
       const verifiedStatus = await getBoardingGroupStatus(Number(toonId), true);
       if (!isCurrentToonContext(requestContext)) return;
       if (!verifiedStatus?.type) throw new Error('Something went wrong. We were not able to create a boarding group.');
@@ -702,7 +702,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
 
       <div className="group relative w-full" tabIndex={teleportDisabledReason ? 0 : -1}>
         <button type="button" aria-describedby={teleportDisabledReason ? 'quick-teleport-disabled-reason' : undefined} disabled={!!teleportDisabledReason} onClick={teleport} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-          {checkingStatus ? 'Checking...' : busy ? (autoDelist ? 'Teleporting...' : 'Creating...') : autoDelist ? `Teleport to ${selectedDestinationFullName}` : `Create ${selectedDestinationFullName} Group`}
+          {checkingStatus ? 'Checking…' : busy ? (autoDelist ? 'Teleporting…' : 'Creating…') : autoDelist ? `Teleport to ${selectedDestinationFullName}` : `Create ${selectedDestinationFullName} Group`}
         </button>
         {teleportDisabledReason && <HoverTooltip id="quick-teleport-disabled-reason">{teleportDisabledReason}</HoverTooltip>}
       </div>

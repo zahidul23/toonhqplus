@@ -107,7 +107,7 @@ test('disconnect, reconnect, SPA navigation, game changes and logout pause witho
   h.commit('setSid', 'next', state => { state.socket.status = 'connected'; state.socket.sid = 'next'; });
   await h.flush(); assert.equal(h.client.state.connected, true); assert.notEqual(h.client.state.context, initial);
   h.target.location.pathname = '/fishing/'; h.mutateDom(); await h.flush();
-  assert.equal(h.client.state.connected, false); assert.match(h.client.state.reason, /Open ToonHQ Groups/);
+  assert.equal(h.client.state.connected, false); assert.match(h.client.state.reason, /Open the ToonHQ Groups page/);
   h.target.location.pathname = '/cc/groups/';
   h.commit('gameChanged', 2, state => { state.core.game = 2; state.socket.rooms.groups.game = 2; });
   await h.flush(); assert.equal(h.client.state.connected, false); assert.equal(h.client.state.gameId, 2);
@@ -166,7 +166,7 @@ test('native schema changes pause collection and recover without opening a conne
   const h = setup(t);
   h.store.state.groups.groups = undefined;
   h.mutateDom(); await h.flush(); assert.equal(h.client.state.available, false);
-  await assert.rejects(h.client.requestBoarding(1), /Waiting/);
+  await assert.rejects(h.client.requestBoarding(1), /Connecting to ToonHQ/);
   h.store.state.groups.groups = { 10: group() };
   h.mutateDom(); await h.flush(); assert.equal(h.client.state.connected, true);
   assert.equal(h.nativeRequests.length, 0); assert.equal(h.forbidden.length, 0);
@@ -230,7 +230,7 @@ test('boarding-created only follows the native active-Toon subscription', async 
 
 test('unowned and incompatible boarding requests do not dispatch native actions', async t => {
   const h = setup(t);
-  await assert.rejects(h.client.requestBoarding(900), /not available/);
+  await assert.rejects(h.client.requestBoarding(900), /linked to your ToonHQ account/);
   h.store._actions = {};
   await assert.rejects(h.client.requestBoarding(1), /unavailable/);
   h.raw({ version: 1, client: 'test-client', type: 'dispatch', action: 'createGroup' });
@@ -285,7 +285,7 @@ test('invalid schema and oversized page data fail closed, then recover with a fu
     state.groups.groups[10] = oversized;
   });
   await h.flush(); assert.equal(h.client.state.available, false);
-  assert.match(h.client.state.reason, /size/);
+  assert.match(h.client.state.reason, /too many groups/);
   h.commit('addOrUpdateGroup', { id: 10 }, state => { state.groups.groups[10] = group(); });
   await h.flush(); assert.equal(h.client.state.connected, true);
   const replay = []; h.client.subscribe(update => replay.push(update));
@@ -326,7 +326,7 @@ test('unlinking a Toon rejects its pending check and stale response without chan
   await h.flush(); await pending;
   h.emit('boarding_response', { nonce: 1, success: true, result: { district: 99 } });
   await h.flush();
-  await assert.rejects(h.client.requestBoarding(2), /not available/);
+  await assert.rejects(h.client.requestBoarding(2), /linked to your ToonHQ account/);
 });
 
 test('one failing extension callback cannot stop other native state consumers', async t => {

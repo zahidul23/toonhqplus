@@ -18,6 +18,19 @@ const SCHEMA_VERSION = 2;
 const CHUNK_SIZE = 7000;
 const MAX_TOTAL_BYTES = 100 * 1024;
 
+const SYNC_ERRORS = {
+  offline: 'Sync Notes needs an internet connection. Reconnect and try again.',
+  full: 'Sync Notes is full. Remove some saved Toons or notes to resume syncing.',
+  newer: 'Sync Notes data was saved by a newer version of ToonHQ+. Update the extension to sync.',
+  damaged: 'Sync Notes data is damaged. Your saved Toons on this device were not changed.',
+};
+// Short banner text for a failed background sync; the full error goes to the console.
+const PENDING_MESSAGES: Record<string, string> = {
+  [SYNC_ERRORS.offline]: 'Saved on this device. Sync Notes will update when you’re back online.',
+  [SYNC_ERRORS.full]: 'Saved on this device, but Sync Notes is full. Remove some saved Toons or notes to resume syncing.',
+  [SYNC_ERRORS.newer]: 'Saved on this device, but another device uses a newer version of ToonHQ+. Update the extension to keep syncing.',
+};
+
 export interface SyncNotesPayload extends SavedToonDataSnapshot {
   app: 'toonhqplus';
   schemaVersion: 1 | 2;
@@ -80,7 +93,7 @@ function isSyncKey(key: string): boolean {
 
 function assertOnlineForSync(): void {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    throw new Error('Sync Notes needs an internet connection. Reconnect and try again.');
+    throw new Error(SYNC_ERRORS.offline);
   }
 }
 
@@ -119,28 +132,28 @@ export async function readSyncNotesPayload(): Promise<SyncNotesPayload | null> {
   const result = await browser.storage.sync.get(SYNC_META_KEY);
   const meta = result[SYNC_META_KEY] as SyncNotesMeta | undefined;
   if (!meta) return null;
-  if (meta.app !== 'toonhqplus' || ![1, SCHEMA_VERSION].includes(meta.schemaVersion) || meta.compression !== 'gzip-base64') throw new Error('Synced Notes data uses an unsupported format.');
+  if (meta.app !== 'toonhqplus' || ![1, SCHEMA_VERSION].includes(meta.schemaVersion) || meta.compression !== 'gzip-base64') throw new Error(SYNC_ERRORS.newer);
 
-  if (!Number.isSafeInteger(meta.chunkCount) || meta.chunkCount < 1 || meta.chunkCount > 64 || (meta.generation !== undefined && !/^[a-zA-Z0-9-]{1,100}$/.test(meta.generation))) throw new Error('Invalid Sync Notes metadata.');
+  if (!Number.isSafeInteger(meta.chunkCount) || meta.chunkCount < 1 || meta.chunkCount > 64 || (meta.generation !== undefined && !/^[a-zA-Z0-9-]{1,100}$/.test(meta.generation))) throw new Error(SYNC_ERRORS.damaged);
   const prefix = meta.generation ? SYNC_CHUNK_PREFIX + meta.generation + '-' : SYNC_CHUNK_PREFIX;
   const chunkKeys = Array.from({ length: meta.chunkCount }, (_, index) => prefix + index);
   const chunks = await browser.storage.sync.get(chunkKeys);
   const encoded = chunkKeys.map((key) => {
     const chunk = chunks[key];
-    if (typeof chunk !== 'string') throw new Error('Synced Notes data is incomplete. Try syncing again from another device.');
+    if (typeof chunk !== 'string') throw new Error('Sync Notes data is incomplete. Try syncing again from another device.');
     return chunk;
   }).join('');
 
   const raw = await decompressToString(base64ToBytes(encoded));
   const parsed = JSON.parse(raw) as SyncNotesPayload;
   if (!parsed || parsed.app !== 'toonhqplus' || parsed.schemaVersion !== meta.schemaVersion) {
-    throw new Error('Synced Notes data uses an unsupported format.');
+    throw new Error(SYNC_ERRORS.damaged);
   }
   if (!Array.isArray(parsed.toons) || !parsed.toons.every(toon => toon && (typeof toon.id === 'string' || Number.isSafeInteger(toon.id)) && typeof toon.name === 'string') ||
       !Array.isArray(parsed.toonyToonIds) || !Array.isArray(parsed.stinkyToonIds) || ![...parsed.toonyToonIds, ...parsed.stinkyToonIds].every(id => typeof id === 'string' && id.length > 0 || typeof id === 'number' && Number.isSafeInteger(id)) || !parsed.notes || typeof parsed.notes !== 'object' || Array.isArray(parsed.notes) ||
-      !Object.values(parsed.notes).every(text => typeof text === 'string') || (parsed.recordVersions !== undefined && !validSavedVersions(parsed.recordVersions))) throw new Error('Invalid saved Toon data. Local data was preserved.');
+      !Object.values(parsed.notes).every(text => typeof text === 'string') || (parsed.recordVersions !== undefined && !validSavedVersions(parsed.recordVersions))) throw new Error(SYNC_ERRORS.damaged);
   const present = savedSnapshotValues(parsed);
-  if (Object.entries(parsed.recordVersions || {}).some(([key, version]) => version.deleted === present.has(key))) throw new Error('Inconsistent saved Toon revisions. Local data was preserved.');
+  if (Object.entries(parsed.recordVersions || {}).some(([key, version]) => version.deleted === present.has(key))) throw new Error(SYNC_ERRORS.damaged);
   const latest = (await browser.storage.sync.get(SYNC_META_KEY))[SYNC_META_KEY] as SyncNotesMeta | undefined;
   if (JSON.stringify(latest) !== JSON.stringify(meta)) throw new Error('Sync Notes changed while reading. Try again.');
   return normalizePayload({ ...parsed, updatedAt: meta.updatedAt });
@@ -159,7 +172,7 @@ async function publish(payload: SyncNotesPayload): Promise<void> {
   for (let index = 0; index < chunkCount; index++) chunks[SYNC_CHUNK_PREFIX + generation + '-' + index] = encoded.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
   const meta: SyncNotesMeta = { app: 'toonhqplus', schemaVersion: SCHEMA_VERSION, updatedAt: normalized.updatedAt, chunkCount, compression: 'gzip-base64', generation };
   const update = { ...chunks, [SYNC_META_KEY]: meta };
-  if (measureBytes(JSON.stringify(update)) > MAX_TOTAL_BYTES) throw new Error('Sync Notes exceeds browser sync storage capacity. Your changes are saved on this device.');
+  if (measureBytes(JSON.stringify(update)) > MAX_TOTAL_BYTES) throw new Error(SYNC_ERRORS.full);
   const existing = (await browser.storage.sync.get(SYNC_META_KEY))[SYNC_META_KEY] as SyncNotesMeta | undefined;
   await browser.storage.sync.set(update);
   lastLocalGeneration = generation;
@@ -247,9 +260,9 @@ export async function setSyncNotesEnabled(enabled: boolean): Promise<void> {
 }
 
 async function markPending(error: unknown): Promise<void> {
-  const message = 'Saved on this device; sync is pending. ' + (error instanceof Error ? error.message : String(error));
-  await setSetting(SYNC_PENDING_KEY, message);
-  console.warn('[ToonHQ+] ' + message);
+  const detail = error instanceof Error ? error.message : String(error);
+  await setSetting(SYNC_PENDING_KEY, (Object.hasOwn(PENDING_MESSAGES, detail) ? PENDING_MESSAGES[detail] : 'Saved on this device, but Sync Notes couldn’t update.'));
+  console.warn('[ToonHQ+] Sync Notes is pending:', detail);
 }
 export async function syncSavedToonsAfterLocalMutation(): Promise<void> {
   if (!(await isSyncNotesEnabled())) return;

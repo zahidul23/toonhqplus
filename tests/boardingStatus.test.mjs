@@ -82,5 +82,5 @@ test('removing an owned Toon clears cached boarding status even when the active 
   h.commit('removeToon', 2, state => { delete state.accounts.toons[2]; });
   await h.flush();
   assert.equal(h.service.getCached(2), undefined);
-  await assert.rejects(h.service.get(2), /not available/);
+  await assert.rejects(h.service.get(2), /linked to your ToonHQ account/);
 });

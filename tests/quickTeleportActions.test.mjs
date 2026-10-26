@@ -52,7 +52,7 @@ test('manual refresh finishing after unmount does not update the closed UI', asy
   h.active.current = false;
   h.emit('boarding_response', { nonce: 1, success: true, result: { district: 30 } });
   await refresh;
-  assert.equal(h.view.status, 'Refreshing location...');
+  assert.equal(h.view.status, 'Refreshing location…');
   assert.equal(h.view.boarding, undefined);
   assert.equal(h.service.getCached(1).district, 30);
 });

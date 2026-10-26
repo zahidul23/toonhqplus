@@ -36,7 +36,7 @@ export function createBoardingStatusService(bridge: ReturnType<typeof getNativeB
       listeners.add(listener); return () => { listeners.delete(listener); };
     },
     get(toonId: number, forceRefresh = false): Promise<BoardingGroupStatus> {
-      if (disposed) return Promise.reject(new Error('The ToonHQ page bridge closed.'));
+      if (disposed) return Promise.reject(new Error('The connection to ToonHQ closed.'));
       const existing = inFlight.get(toonId);
       if (existing) return existing;
       if (forceRefresh) { recent.delete(toonId); failures.delete(toonId); }

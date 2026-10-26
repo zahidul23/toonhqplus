@@ -12,7 +12,7 @@ export const changelog: ChangelogEntry[] = [
       'Reduce ToonHQ server load by reusing its existing data feed',
       'Improve group history synchronization and handling of login, Toon changes, and reconnects',
       'Protect saved Toons and notes from sync failures and stale device data',
-      'Keep Toon data entries visible when details are missing'
+      'Keep saved Toons visible even when their details can’t be loaded'
     ]
   },
   {
