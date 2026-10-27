@@ -10,7 +10,7 @@ export const changelog: ChangelogEntry[] = [
     date: 'Oct 26, 2026',
     changes: [
       'Reduce ToonHQ server load by reusing its existing data feed',
-      'Fix issues with saved Toons getting lost',
+      'Fix issues with saved Toon data getting lost',
       'Add Defense, Remote Controls, and Oil Cans to the Gag Calculator',
       'Add Cog Healths and Oil Can Damage reference pages next to Common Gag Combos'
     ]
