@@ -7,16 +7,12 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.3.0',
-    date: 'Oct 22, 2026',
+    date: 'Oct 26, 2026',
     changes: [
       'Reduce ToonHQ server load by reusing its existing data feed',
-      'Improve group history synchronization and handling of login, Toon changes, and reconnects',
-      'Protect saved Toons and notes from sync failures and stale device data',
-      'Keep saved Toons visible even when their details can’t be loaded',
-      'Add Field Office and Factory Foreman defense, Remote Controls, and CEO Oil Cans to the Gag Calculator',
-      'Add Cog Healths and Oil Can Damage reference pages next to Common Gag Combos',
-      'The Gag Calculator trash can now also clears all selected options',
-      'Reduce unneeded scrolling in the Gag Calculator'
+      'Fix issues with saved Toons getting lost',
+      'Add Defense, Remote Controls, and Oil Cans to the Gag Calculator',
+      'Add Cog Healths and Oil Can Damage reference pages next to Common Gag Combos'
     ]
   },
   {
