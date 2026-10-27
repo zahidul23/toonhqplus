@@ -12,10 +12,20 @@ export function NativeStatusText({ text }: { text: string }) {
   </>;
 }
 
+const STATUS_DELAY_MS = 1000;
+
 export function NativeConnectionStatus() {
   const [state, setState] = useState(() => getNativeBridge().state);
   useEffect(() => getNativeBridge().subscribe(update => setState(update.state)), []);
-  if (state.connected || state.reason?.includes(GROUPS_PAGE_LINK_TEXT)) return null;
+  const hidden = state.connected || !!state.reason?.includes(GROUPS_PAGE_LINK_TEXT);
+  const [delayed, setDelayed] = useState(false);
+  // Reconnects are usually instant; only show the message if one drags on.
+  useEffect(() => {
+    if (hidden) { setDelayed(false); return; }
+    const timer = setTimeout(() => setDelayed(true), STATUS_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [hidden, state.reason]);
+  if (hidden || !delayed) return null;
   return <p role="status" className="mb-2 rounded-md bg-black/20 px-2 py-1.5 text-xs text-green-100/80">
     <NativeStatusText text={state.reason || 'Live history is paused while ToonHQ reconnects.'} />
   </p>;
