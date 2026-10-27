@@ -794,6 +794,11 @@ function injectHighlightStyles() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      white-space: nowrap;
+    }
+
+    .group-details-dialog .row.text-center > div p:has(> .toonhq-plus-district-indicators) > .toonhq-plus-district-indicators {
+      flex-shrink: 0;
     }
 
     :is(.vuedal, .group-details-dialog) :is(.multiselect__option, .multiselect__single, [role="option"], .dropdown-item):has(> .toonhq-plus-district-indicators) {
