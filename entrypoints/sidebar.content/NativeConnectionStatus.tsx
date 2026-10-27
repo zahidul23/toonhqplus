@@ -15,7 +15,7 @@ export function NativeStatusText({ text }: { text: string }) {
 export function NativeConnectionStatus() {
   const [state, setState] = useState(() => getNativeBridge().state);
   useEffect(() => getNativeBridge().subscribe(update => setState(update.state)), []);
-  if (state.connected) return null;
+  if (state.connected || state.reason?.includes(GROUPS_PAGE_LINK_TEXT)) return null;
   return <p role="status" className="mb-2 rounded-md bg-black/20 px-2 py-1.5 text-xs text-green-100/80">
     <NativeStatusText text={state.reason || 'Live history is paused while ToonHQ reconnects.'} />
   </p>;

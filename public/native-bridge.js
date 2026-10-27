@@ -90,7 +90,7 @@
         subscriptionToonId: validId(state.groups.toonBoardingGroupSubscription) ? state.groups.toonBoardingGroupSubscription : null,
         ownedToons,
         reason: ready ? null : gameId !== 1 ? 'Live history only works for Toontown Rewritten. Switch ToonHQ to Toontown Rewritten to resume.'
-          : !onGroups ? 'Open the ToonHQ Groups page to turn on live history and Quick Teleport status checks.'
+          : !onGroups ? 'Open the ToonHQ Groups page to use the Quick Teleport and Quick Create functionality.'
             : 'Connecting to ToonHQ Groups…',
       },
     };
