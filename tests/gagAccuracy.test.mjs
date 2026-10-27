@@ -5,6 +5,30 @@ import { calculateGagAccuracy } from '../entrypoints/sidebar.content/gagAccuracy
 const gag = (trackId, gagIndex, variant = 'base') => ({ trackId, gagIndex, variant });
 const entry = (result, trackId) => result.breakdown.find((item) => item.trackId === trackId);
 
+test('remote-only damage has guaranteed accuracy', () => {
+  assert.equal(calculateGagAccuracy([], false, 20, false, { damage: 45 }).total, 100);
+  assert.equal(calculateGagAccuracy([], false, 20).total, 0);
+});
+
+test('self-damage remote makes target gags hit but preserves lured Drop misses', () => {
+  const remotes = { targetRemoted: true, damage: 45 };
+  const result = calculateGagAccuracy([gag('drop', 5)], false, 20, false, remotes);
+  assert.equal(result.total, 100);
+  assert.match(entry(result, 'drop').specialRule, /remote-controlled/);
+  assert.equal(calculateGagAccuracy([gag('drop', 5)], true, 20, false, remotes).total, 0);
+});
+
+test('damage from other remoted Cogs does not change gag accuracy', () => {
+  for (const damage of [45, 135, 270]) {
+    for (const [track, tier] of [['sound', 5], ['throw', 6], ['squirt', 6], ['drop', 5]]) {
+      const baseline = calculateGagAccuracy([gag(track, tier)], false, 20);
+      const result = calculateGagAccuracy([gag(track, tier)], false, 20, false, { damage });
+      assert.equal(result.total, baseline.total);
+      assert.deepEqual(result.breakdown, baseline.breakdown);
+    }
+  }
+});
+
 test('standalone calculator aggregates every earlier gag in a different track', () => {
   const result = calculateGagAccuracy(
     [gag('throw', 4), gag('throw', 4), gag('squirt', 6)],

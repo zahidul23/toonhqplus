@@ -1,5 +1,14 @@
 import { CalculatorPortalProvider, useCalculatorPortal } from './components/CalculatorPortal';
 import { GagCombosPanel } from './GagCombosPanel';
+import { DefenseSelector } from './DefenseSelector';
+import { calculateGagDamage as calculateDamage, getDamageAfterDefense } from './gagDamage';
+import type { FieldOfficeDefense } from './gagDamage';
+import { CEO_OIL_HEALTH_OPTIONS, getCeoOilCanHealth, getCeoOilCanHealthPercent, NO_OIL_CANS } from './ceoOil';
+import type { CeoOilCans } from './ceoOil';
+import type { ReactNode } from 'react';
+import type { GagAccuracyRemotes } from './gagAccuracy';
+import { REMOTE_DAMAGE, REMOTE_SELF_DAMAGE, getRemoteDamage, changeRemoteDamageStars } from './remoteRules';
+import type { RemoteStars } from './remoteRules';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { COG_HEALTH } from './gagCombos';
@@ -68,70 +77,17 @@ const getSosGags = (trackId: TrackId): SosGag[] => {
     }));
 };
 
-function comboBonus(damage: number, count: number) {
-  return count >= 2 ? Math.ceil(damage * 0.2) : 0;
-}
-
-function calculateDamage(gags: Array<SelectedGag | null>, preLured: boolean) {
-  let base = 0;
-  let knockback = 0;
-  const bonuses: Array<{ trackId: TrackId; amount: number }> = [];
-  let lured = preLured;
-  const hasSelectedLure = gags.some((gag) => gag?.trackId === 'lure');
-  const selectedTrapCount = gags.filter((gag) => gag?.trackId === 'trap').length;
-
-  for (const trackId of TRACK_IDS) {
-    const trackGags = gags.filter((gag): gag is SelectedGag => gag?.trackId === trackId);
-    if (!trackGags.length) continue;
-
-    if (trackId === 'trap') {
-      if (hasSelectedLure) base += Math.max(...trackGags.map((gag) => gag.damage));
-      continue;
-    }
-
-    if (trackId === 'lure') {
-      // A successful Lure immediately springs a Trap selected in the same
-      // combo. Once the Trap hits, the Cog is no longer lured, so a later
-      // Drop can hit normally.
-      lured = selectedTrapCount === 0;
-      continue;
-    }
-
-    const baseDamage = trackGags.reduce((sum, gag) => sum + gag.damage, 0);
-    const bonus = comboBonus(baseDamage, trackGags.length);
-
-    if (trackId === 'sound') {
-      base += baseDamage;
-      if (bonus) bonuses.push({ trackId, amount: bonus });
-      lured = false;
-    } else if (trackId === 'throw' || trackId === 'squirt') {
-      const trackKnockback = lured ? Math.ceil(baseDamage * 0.5) : 0;
-      base += baseDamage;
-      knockback += trackKnockback;
-      if (bonus) bonuses.push({ trackId, amount: bonus });
-      lured = false;
-    } else if (trackId === 'drop' && !lured) {
-      base += baseDamage;
-      if (bonus) bonuses.push({ trackId, amount: bonus });
-    }
-  }
-
-  const bonus = bonuses.reduce((sum, entry) => sum + entry.amount, 0);
-  return { total: base + knockback + bonus, base, knockback, bonuses };
-}
-
-function getHighestDefeatedCogLevel(damage: number) {
+function getHighestDefeatedCogLevel(damage: number, oil: CeoOilCans = NO_OIL_CANS) {
   return Math.max(
     0,
     ...Object.entries(COG_HEALTH)
-      .filter(([, hp]) => damage >= hp)
+      .filter(([, hp]) => damage >= getCeoOilCanHealth(hp, oil))
       .map(([level]) => Number(level)),
   );
 }
 
-function calculateAccuracy(gags: Array<SelectedGag | null>, preLured: boolean, cogLevel: number, toonsHit = false) {
-  return calculateGagAccuracy(gags, preLured, cogLevel, toonsHit);
-
+function calculateAccuracy(gags: Array<SelectedGag | null>, preLured: boolean, cogLevel: number, toonsHit = false, remotes: GagAccuracyRemotes = {}) {
+  return calculateGagAccuracy(gags, preLured, cogLevel, toonsHit, remotes);
 }
 
 function formatAccuracy(value: number) {
@@ -198,8 +154,9 @@ function AccuracyBreakdownTooltip({ breakdown, position, id, onClose }: {
         </div>
       ))}
       <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] font-bold tabular-nums text-white/65">
-        <div>{breakdown.breakdown.map((entry) => `${formatAccuracy(entry.accuracy)}%`).join(' × ')}</div>
-        <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(breakdown.total)}% chance every selected gag hits</div>
+        {breakdown.remoteDamage > 0 && <div>Remote: {breakdown.remoteDamage} DMG · 100% Accuracy</div>}
+        <div>{[...breakdown.breakdown.map((entry) => `${formatAccuracy(entry.accuracy)}%`), ...(breakdown.remoteDamage > 0 ? ['100% Remote'] : [])].join(' × ')}</div>
+        <div className="text-[11px] font-black text-sky-300">= {formatAccuracy(breakdown.total)}% chance every selected attack hits</div>
       </div>
     </>;
   return <AccuracyDetails title="Accuracy breakdown" onClose={onClose} desktop={createPortal(
@@ -279,11 +236,11 @@ function StartingEffectToggle({ active, effect, onToggle }: {
   const isLure = effect === 'lure';
   const label = isLure ? 'Pre-lured' : 'Toons Hit';
   return <button type="button" onClick={onToggle} aria-label={label} aria-pressed={active} aria-describedby={tooltipId}
-    className={`group relative flex h-8 sm:h-10 shrink-0 cursor-pointer items-center gap-1.5 sm:gap-2 rounded-full border px-2.5 sm:px-3 text-xs sm:text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${active
+    className={`group relative flex h-8 sm:h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs sm:text-[13px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${active
       ? isLure ? 'border-emerald-400 bg-emerald-700 text-white hover:bg-emerald-600' : 'border-sky-400 bg-sky-700 text-white hover:bg-sky-600'
       : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-400 hover:bg-slate-700'}`}>
     <img alt="" draggable="false" src={staticUrl(isLure ? '/external/static/assets/gags/ttr/1_bill.png' : '/images/statuses/toons-hit-accuracy.png')}
-      className={`h-5 w-5 sm:h-6 sm:w-6 object-contain ${active ? '' : 'opacity-60'}`} />
+      className={`h-5 w-5 object-contain ${active ? '' : 'opacity-60'}`} />
     {label}
     <span aria-hidden="true" className={`w-3 text-center ${active ? '' : 'opacity-0'}`}>✓</span>
     <span id={tooltipId} role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-44 -translate-x-1/2 rounded-lg border border-white/15 bg-[#020712] px-3 py-2 text-center text-[11px] font-medium leading-relaxed text-white/80 shadow-xl group-hover:block group-focus-visible:block">
@@ -292,18 +249,201 @@ function StartingEffectToggle({ active, effect, onToggle }: {
   </button>;
 }
 
+
+function MoreEffectsMenu({ children, activeCount }: { children: ReactNode; activeCount: number }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!ref.current || !event.composedPath().includes(ref.current)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [open]);
+  return <div ref={ref} className="relative sm:contents" onKeyDown={event => {
+    if (event.key === 'Escape') { setOpen(false); ref.current?.querySelector('button')?.focus(); }
+  }} onBlur={event => {
+    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
+  }}>
+    <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}
+      className={`flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-bold sm:hidden ${activeCount ? 'border-sky-400 bg-sky-800 text-white' : 'border-slate-600 bg-slate-800 text-slate-300'}`}>
+      More{activeCount > 0 && ` (${activeCount})`} <span aria-hidden="true">▾</span>
+    </button>
+    <div id={id} className={`mobile-more-effects absolute right-0 top-full z-50 mt-2 max-h-[55dvh] w-64 flex-col gap-2 overflow-y-auto rounded-xl border border-white/15 bg-[#020712] p-3 shadow-xl sm:static sm:mt-0 sm:flex sm:max-h-none sm:w-auto sm:flex-row sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none ${open ? 'flex' : 'hidden'}`}>
+      {children}
+    </div>
+  </div>;
+}
+
+function OilCanSelector({ oil, onChange }: { oil: CeoOilCans; onChange: (oil: CeoOilCans) => void }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+  const selected = CEO_OIL_HEALTH_OPTIONS.find(option => option.cans === oil.cans && option.vip === oil.vip) ?? CEO_OIL_HEALTH_OPTIONS[0];
+  const selectedColors = selected.color === '#facc15'
+    ? 'border-yellow-300 bg-yellow-500 text-yellow-950 hover:bg-yellow-400'
+    : selected.color === '#ef4444'
+      ? 'border-red-400 bg-red-800 text-white hover:bg-red-700'
+      : 'border-orange-400 bg-orange-800 text-white hover:bg-orange-700';
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!containerRef.current || !event.composedPath().includes(containerRef.current)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        containerRef.current?.querySelector('button')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return <div ref={containerRef} className="relative" onBlur={event => {
+    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
+  }}>
+    <button type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(value => !value)}
+      className={`flex h-8 sm:h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs sm:text-[13px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${oil.cans
+        ? selectedColors
+        : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-400 hover:bg-slate-700'}`}>
+      <img alt="" draggable="false" src={staticUrl('/images/ceo-oil-can.png')} className="h-5 w-5 -rotate-[32deg] object-contain" />
+      Oil Can{oil.cans > 0 && ` (${selected.label})`} <span aria-hidden="true">▾</span>
+    </button>
+    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#020712] p-3 text-xs text-white shadow-xl">
+      <fieldset>
+        <legend className="mb-2 font-bold">CEO Banquet Oil Can Damage</legend>
+        {CEO_OIL_HEALTH_OPTIONS.map(option => <div key={option.label}>
+          {(option.label === 'Orange' || option.label === 'Yellow 2.0') && <hr className="my-2 border-white/10" />}
+          <button type="button" aria-pressed={selected === option} onClick={() => onChange({ cans: option.cans, vip: option.vip })}
+            className={`flex w-full cursor-pointer items-center gap-2 rounded-lg border px-2 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${selected === option ? 'border-amber-400/50 bg-amber-500/25 text-white' : 'border-transparent hover:bg-white/10'}`}>
+            {option.color && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: option.color }} />}
+            <span>{option.label}</span>
+            <span className="ml-auto whitespace-nowrap text-[10px] tabular-nums text-white/65">{getCeoOilCanHealthPercent(option)}% HP left</span>
+          </button>
+        </div>)}
+      </fieldset>
+    </div>}
+  </div>;
+}
+
+function RemoteSelector({ damageStars, selfDamageStars, onDamageChange, onSelfDamageChange }: {
+  damageStars: RemoteStars[];
+  selfDamageStars: RemoteStars | null;
+  onDamageChange: (stars: RemoteStars, change: 1 | -1) => void;
+  onSelfDamageChange: (stars: RemoteStars) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+  const count = damageStars.length + Number(selfDamageStars !== null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!containerRef.current || !event.composedPath().includes(containerRef.current)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        containerRef.current?.querySelector('button')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return <div ref={containerRef} className="relative" onBlur={event => {
+    // Clicking a label briefly clears focus before activating its checkbox.
+    // Outside pointer clicks are handled separately; only close for a known focus target.
+    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
+  }}>
+    <button type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(value => !value)}
+      className={`flex h-8 sm:h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs sm:text-[13px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${count
+        ? 'border-orange-400 bg-orange-800 text-white hover:bg-orange-700'
+        : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-400 hover:bg-slate-700'}`}>
+      <img alt="" draggable="false" src={staticUrl('/images/remotes.webp')} className="h-5 w-5 object-contain" />
+      Remote{count > 0 && ` (${count})`} <span aria-hidden="true">▾</span>
+    </button>
+    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#020712] p-3 text-xs text-white shadow-xl">
+      <fieldset>
+        <legend className="mb-2 font-bold">Damage (Other Cogs Remoted)</legend>
+        {([1, 2, 3] as const).map(stars => {
+          const quantity = damageStars.filter(value => value === stars).length;
+          return <div key={stars} className="flex items-center gap-2 rounded px-1 py-2">
+            <span className="flex-1">{stars}-Star · {REMOTE_DAMAGE[stars]} DMG</span>
+            <button type="button" aria-label={`Remove ${stars}-star damage remote`} disabled={quantity === 0}
+              onClick={() => onDamageChange(stars, -1)} className="h-7 w-7 rounded bg-white/10 font-bold hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">−</button>
+            <span aria-label={`${quantity} selected`} className="w-3 text-center tabular-nums">{quantity}</span>
+            <button type="button" aria-label={`Add ${stars}-star damage remote`} disabled={damageStars.length >= 3}
+              onClick={() => onDamageChange(stars, 1)} className="h-7 w-7 rounded bg-white/10 font-bold hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">+</button>
+          </div>;
+        })}
+      </fieldset>
+      <fieldset className="mt-2 border-t border-white/10 pt-3">
+        <legend className="pt-3 font-bold">Self Damage</legend>
+        {([1, 2, 3] as const).map(stars => <label key={stars} className="flex cursor-pointer items-center gap-2 rounded px-1 py-2 hover:bg-white/10">
+          <input type="checkbox" checked={selfDamageStars === stars} onChange={() => onSelfDamageChange(stars)} className="accent-orange-400" />
+          <span>{stars}-Star Self Damage</span><span className="ml-auto tabular-nums text-orange-300">{REMOTE_SELF_DAMAGE[stars]} DMG</span>
+        </label>)}
+      </fieldset>
+    </div>}
+  </div>;
+}
+
+function SelectedRemotes({ damageStars, selfDamageStars, onRemoveDamage, onRemoveSelf }: {
+  damageStars: RemoteStars[];
+  selfDamageStars: RemoteStars | null;
+  onRemoveDamage: (stars: RemoteStars) => void;
+  onRemoveSelf: () => void;
+}) {
+  if (!damageStars.length && selfDamageStars === null) return null;
+  const chipClass = 'flex items-center gap-1.5 rounded-full border border-orange-400/40 bg-orange-950/70 px-2.5 py-1 text-[11px] font-bold text-orange-100 hover:bg-orange-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300';
+  return <div role="group" aria-label="Selected remotes" className="flex shrink-0 max-w-full flex-wrap items-center justify-center gap-1.5">
+    {damageStars.map((stars, index) => <button key={index} type="button" className={chipClass}
+      aria-label={`Remove selected ${stars}-star damage remote ${index + 1}`} title={`${stars}-Star Damage Remote · ${REMOTE_DAMAGE[stars]} DMG · Click to remove`} onClick={() => onRemoveDamage(stars)}>
+      <span aria-hidden="true" className="flex h-5 shrink-0 items-center gap-1">
+        <img src={staticUrl('/images/remotes.webp')} alt="" draggable="false" className="h-5 w-5 object-contain" />
+        <span className="whitespace-nowrap text-[9px] leading-none text-yellow-300">{'★'.repeat(stars)}</span>
+      </span>
+      <span>{REMOTE_DAMAGE[stars]} DMG</span><span aria-hidden="true">×</span>
+    </button>)}
+    {selfDamageStars !== null && <button type="button" className={chipClass} aria-label="Remove selected self-damage remote"
+      title={`${selfDamageStars}-Star Self Damage Remote · ${REMOTE_SELF_DAMAGE[selfDamageStars]} DMG · Click to remove`} onClick={onRemoveSelf}>
+      <span aria-hidden="true" className="flex h-5 shrink-0 items-center gap-1">
+        <img src={staticUrl('/images/remotesheal.webp')} alt="" draggable="false" className="h-5 w-5 object-contain" />
+        <span className="whitespace-nowrap text-[9px] leading-none text-yellow-300">{'★'.repeat(selfDamageStars)}</span>
+      </span>
+      <span>{REMOTE_SELF_DAMAGE[selfDamageStars]} DMG</span><span aria-hidden="true">×</span>
+    </button>}
+  </div>;
+}
+
 function CogCarousel({
   damage,
   selectedGags,
   preLured,
   toonsHit,
+  remotes,
+  oil,
 }: {
   damage: number;
   selectedGags: Array<SelectedGag | null>;
   preLured: boolean;
   toonsHit: boolean;
+  remotes: GagAccuracyRemotes;
+  oil: CeoOilCans;
 }) {
-  const highestDefeated = getHighestDefeatedCogLevel(damage);
+  const highestDefeated = getHighestDefeatedCogLevel(damage, oil);
   const focusLevel = highestDefeated || 1;
   const viewportRef = useRef<HTMLDivElement>(null);
   const mobileAccuracy = useMobileAccuracy();
@@ -548,9 +688,12 @@ function CogCarousel({
         className="gag-cog-track"
       >
         {levels.map((level) => {
-          const hp = COG_HEALTH[level];
+          const maxHp = COG_HEALTH[level];
+          const hp = getCeoOilCanHealth(maxHp, oil);
+          const oilDamage = maxHp - hp;
+          const vipOuterLayer = oil.vip && oilDamage > 0;
           const defeated = damage >= hp;
-            const cardAccuracyBreakdown = calculateAccuracy(selectedGags, preLured, level, toonsHit);
+            const cardAccuracyBreakdown = calculateAccuracy(selectedGags, preLured, level, toonsHit, remotes);
             const allHitAccuracy = cardAccuracyBreakdown.total;
             const isFocus = level === activeLevel;
             const isHighestDefeated = level === highestDefeated;
@@ -564,7 +707,7 @@ function CogCarousel({
                 type="button"
                 data-highest-defeated={isHighestDefeated}
                 aria-current={isFocus ? 'true' : undefined}
-                aria-label={`${isHighestDefeated ? 'Highest defeated Cog. ' : ''}Level ${level}, ${hp} HP, ${defeated ? 'defeated' : `${difference} damage short`}, ${formatAccuracy(allHitAccuracy)}% accuracy`}
+                aria-label={`${isHighestDefeated ? `Highest defeated ${vipOuterLayer ? 'outer layer' : 'Cog'}. ` : ''}Level ${level}, ${hp} HP${oilDamage ? ` after ${oil.cans} oil ${oil.cans === 1 ? 'can' : 'cans'} (${oilDamage} damage)${vipOuterLayer ? ', VIP outer layer only' : ''}` : ''}, ${defeated ? 'defeated' : `${difference} damage short`}, ${formatAccuracy(allHitAccuracy)}% accuracy`}
                 onClick={() => scrollToLevel(level)}
                 onFocus={() => scrollToLevel(level)}
                 className={`gag-cog-card relative flex flex-col items-center rounded-xl border px-1 py-2 text-center sm:py-4 ${isFocus
@@ -580,12 +723,19 @@ function CogCarousel({
                 opacity: isHighestDefeated ? 1 : level === focusLevel ? 0.85 : distance === 1 ? 0.72 : 0.52,
               }}
             >
-              <img
-                src={staticUrl('/external/static/assets/cogs/skelecog.png')}
-                alt=""
-                draggable={false}
-                className={`h-14 w-14 object-contain transition-opacity duration-300 sm:h-24 sm:w-24 ${defeated ? 'opacity-40' : 'opacity-100'}`}
-              />
+              <div className="relative shrink-0">
+                <img
+                  src={staticUrl('/external/static/assets/cogs/skelecog.png')}
+                  alt=""
+                  draggable={false}
+                  className={`h-14 w-14 object-contain transition-opacity duration-300 sm:h-24 sm:w-24 ${defeated ? 'opacity-40' : 'opacity-100'}`}
+                />
+                {oilDamage > 0 && <span aria-hidden="true"
+                  title={`${maxHp} HP − ${oilDamage} oil damage = ${hp} HP${vipOuterLayer ? ' (2.0 outer layer)' : ''}`}
+                  className="gag-oil-damage absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-400/40 bg-slate-950/95 px-1.5 py-0.5 text-[9px] font-black leading-none tabular-nums text-amber-200 sm:text-[10px]">
+                  Oil −{oilDamage}
+                </span>}
+              </div>
               <div className="text-base font-black leading-tight text-white sm:text-3xl">Level {level}</div>
               <div className="text-sm font-black tabular-nums text-white sm:text-2xl">{hp} HP</div>
               <div className={`text-[10px] font-black tabular-nums sm:text-sm ${defeated ? 'text-red-300' : 'text-amber-300'}`}>
@@ -637,6 +787,7 @@ function DamageBreakdown({
     >
       <span className="text-white">Base {damageBreakdown.base}</span>
       <span style={{ color: '#31be35' }}>Knockback {damageBreakdown.knockback}</span>
+      {damageBreakdown.remote > 0 && <span className="text-orange-300">Remote {damageBreakdown.remote}</span>}
       {damageBreakdown.bonuses.map((bonus) => (
         <span key={bonus.trackId} style={{ color: getTrackColor(bonus.trackId) }}>
           {getTrackName(bonus.trackId)} Bonus {bonus.amount}
@@ -663,9 +814,15 @@ function GagCalculatorContent() {
   const [clearOnNextSelection, setClearOnNextSelection] = useState(() => selectedGags.every(Boolean));
   const [preLured, setPreLured] = useState(false);
   const [toonsHit, setToonsHit] = useState(false);
+  const [defense, setDefense] = useState<FieldOfficeDefense>(0);
+  const [oil, setOil] = useState<CeoOilCans>(NO_OIL_CANS);
+  const [remoteDamageStars, setRemoteDamageStars] = useState<RemoteStars[]>([]);
+  const [remoteSelfDamageStars, setRemoteSelfDamageStars] = useState<RemoteStars | null>(null);
   const [mobileOrganicMode, setMobileOrganicMode] = useState(false);
   const [accuracyTooltipPosition, setAccuracyTooltipPosition] = useState<{ left: number; top: number } | null>(null);
   const hasSelectedGags = selectedGags.some(Boolean);
+  const hasActiveOptions = preLured || toonsHit || defense > 0 || oil.cans > 0
+    || remoteDamageStars.length > 0 || remoteSelfDamageStars !== null;
   useEffect(() => {
     try {
       window.localStorage.setItem(SAVED_GAGS_KEY, JSON.stringify(selectedGags));
@@ -674,12 +831,13 @@ function GagCalculatorContent() {
     }
   }, [selectedGags]);
   const damageBreakdown = useMemo(
-    () => calculateDamage(selectedGags, preLured),
-    [selectedGags, preLured],
+    () => calculateDamage(selectedGags, preLured, getRemoteDamage(remoteDamageStars, remoteSelfDamageStars), defense),
+    [selectedGags, preLured, remoteDamageStars, remoteSelfDamageStars, defense],
   );
   const accuracyBreakdown = useMemo(
-    () => calculateAccuracy(selectedGags, preLured, getHighestDefeatedCogLevel(damageBreakdown.total) || 1, toonsHit),
-    [selectedGags, preLured, damageBreakdown.total, toonsHit],
+    () => calculateAccuracy(selectedGags, preLured, getHighestDefeatedCogLevel(damageBreakdown.total, oil) || 1, toonsHit,
+      { targetRemoted: remoteSelfDamageStars !== null, damage: damageBreakdown.remote }),
+    [selectedGags, preLured, damageBreakdown.total, damageBreakdown.remote, toonsHit, remoteSelfDamageStars, oil],
   );
   const getTrackName = (trackId: TrackId) => tracks.find((track) => track.id === trackId)?.name ?? trackId;
   const getTrackColor = (trackId: TrackId) => tracks.find((track) => track.id === trackId)?.color ?? 'white';
@@ -716,12 +874,24 @@ function GagCalculatorContent() {
 
   return (
     <div className="gag-calculator flex min-w-0 w-full flex-col items-center justify-start gap-2">
-      <CogCarousel damage={damageBreakdown.total} selectedGags={selectedGags} preLured={preLured} toonsHit={toonsHit} />
+      <CogCarousel damage={damageBreakdown.total} selectedGags={selectedGags} preLured={preLured} toonsHit={toonsHit}
+        remotes={{ targetRemoted: remoteSelfDamageStars !== null, damage: damageBreakdown.remote }} oil={oil} />
 
-      <div role="group" aria-label="Starting effects" className="flex shrink-0 items-center gap-2">
+      <div role="group" aria-label="Starting effects" className="flex flex-wrap shrink-0 items-center justify-center gap-1.5">
         <StartingEffectToggle effect="lure" active={preLured} onToggle={() => setPreLured(value => !value)} />
         <StartingEffectToggle effect="accuracy" active={toonsHit} onToggle={() => setToonsHit(value => !value)} />
+        <MoreEffectsMenu activeCount={Number(defense > 0) + Number(remoteDamageStars.length > 0 || remoteSelfDamageStars !== null) + Number(oil.cans > 0)}>
+        <DefenseSelector defense={defense} onChange={setDefense} />
+        <RemoteSelector damageStars={remoteDamageStars} selfDamageStars={remoteSelfDamageStars}
+          onDamageChange={(stars, change) => setRemoteDamageStars(current => changeRemoteDamageStars(current, stars, change))}
+          onSelfDamageChange={stars => setRemoteSelfDamageStars(current => current === stars ? null : stars)} />
+        <OilCanSelector oil={oil} onChange={setOil} />
+        </MoreEffectsMenu>
       </div>
+
+      <SelectedRemotes damageStars={remoteDamageStars} selfDamageStars={remoteSelfDamageStars}
+        onRemoveDamage={stars => setRemoteDamageStars(current => changeRemoteDamageStars(current, stars, -1))}
+        onRemoveSelf={() => setRemoteSelfDamageStars(null)} />
 
       <div className="custom-scrollbar flex w-fit max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-white/5 bg-black/40 px-3 py-2 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -772,7 +942,7 @@ function GagCalculatorContent() {
                 )}
               </div>
               <span className="h-3 text-xs font-black tabular-nums text-white">
-                {gag?.trackId === 'toonsHit' ? '+75%' : gag ? `${gag.trackId === 'lure' && gag.variant === 'sos' ? 100 : gag.damage}${gag.trackId === 'lure' ? '%' : ''}` : ''}
+                {gag?.trackId === 'toonsHit' ? '+75%' : gag ? `${gag.trackId === 'lure' && gag.variant === 'sos' ? 100 : getDamageAfterDefense(gag, defense)}${gag.trackId === 'lure' ? '%' : ''}` : ''}
               </span>
             </div>
           ))}
@@ -816,11 +986,17 @@ function GagCalculatorContent() {
             setSelectedGags([null, null, null, null]);
             setClearOnNextSelection(false);
             setActiveSlot(0);
+            setPreLured(false);
+            setToonsHit(false);
+            setDefense(0);
+            setOil(NO_OIL_CANS);
+            setRemoteDamageStars([]);
+            setRemoteSelfDamageStars(null);
           }}
           className="trash-button relative flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center sm:h-12 sm:w-12"
-          data-trash-has-gags={hasSelectedGags}
-          title="Clear selected gags"
-          aria-label="Clear selected gags"
+          data-trash-has-gags={hasSelectedGags || hasActiveOptions}
+          title="Clear gags and options"
+          aria-label="Clear gags and options"
         >
           <img src={staticUrl('/images/trashcan_closed.png')} alt="" className="trash-can-image trash-can-closed" />
           <img src={staticUrl('/images/trashcan_rlvr.png')} alt="" className="trash-can-image trash-can-rlvr" />
@@ -924,9 +1100,9 @@ function GagCalculatorContent() {
 
 export function GagCalculator() {
   return <CalculatorPortalProvider>
-    <div data-calculator-layout className="gag-calculator-page min-h-full w-full">
-      <div className="gag-calculator-columns flex items-start gap-4">
-      <aside className="gag-combos-sidebar w-[380px] shrink-0"><GagCombosPanel /></aside>
+    <div data-calculator-layout className="gag-calculator-page h-full w-full">
+      <div className="gag-calculator-columns flex h-full items-start gap-4">
+      <aside className="gag-combos-sidebar min-h-0 w-[380px] shrink-0 self-stretch"><GagCombosPanel /></aside>
       <section className="min-w-0 flex-1 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
         <GagCalculatorContent />
       </section>

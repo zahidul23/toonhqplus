@@ -44,7 +44,9 @@ function getMultiLureBonus(lures: GagAccuracySelection[], baseline: GagAccuracyS
   }, 0);
 }
 
-export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, preLured: boolean, cogLevel: number, presetToonsHit = false) {
+export type GagAccuracyRemotes = { targetRemoted?: boolean; damage?: number };
+
+export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, preLured: boolean, cogLevel: number, presetToonsHit = false, remotes: GagAccuracyRemotes = {}) {
   const toonsHitBonus = presetToonsHit || getToonsHitRounds([gags])[0] > 0 ? TOONS_HIT_BONUS : 0;
   const cogDefense = COG_DEFENSE[cogLevel] ?? COG_DEFENSE[20];
   const breakdown: Array<{
@@ -97,7 +99,8 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
     else if (trackId === 'trap' || trackGags.some((gag) => gag.variant === 'sos')) {
       accuracy = 100;
       specialRule = trackId === 'trap' ? 'Trap placement always hits' : 'SOS gag always hits';
-    } else if (lured && trackId !== 'lure') { accuracy = 100; specialRule = 'Attacking a lured Cog always hits'; }
+    } else if (remotes.targetRemoted) { accuracy = 100; specialRule = 'Gags cannot miss a remote-controlled Cog'; }
+    else if (lured && trackId !== 'lure') { accuracy = 100; specialRule = 'Attacking a lured Cog always hits'; }
     else accuracy = applyEstimatedSoftCap(uncappedAccuracy);
 
     breakdown.push({
@@ -118,6 +121,7 @@ export function calculateGagAccuracy(gags: Array<GagAccuracySelection | null>, p
     if (trackId === 'lure' && accuracy > 0) lured = selectedTrapCount === 0;
     if (trackId === 'sound' || trackId === 'throw' || trackId === 'squirt') lured = false;
   }
-  const total = breakdown.length ? breakdown.reduce((chance, item) => chance * item.accuracy / 100, 1) * 100 : 0;
-  return { total, breakdown, cogLevel, cogDefense };
+  const remoteDamage = remotes.damage ?? 0;
+  const total = breakdown.length ? breakdown.reduce((chance, item) => chance * item.accuracy / 100, 1) * 100 : remoteDamage > 0 ? 100 : 0;
+  return { total, breakdown, cogLevel, cogDefense, remoteDamage };
 }
