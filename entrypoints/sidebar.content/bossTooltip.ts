@@ -100,7 +100,7 @@ export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount }
       ${rows}
     </div>
     <div class="toonhq-plus-boss-tip__round">
-      <div class="toonhq-plus-boss-tip__label">${roundName}</div>
+      <div class="toonhq-plus-boss-tip__label">${roundName} · Tier ${tier}</div>
       <div class="toonhq-plus-boss-tip__stats">${stats}</div>
     </div>`;
 };
