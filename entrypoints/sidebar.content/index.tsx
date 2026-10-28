@@ -1,7 +1,9 @@
 import ReactDOM from 'react-dom/client';
 import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
-import { extractToonName, getCogValueFromName, getAverageSuitValue, bankersRound } from './toonUtils';
+import { extractToonName, getCogValueFromName, getAverageSuitValue } from './toonUtils';
+import { getCogNameForLevel, getCJDifficultyTier, getCEODifficultyTier, getGroupBossTier } from './bossTiers';
+import { BOSS_TOOLTIP_ARROW_TOP, BOSS_TOOLTIP_CSS, bossTooltipClass, renderBossTooltip } from './bossTooltip';
 import { disposeBoardingStatus } from './boardingStatus';
 import { getNativeBridge } from './nativeBridge';
 import { createNativeGroupTracker } from './nativeGroupTracker';
@@ -385,200 +387,7 @@ function injectHighlightStyles() {
     //   opacity: 1;
     // }
 
-    /* tooltip for boss info */
-    .boss-info {
-      position: relative;
-      cursor: help;
-    }
-    .boss-info-tooltip {
-      position: absolute;
-      top: 50%;
-      left: calc(100% + 12px);
-      transform: translateY(-50%);
-      background: #064e3b;
-      color: #fff;
-      padding: 14px 18px;
-      border-radius: 12px;
-      font-size: 14px;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.2s, visibility 0.2s;
-      z-index: 10000;
-      min-width: 240px;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      pointer-events: none;
-      backdrop-filter: blur(8px);
-      line-height: 1.4;
-      text-transform: none;
-      letter-spacing: normal;
-    }
-    .boss-info-tooltip.lawbot-tip {
-      padding: 12px 16px;
-      min-width: 280px;
-    }
-    .boss-info:hover .boss-info-tooltip {
-      opacity: 1;
-      visibility: visible;
-    }
-    .boss-info-tooltip::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      right: 100%;
-      transform: translateY(-50%);
-      border-width: 6px;
-      border-style: solid;
-      border-color: transparent #064e3b transparent transparent;
-    }
-    .tooltip-boss-info {
-      display: flex;
-      flex-direction: column;
-      gap: 6px 12px;
-    }
-    .tooltip-label {
-      font-weight: 700;
-      color: #9ca3af;
-      text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 0.05em;
-      text-align: right;
-    }
-    .tooltip-value {
-      color: #fff;
-      font-weight: 500;
-      width: 60px;
-      text-align: right;
-    }
-    .bossbot-info .tooltip-value {
-      width: 40px;
-    }
-    .tooltip-divider {
-      grid-column: 1 / -1;
-      height: 1px;
-      background: rgba(16, 185, 129, 0.2);
-      margin: 6px 0;
-    }
-    .tooltip-header {
-      grid-column: 1 / -1;
-      font-weight: 700;
-      color: #9ca3af;
-      text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 0.05em;
-      margin-bottom: -2px;
-      text-align: center;
-    }
-    .tooltip-header.emerald { color: #10b981; font-size: 13px; }
-    .tooltip-header .tooltip-header-secondary {
-      color: #fff;
-      font-weight: 600;
-    }
-    .tooltip-header.gray { color: #9ca3af; }
-    .tooltip-section-label {
-      grid-column: 1 / -1;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #6b7280;
-      text-align: center;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      padding-top: 6px;
-      margin: 4px -8px 2px;
-    }
-    
-    .tooltip-sub-header {
-      grid-column: 1 / -1;
-      font-weight: 800;
-      color: #10b981;
-      margin-bottom: 4px;
-      font-size: 14px;
-      text-align: center;
-    }
-    .tooltip-tier-row {
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0 12px;
-      padding: 6px 8px;
-      margin: 0 -8px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-    .tooltip-tier-row .tooltip-label {
-      text-align: right;
-    }
-    .tooltip-tier-row .tooltip-value {
-      text-align: left;
-    }
-    .tooltip-tier-row.active {
-      background: rgba(16, 185, 129, 0.25);
-      color: #fff;
-      font-weight: 700;
-      box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.4);
-    }
-    .tooltip-tier-row.active .tooltip-label {
-      color: #34d399;
-    }
-    .tooltip-tier-row.active .tooltip-value {
-      color: #fff;
-    }
-    .tooltip-tier-row.tier-stats {
-      padding: 4px 8px;
-    }
-    .feeding-round-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 4px 8px;
-    }
-    .feeding-round-grid .tooltip-tier-row {
-      margin: 0;
-      min-width: 0;
-    }
-    .tooltip-bool-box {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 800;
-      line-height: 1;
-      border: 1px solid transparent;
-    }
-    .tooltip-bool-box svg {
-      width: 12px;
-      height: 12px;
-      stroke-width: 6;
-    }
-    .tooltip-bool-box.yes {
-      background: #166534;
-      border-color: #22c55e;
-      color: #dcfce7;
-    }
-    .tooltip-bool-box.no {
-      background: #991b1b;
-      border-color: #ef4444;
-      color: #fee2e2;
-    }
-    .tooltip-note {
-      width: 100%;
-      font-size: 9px;
-      color: #9ca3af;
-      margin-top: 2px;
-      text-align: left;
-      font-style: italic;
-      opacity: 0.9;
-    }
-    .active .tooltip-note {
-      color: #34d399;
-      font-weight: 500;
-      opacity: 1;
-    }
-
+    ${BOSS_TOOLTIP_CSS}
     /* buttons injected inside toon element */
     .toonhq-plus-buttons {
       display: inline-flex;
@@ -892,6 +701,36 @@ function injectHighlightStyles() {
     html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-capacity--green { background: #168653; }
     html[data-toonhq-plus-display-mode="dark"] .toonhq-plus-capacity--blue { background: #2563eb; }
     .toonhq-plus-speedchat-only { background: #dc2626; }
+
+    .toonhq-plus-boss-tier {
+      /* Same size as the district population pill, in department colors. */
+      display: inline-flex;
+      align-items: center;
+      height: 17px;
+      margin-left: 6px;
+      padding: 0 6px;
+      box-sizing: border-box;
+      border-radius: 9px;
+      background: #8a5a2e; /* Bossbot brown, matches the tooltip header */
+      color: white;
+      /* The card title uses ToonHQ's display font; the tag uses body text. */
+      font-family: Roboto, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: normal;
+      text-transform: none;
+      line-height: 1;
+      white-space: nowrap;
+      vertical-align: middle;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      cursor: help;
+      outline: none;
+    }
+    .toonhq-plus-boss-tier:focus-visible {
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9), 0 0 0 5px rgba(17, 24, 39, 0.7);
+    }
+    .toonhq-plus-boss-tier--cj { background: #31528c; } /* Lawbot navy */
+
 
     .toony-count {
       display: inline-flex;
@@ -1248,209 +1087,17 @@ const getPinkSlips = (value: number): number => {
   }
 }
 
-const getCogNameForLevel = (level: number, suit: string) => {
-  if (level <= 5) {
-    return (suit === "lawbot" ? "Bottom Feeder" : "Flunky") + " " + level;
-  } else if (level <= 10) {
-    return (suit === "lawbot" ? "Bloodsucker" : "Pencil Pusher") + " " + (level - 4);
-  } else if (level <= 15) {
-    return (suit === "lawbot" ? "Double Talker" : "Yesman") + " " + (level - 8);
-  } else if (level <= 20) {
-    return (suit === "lawbot" ? "Ambulance Chaser" : "Micromanager") + " " + (level - 12);
-  } else if (level <= 25) {
-    return (suit === "lawbot" ? "Back Stabber" : "Downsizer") + " " + (level - 16);
-  } else if (level <= 30) {
-    return (suit === "lawbot" ? "Spin Doctor" : "Head Hunter") + " " + (level - 20);
-  } else if (level <= 35) {
-    return (suit === "lawbot" ? "Legal Eagle" : "Corporate Raider") + " " + (level - 24);
-  } else {
-    return (suit === "lawbot" ? "Big Wig" : "The Big Cheese") + " " + (level - 28);
-  }
-}
-
-
-
-interface CJDifficultyTier {
-  tier: number;
-  minlevel: number;
-  lawyers: number;
-  gavels: number;
-  evidence: number;
-  hasBonusWeight: boolean;
-  laffHeal: number;
-}
-
-const CJ_DIFFICULTY_TIERS: CJDifficultyTier[] = [
-  { tier: 9, minlevel: 70, lawyers: 10, gavels: 8, evidence: 22, hasBonusWeight: true, laffHeal: 4 },
-  { tier: 8, minlevel: 61, lawyers: 9, gavels: 8, evidence: 24, hasBonusWeight: true, laffHeal: 4 },
-  { tier: 7, minlevel: 53, lawyers: 9, gavels: 7, evidence: 26, hasBonusWeight: true, laffHeal: 3 },
-  { tier: 6, minlevel: 44, lawyers: 8, gavels: 7, evidence: 28, hasBonusWeight: false, laffHeal: 3 },
-  { tier: 5, minlevel: 36, lawyers: 8, gavels: 6, evidence: 30, hasBonusWeight: false, laffHeal: 2 },
-  { tier: 4, minlevel: 27, lawyers: 8, gavels: 6, evidence: 32, hasBonusWeight: false, laffHeal: 2 },
-  { tier: 3, minlevel: 19, lawyers: 8, gavels: 5, evidence: 34, hasBonusWeight: false, laffHeal: 1 },
-  { tier: 2, minlevel: 10, lawyers: 8, gavels: 5, evidence: 36, hasBonusWeight: false, laffHeal: 1 },
-  { tier: 1, minlevel: 1, lawyers: 8, gavels: 4, evidence: 38, hasBonusWeight: false, laffHeal: 1 },
-];
-
-const getCJDifficultyTier = (value: number): CJDifficultyTier => {
-  // Determine the difficulty tier based on the value
-  return CJ_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CJ_DIFFICULTY_TIERS[8];
-};
-
-interface CEODifficultyTier {
-  tier: number;
-  minlevel: number;
-  timer: string;
-  tables: number;
-  cogTypes: string[];
-  totalCogs: number;
-  slips: number;
-}
-
-const CEO_DIFFICULTY_TIERS: CEODifficultyTier[] = [
-  { tier: 5, minlevel: 63, timer: '330s', tables: 13, cogTypes: ['the_big_cheese.png'], totalCogs: 65, slips: 5 },
-  { tier: 4, minlevel: 48, timer: '315s', tables: 12, cogTypes: ['corporate_raider.png', 'the_big_cheese.png'], totalCogs: 60, slips: 5 },
-  { tier: 3, minlevel: 33, timer: '300s', tables: 10, cogTypes: ['corporate_raider.png'], totalCogs: 55, slips: 4 },
-  { tier: 2, minlevel: 17, timer: '285s', tables: 9, cogTypes: ['head_hunter.png', 'corporate_raider.png'], totalCogs: 50, slips: 4 },
-  { tier: 1, minlevel: 1, timer: '270s', tables: 8, cogTypes: ['head_hunter.png'], totalCogs: 40, slips: 3 },
-];
-
-const getCEODifficultyTier = (value: number): CEODifficultyTier => {
-  return CEO_DIFFICULTY_TIERS.find(t => value >= t.minlevel) || CEO_DIFFICULTY_TIERS[4];
-};
-
 const BOSS_CONFIG: Record<string, string> = {
   'CEO': 'bossbot',
   'CJ': 'lawbot',
-};
-
-const LAWYER_THRESHOLDS = [
-  { minSuitValue: 70, lawyerCount: 10 },
-  { minSuitValue: 53, lawyerCount: 9 },
-  { minSuitValue: 1, lawyerCount: 8 }
-];
-
-const PINK_SLIP_THRESHOLDS = [
-  { minSuitValue: 48, slipCount: 5 },
-  { minSuitValue: 17, slipCount: 4 },
-  { minSuitValue: 1, slipCount: 3 }
-];
-
-const renderTierRow = (label: string, value: string | number, isActive: boolean, extraClass = '', note = '') => `
-  <div class="tooltip-tier-row ${isActive ? 'active' : ''} ${extraClass}">
-    <div class="tooltip-label">${label}</div>
-    <div class="tooltip-value">${value}</div>
-    ${note ? `<div class="tooltip-note">${note}</div>` : ''}
-  </div>
-`;
-
-const getTooltipNoteForThreshold = (
-  minSuitValue: number,
-  currentSum: number,
-  currentCount: number,
-  currentAvg: number,
-  isActive: boolean,
-  bossKey: string
-) => {
-  if (currentCount >= 8 || minSuitValue <= 1) return '';
-  if (minSuitValue <= currentAvg && !isActive) return '';
-
-  const targetSum = minSuitValue * 8;
-  const action = isActive ? 'maintain' : 'reach';
-  const remaining = 8 - currentCount;
-  const avgNeeded = Math.ceil((targetSum - currentSum) / remaining);
-
-  if (avgNeeded > 78) {
-    return `Impossible to ${action} with 8 members`;
-  } else if (avgNeeded > 1) {
-    return `${getCogNameForLevel(avgNeeded, bossKey)}+ required to ${action}`;
-  }
-  return '';
-};
-
-const renderTooltipBoolIcon = (value: boolean) => `
-  <span class="tooltip-bool-box ${value ? 'yes' : 'no'}" aria-label="${value ? 'Yes' : 'No'}">
-    ${value
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>'
-  }
-  </span>
-`;
-
-const renderLawbotTooltip = (tierData: CJDifficultyTier, suitString: string, bossKey: string, currentSum: number, currentCount: number) => {
-  const currentAvg = bankersRound(currentSum / currentCount);
-  const lawyerRowsHtml = LAWYER_THRESHOLDS.map(threshold => {
-    const isActive = tierData.lawyers === threshold.lawyerCount;
-    const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);
-    return renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.lawyerCount} Lawyers`, isActive, '', note);
-  }).join('');
-
-  const statsList = [
-    { label: 'Gavels', value: tierData.gavels },
-    { label: 'Bonus Weight', value: renderTooltipBoolIcon(tierData.hasBonusWeight) },
-    { label: 'Evidence Count', value: tierData.evidence },
-    { label: 'Evidence Heal', value: tierData.laffHeal + " Laff" }
-  ];
-
-  const statsHtml = statsList.map(stat => renderTierRow(stat.label, stat.value, false, "tier-stats")).join('');
-
-  return `
-    <div class="tooltip-boss-info">
-      <div class="tooltip-header">Group Average</div>
-      <div class="tooltip-sub-header">${suitString}</div>
-      <div class="tooltip-divider"></div>
-      <div class="tooltip-header emerald">Tier ${tierData.tier} <span class="tooltip-header-secondary">- ${tierData.lawyers} Lawyers</span></div>
-      <div class="tooltip-section-label">Evidence Round</div>
-      <div class="feeding-round-grid">
-        ${statsHtml}
-      </div>
-      <div class="tooltip-divider"></div>
-      <div class="tooltip-header gray">Lawyer Thresholds</div>
-      ${lawyerRowsHtml}
-    </div>
-  `;
-};
-
-const renderBossbotTooltip = (tierData: CEODifficultyTier, suitString: string, bossKey: string, currentSum: number, currentCount: number) => {
-  const currentAvg = bankersRound(currentSum / currentCount);
-  const rowsHtml = PINK_SLIP_THRESHOLDS.map(threshold => {
-    const isActive = tierData.slips === threshold.slipCount;
-    const note = getTooltipNoteForThreshold(threshold.minSuitValue, currentSum, currentCount, currentAvg, isActive, bossKey);
-    return renderTierRow(`${getCogNameForLevel(threshold.minSuitValue, bossKey)}+`, `${threshold.slipCount} Slips`, isActive, 'bossbot-info', note);
-  }).join('');
-
-  const cogImagesHtml = tierData.cogTypes.map(img => `<img src="https://toonhq.org/static/assets/cogs/${img}" alt="Cog" style="width:24px;height:24px;vertical-align:middle;margin-right:4px;" />`).join('');
-
-  const feedingStatsList = [
-    { label: 'Timer', value: tierData.timer },
-    { label: 'Cog Types', value: `<div style="display:flex;justify-content:flex-start;align-items:center;">${cogImagesHtml}</div>` },
-    { label: 'Tables', value: tierData.tables },
-    { label: 'Total Cogs', value: tierData.totalCogs }
-  ];
-
-  const feedingStatsHtml = feedingStatsList.map(stat => renderTierRow(stat.label, stat.value, false, "tier-stats bossbot-info")).join('');
-
-  return `
-    <div class="tooltip-boss-info">
-      <div class="tooltip-header">Group Average</div>
-      <div class="tooltip-sub-header">${suitString}</div>
-      <div class="tooltip-divider"></div>
-      <div class="tooltip-header emerald">Tier ${tierData.tier} <span class="tooltip-header-secondary">- ${tierData.slips} Pink Slips</span></div>
-      <div class="tooltip-section-label">Feeding Round</div>
-      <div class="feeding-round-grid">
-        ${feedingStatsHtml}
-      </div>
-      <div class="tooltip-divider"></div>
-      <div class="tooltip-header gray">Pink Slip Thresholds</div>
-      ${rowsHtml}
-    </div>
-  `;
 };
 
 const isBossInfoMutationNode = (node: Node | null | undefined): boolean => {
   if (!(node instanceof HTMLElement)) return false;
   return !!node.closest('.boss-title-wrapper, .boss-info');
 };
+
+const renderedBossTooltips = new WeakMap<HTMLElement, string>();
 
 const updateBossInfo = (dialog?: ParentNode | null) => {
   if (bossInfoEnabled === false) {
@@ -1486,44 +1133,38 @@ const updateBossInfo = (dialog?: ParentNode | null) => {
   if (averageSuitValue === 0) return;
   const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
 
-  let infoText = '';
-  let html = '';
-  let tierKey = '';
-
-  if (thisBossKey === 'lawbot') {
-    const tierData = getCJDifficultyTier(averageSuitValue);
-    tierKey = String(tierData.tier);
-    infoText = `(${tierData.lawyers} lawyers)`;
-    html = renderLawbotTooltip(tierData, suitString, thisBossKey, currentSum, suitNames.length);
-  } else {
-    const tierData = getCEODifficultyTier(averageSuitValue);
-    tierKey = String(tierData.tier);
-    infoText = `(${tierData.slips} Pink Slips)`;
-    html = renderBossbotTooltip(tierData, suitString, thisBossKey, currentSum, suitNames.length);
-  }
+  const boss: 'CEO' | 'CJ' = thisBossKey === 'lawbot' ? 'CJ' : 'CEO';
+  const infoText = boss === 'CJ'
+    ? `(${getCJDifficultyTier(averageSuitValue).lawyers} lawyers)`
+    : `(${getCEODifficultyTier(averageSuitValue).slips} Pink Slips)`;
+  const html = renderBossTooltip({
+    boss, average: averageSuitValue, averageName: suitString, sum: currentSum, toonCount: suitNames.length,
+  });
 
   // Ensure tooltip exists
   let tooltipEl = thisBossInfo.querySelector('.boss-info-tooltip') as HTMLElement | null;
   if (!tooltipEl) {
     tooltipEl = document.createElement('div');
-    tooltipEl.className = `boss-info-tooltip ${thisBossKey === 'lawbot' ? 'lawbot-tip' : ''}`;
     thisBossInfo.appendChild(tooltipEl);
   }
+  const tooltipClass = `boss-info-tooltip ${bossTooltipClass(boss)}`;
+  if (tooltipEl.className !== tooltipClass) tooltipEl.className = tooltipClass;
 
-  // Update content only if changed
+  // Update content only if changed. Compare the rendered HTML so threshold
+  // notes refresh when members change without changing the tier.
   const currentInfoText = thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE
     ? thisBossInfo.firstChild.textContent
     : '';
-  const cachedTier = tooltipEl.dataset.tooltipTier ?? '';
-
-  if (currentInfoText !== infoText || cachedTier !== tierKey) {
+  if (currentInfoText !== infoText) {
     if (thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE) {
       thisBossInfo.firstChild.textContent = infoText;
     } else {
       thisBossInfo.prepend(document.createTextNode(infoText));
     }
+  }
+  if (renderedBossTooltips.get(tooltipEl) !== html) {
     tooltipEl.innerHTML = html;
-    tooltipEl.dataset.tooltipTier = tierKey;
+    renderedBossTooltips.set(tooltipEl, html);
   }
 }
 const CONFIGURABLE_NAV_ITEMS: Record<string, { label: string, href: string, colorClass: string }> = {
@@ -1853,7 +1494,81 @@ async function applyGroupHighlights(
   });
 }
 
+// Cards clip their overflow, so the card tooltip floats on the page body. It
+// shares the district tooltip's active slot, so the existing scroll, resize
+// and pointer handlers also close it.
+function showBossTierTooltip(tag: HTMLElement) {
+  const tier = getGroupBossTier(groupsState[Number(tag.dataset.groupId)]);
+  if (!tier) return;
+  hideDistrictTooltip();
+
+  const tooltip = document.createElement('div');
+  tooltip.className = `${bossTooltipClass(tier.boss)} toonhq-plus-boss-tip--floating`;
+  tooltip.id = `toonhq-plus-tooltip-${++districtTooltipSequence}`;
+  tooltip.setAttribute('role', 'tooltip');
+  tooltip.innerHTML = renderBossTooltip(tier);
+  document.body.appendChild(tooltip);
+
+  // Match the dialog: open to the right of the tag (or left if there is no
+  // room) with the arrow beside the header, pointing at the tag. Shift up only
+  // if the tooltip would run off the bottom of the viewport.
+  const anchorRect = tag.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const fitsRight = anchorRect.right + 12 + tooltipRect.width <= window.innerWidth - 8;
+  const left = fitsRight ? anchorRect.right + 12 : Math.max(8, anchorRect.left - 12 - tooltipRect.width);
+  const centerY = anchorRect.top + anchorRect.height / 2;
+  const top = Math.max(8, Math.min(window.innerHeight - tooltipRect.height - 8, centerY - BOSS_TOOLTIP_ARROW_TOP));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+  tooltip.style.setProperty('--toonhq-plus-arrow-top', `${centerY - top}px`);
+  tooltip.dataset.placement = fitsRight ? 'right' : 'left';
+  tag.setAttribute('aria-describedby', tooltip.id);
+  activeDistrictTooltip = tooltip;
+  activeDistrictTooltipAnchor = tag;
+}
+
+// Show the live CEO/CJ tier next to each Groups page card's name so players
+// can see it without opening the group. Uses the same averaging as the dialog.
+function applyBossTierTags() {
+  document.querySelectorAll<HTMLElement>('.groups-list-item').forEach(groupCard => {
+    const groupId = Number(groupCard.getAttribute('group-id'));
+    const tier = bossInfoEnabled && groupId ? getGroupBossTier(groupsState[groupId]) : null;
+    const title = groupCard.querySelector<HTMLElement>('.info-card__title');
+    let tag = groupCard.querySelector<HTMLElement>('.toonhq-plus-boss-tier');
+    if (!tier || !title) {
+      if (tag && tag === activeDistrictTooltipAnchor) hideDistrictTooltip();
+      tag?.remove();
+      return;
+    }
+
+    if (!tag || tag.parentElement !== title) {
+      tag?.remove();
+      tag = document.createElement('span');
+      tag.className = 'toonhq-plus-boss-tier';
+      tag.tabIndex = 0;
+      const anchor = tag;
+      anchor.addEventListener('mouseenter', () => showBossTierTooltip(anchor));
+      anchor.addEventListener('mouseleave', hideDistrictTooltip);
+      anchor.addEventListener('focus', () => showBossTierTooltip(anchor));
+      anchor.addEventListener('blur', hideDistrictTooltip);
+      // Sits after ToonHQ's fit-text name, which only measures itself.
+      title.appendChild(tag);
+    }
+    tag.dataset.groupId = String(groupId);
+
+    const key = `${tier.boss}:${tier.tier}:${tier.average}:${tier.sum}:${tier.toonCount}`;
+    if (tag.dataset.tierKey === key) return;
+    tag.dataset.tierKey = key;
+    tag.classList.toggle('toonhq-plus-boss-tier--cj', tier.boss === 'CJ');
+    tag.textContent = tier.detail;
+    tag.setAttribute('aria-label', `${tier.boss} Tier ${tier.tier}, ${tier.detail}. Group average ${tier.averageName}.`);
+    // Refresh an open tooltip when members join or leave.
+    if (tag === activeDistrictTooltipAnchor) showBossTierTooltip(tag);
+  });
+}
+
 function applyCurrentGroupHighlights() {
+  applyBossTierTags();
   void applyGroupHighlights(
     groupsState,
     toonyToonsMemory,
@@ -2000,6 +1715,7 @@ export default defineContentScript({
     districtIndicatorsEnabled = currentSettings['district-indicators-enabled'] !== false;
     applyDistrictIndicators();
     bossInfoEnabled = currentSettings['boss-info-enabled'] !== false;
+    applyBossTierTags();
     notesEnabled = currentSettings['notes-enabled'] !== false;
     highlightGroupsEnabled = currentSettings['highlight-groups'] !== false;
     if (currentSettings['navbar-config']) {
@@ -2108,6 +1824,8 @@ export default defineContentScript({
       districtIndicatorFrame = window.requestAnimationFrame(() => {
         districtIndicatorFrame = null;
         applyDistrictIndicators();
+        // New or re-rendered group cards need their tier tag as well.
+        applyBossTierTags();
       });
     };
     const districtIndicatorObserver = new MutationObserver(scheduleDistrictIndicators);
@@ -2115,7 +1833,7 @@ export default defineContentScript({
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['district-name'],
+      attributeFilter: ['district-name', 'group-id'],
     });
     ctx.onInvalidated(() => {
       districtIndicatorObserver.disconnect();
@@ -2442,6 +2160,7 @@ export default defineContentScript({
         getSetting<boolean>('boss-info-enabled').then(enabled => {
           if (enabled !== undefined) {
             bossInfoEnabled = enabled !== false;
+            applyBossTierTags();
             if (bossInfoEnabled) {
               document.querySelectorAll('.group-details-dialog').forEach(el => fixDialog(el as HTMLElement));
             } else {

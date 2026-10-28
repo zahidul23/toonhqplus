@@ -1,5 +1,6 @@
 import { groupTypes } from './groupTypes';
 import { GROUP_CONFIG } from './groupConfig';
+import { bankersRound } from './bossTiers';
 
 /** Get a group's simple name, e.g. "Sellbot Building" (if Sellbot is showOnSimple) or just "Building" */
 export function getGroupSimpleName(typeId: number, groupId?: number, options?: Record<string, number>): string {
@@ -129,14 +130,7 @@ export function getToonSuitLevel(suitCode: unknown): number {
   return Number.isFinite(directLevel) ? directLevel : 0;
 }
 
-export function bankersRound(num: number): number {
-  const half = Math.floor(num) + 0.5;
-  if (Math.abs(num - half) < 0.000001) {
-    const floor = Math.floor(num);
-    return (floor % 2 === 0) ? floor : floor + 1;
-  }
-  return Math.round(num);
-}
+export { bankersRound };
 
 export const getAverageSuitValue = (suitNames: string[]) => {
   if (suitNames.length === 0) return 0;
