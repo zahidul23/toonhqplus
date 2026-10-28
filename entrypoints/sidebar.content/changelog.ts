@@ -13,7 +13,7 @@ export const changelog: ChangelogEntry[] = [
       'Fix issues with saved Toon data getting lost',
       'Add Defense, Remote Controls, and Oil Cans to the Gag Calculator',
       'Add Cog Healths and Oil Can Damage reference pages next to Common Gag Combos',
-      'Redesign CEO and CJ difficulty tiers tooltips and add to main groups page'
+      'Redesign CEO and CJ tiers tooltips and add them to main groups page'
     ]
   },
   {
