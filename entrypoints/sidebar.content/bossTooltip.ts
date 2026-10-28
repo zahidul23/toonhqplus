@@ -96,10 +96,12 @@ export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount }
       <span class="toonhq-plus-boss-tip__average-value">${averageName}</span>
     </div>
     <div class="toonhq-plus-boss-tip__body">
-      <div class="toonhq-plus-boss-tip__label">${roundName}</div>
-      <div class="toonhq-plus-boss-tip__stats">${stats}</div>
       <div class="toonhq-plus-boss-tip__label toonhq-plus-boss-tip__section">${thresholdsName}</div>
       ${rows}
+    </div>
+    <div class="toonhq-plus-boss-tip__round">
+      <div class="toonhq-plus-boss-tip__label">${roundName}</div>
+      <div class="toonhq-plus-boss-tip__stats">${stats}</div>
     </div>`;
 };
 
@@ -230,7 +232,13 @@ export const BOSS_TOOLTIP_CSS = `
       font-weight: 700;
       white-space: nowrap;
     }
-    .toonhq-plus-boss-tip__body { padding: 10px 12px 10px; }
+    .toonhq-plus-boss-tip__body { padding: 10px 12px 12px; }
+    /* Round info sits in a darker footer tray, like the group average band. */
+    .toonhq-plus-boss-tip__round {
+      padding: 10px 12px 12px;
+      background: rgba(0, 0, 0, 0.28);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
     .toonhq-plus-boss-tip__label {
       font-size: 9px;
       font-weight: 700;
@@ -262,7 +270,7 @@ export const BOSS_TOOLTIP_CSS = `
     .toonhq-plus-boss-tip__cogs { display: inline-flex; }
     .toonhq-plus-boss-tip__cogs img { width: 20px; height: 20px; }
     .toonhq-plus-boss-tip__cogs img + img { margin-left: -6px; }
-    .toonhq-plus-boss-tip__section { margin: 12px 0 4px; }
+    .toonhq-plus-boss-tip__section { margin-bottom: 4px; }
     .toonhq-plus-boss-tip__row {
       display: grid;
       grid-template-columns: auto 1fr;
