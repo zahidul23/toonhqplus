@@ -151,7 +151,9 @@ export const BOSS_TOOLTIP_CSS = `
       text-align: left;
       text-transform: none;
       pointer-events: none;
-      z-index: 2147483000;
+      /* Above the ToonHQ+ sidebar and ToonHQ's dialogs (both use the maximum);
+         the tooltip is appended last to the body, so it wins the tie. */
+      z-index: 2147483647;
     }
     .toonhq-plus-boss-tip--lawbot {
       --boss-hero: #31528c;
@@ -160,29 +162,13 @@ export const BOSS_TOOLTIP_CSS = `
       --boss-accent-bg: rgba(147, 180, 240, 0.16);
       --boss-accent-border: rgba(147, 180, 240, 0.5);
     }
-    /* Dialog copy: anchored beside the "(5 Pink Slips)" heading, shown on hover. */
-    .boss-info-tooltip {
-      position: absolute;
-      /* Top-anchored: the arrow beside the header points at the heading. */
-      top: 50%;
-      left: calc(100% + 12px);
-      transform: translateY(-${BOSS_TOOLTIP_ARROW_TOP}px);
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.2s, visibility 0.2s;
-    }
-    .boss-info:hover .boss-info-tooltip {
-      opacity: 1;
-      visibility: visible;
-    }
-    /* Card copy: positioned on the page by showBossTierTooltip(). */
+    /* Positioned on the page by showBossTooltip() for cards and dialogs. */
     .toonhq-plus-boss-tip--floating {
       position: fixed;
       overflow: visible;
     }
     .toonhq-plus-boss-tip--floating > :first-child { border-radius: 13px 13px 0 0; }
     .toonhq-plus-boss-tip--floating > :last-child { border-radius: 0 0 13px 13px; }
-    .boss-info-tooltip::before,
     .toonhq-plus-boss-tip--floating::before {
       content: '';
       position: absolute;
@@ -193,9 +179,6 @@ export const BOSS_TOOLTIP_CSS = `
       border-style: solid;
       border-color: transparent var(--boss-hero) transparent transparent;
     }
-    .boss-info-tooltip { overflow: visible; }
-    .boss-info-tooltip > :first-child { border-radius: 13px 13px 0 0; }
-    .boss-info-tooltip > :last-child { border-radius: 0 0 13px 13px; }
     .toonhq-plus-boss-tip--floating[data-placement="left"]::before {
       right: auto;
       left: 100%;

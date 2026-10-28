@@ -1097,7 +1097,7 @@ const isBossInfoMutationNode = (node: Node | null | undefined): boolean => {
   return !!node.closest('.boss-title-wrapper, .boss-info');
 };
 
-const renderedBossTooltips = new WeakMap<HTMLElement, string>();
+const renderedBossTooltips = new WeakMap<Element, string>();
 
 /**
  * Tier data for an open group details dialog. Uses the same native group data
@@ -1158,18 +1158,9 @@ const updateBossInfo = (dialog?: ParentNode | null) => {
     ? `(${getCJDifficultyTier(input.average).lawyers} lawyers)`
     : `(${getCEODifficultyTier(input.average).slips} Pink Slips)`;
   const html = renderBossTooltip(input);
+  enableBossTooltip(thisBossInfo as HTMLElement);
 
-  // Ensure tooltip exists
-  let tooltipEl = thisBossInfo.querySelector('.boss-info-tooltip') as HTMLElement | null;
-  if (!tooltipEl) {
-    tooltipEl = document.createElement('div');
-    thisBossInfo.appendChild(tooltipEl);
-  }
-  const tooltipClass = `boss-info-tooltip ${bossTooltipClass(boss)}`;
-  if (tooltipEl.className !== tooltipClass) tooltipEl.className = tooltipClass;
-
-  // Update content only if changed. Compare the rendered HTML so threshold
-  // notes refresh when members change without changing the tier.
+  // Update the heading only if changed.
   const currentInfoText = thisBossInfo.firstChild?.nodeType === Node.TEXT_NODE
     ? thisBossInfo.firstChild.textContent
     : '';
@@ -1180,9 +1171,10 @@ const updateBossInfo = (dialog?: ParentNode | null) => {
       thisBossInfo.prepend(document.createTextNode(infoText));
     }
   }
-  if (renderedBossTooltips.get(tooltipEl) !== html) {
-    tooltipEl.innerHTML = html;
-    renderedBossTooltips.set(tooltipEl, html);
+  // Refresh an open tooltip when members change, even if the tier did not.
+  if (renderedBossTooltips.get(thisBossInfo) !== html) {
+    renderedBossTooltips.set(thisBossInfo, html);
+    if (thisBossInfo === activeDistrictTooltipAnchor) showBossTooltip(thisBossInfo as HTMLElement);
   }
 }
 const CONFIGURABLE_NAV_ITEMS: Record<string, { label: string, href: string, colorClass: string }> = {
@@ -1512,11 +1504,18 @@ async function applyGroupHighlights(
   });
 }
 
-// Cards clip their overflow, so the card tooltip floats on the page body. It
-// shares the district tooltip's active slot, so the existing scroll, resize
-// and pointer handlers also close it.
-function showBossTierTooltip(tag: HTMLElement) {
-  const tier = getGroupBossTier(groupsState[Number(tag.dataset.groupId)]);
+// Tier data for a tooltip anchor: a card pill or a dialog's boss heading.
+const getAnchorBossTooltipInput = (anchor: HTMLElement): BossTooltipInput | null => {
+  const dialog = anchor.closest<HTMLElement>('.group-details-dialog');
+  return dialog ? getDialogBossTooltipInput(dialog) : getGroupBossTier(groupsState[Number(anchor.dataset.groupId)]);
+};
+
+// Cards clip their overflow, and the sidebar draws over ToonHQ's dialogs, so
+// both boss tooltips float on the page body. They share the district
+// tooltip's active slot, so the existing scroll, resize and pointer handlers
+// also close them.
+function showBossTooltip(tag: HTMLElement) {
+  const tier = getAnchorBossTooltipInput(tag);
   if (!tier) return;
   hideDistrictTooltip();
 
@@ -1527,9 +1526,9 @@ function showBossTierTooltip(tag: HTMLElement) {
   tooltip.innerHTML = renderBossTooltip(tier);
   document.body.appendChild(tooltip);
 
-  // Match the dialog: open to the right of the tag (or left if there is no
-  // room) with the arrow beside the header, pointing at the tag. Shift up only
-  // if the tooltip would run off the bottom of the viewport.
+  // Open to the right of the anchor (or left if there is no room) with the
+  // arrow beside the header, pointing at the anchor. Shift up only if the
+  // tooltip would run off the bottom of the viewport.
   const anchorRect = tag.getBoundingClientRect();
   const tooltipRect = tooltip.getBoundingClientRect();
   const fitsRight = anchorRect.right + 12 + tooltipRect.width <= window.innerWidth - 8;
@@ -1543,6 +1542,15 @@ function showBossTierTooltip(tag: HTMLElement) {
   tag.setAttribute('aria-describedby', tooltip.id);
   activeDistrictTooltip = tooltip;
   activeDistrictTooltipAnchor = tag;
+}
+
+function enableBossTooltip(anchor: HTMLElement) {
+  if (anchor.dataset.bossTooltip) return;
+  anchor.dataset.bossTooltip = 'true';
+  anchor.addEventListener('mouseenter', () => showBossTooltip(anchor));
+  anchor.addEventListener('mouseleave', hideDistrictTooltip);
+  anchor.addEventListener('focus', () => showBossTooltip(anchor));
+  anchor.addEventListener('blur', hideDistrictTooltip);
 }
 
 // Show the live CEO/CJ tier next to each Groups page card's name so players
@@ -1564,11 +1572,7 @@ function applyBossTierTags() {
       tag = document.createElement('span');
       tag.className = 'toonhq-plus-boss-tier';
       tag.tabIndex = 0;
-      const anchor = tag;
-      anchor.addEventListener('mouseenter', () => showBossTierTooltip(anchor));
-      anchor.addEventListener('mouseleave', hideDistrictTooltip);
-      anchor.addEventListener('focus', () => showBossTierTooltip(anchor));
-      anchor.addEventListener('blur', hideDistrictTooltip);
+      enableBossTooltip(tag);
       // Sits after ToonHQ's fit-text name, which only measures itself.
       title.appendChild(tag);
     }
@@ -1581,7 +1585,7 @@ function applyBossTierTags() {
     tag.textContent = tier.detail;
     tag.setAttribute('aria-label', `${tier.boss} Tier ${tier.tier}, ${tier.detail}. Group average ${tier.averageName}.`);
     // Refresh an open tooltip when members join or leave.
-    if (tag === activeDistrictTooltipAnchor) showBossTierTooltip(tag);
+    if (tag === activeDistrictTooltipAnchor) showBossTooltip(tag);
   });
   // Open details dialogs use the same group data, so keep them in step.
   document.querySelectorAll<HTMLElement>('.group-details-dialog').forEach(dialog => updateBossInfo(dialog));
