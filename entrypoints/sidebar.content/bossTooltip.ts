@@ -60,8 +60,8 @@ export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount }
     const note = getTooltipNoteForThreshold(minSuitValue, sum, toonCount, average, isActive, bossKey);
     return `
       <div class="toonhq-plus-boss-tip__row ${isActive ? 'is-active' : ''}">
-        <span class="toonhq-plus-boss-tip__who">${getCogNameForLevel(minSuitValue, bossKey)}+</span>
         <span class="toonhq-plus-boss-tip__reward">${reward}</span>
+        <span class="toonhq-plus-boss-tip__who">${getCogNameForLevel(minSuitValue, bossKey)}+</span>
         ${note ? `<span class="toonhq-plus-boss-tip__hint">${note}</span>` : ''}
       </div>`;
   };
@@ -265,7 +265,7 @@ export const BOSS_TOOLTIP_CSS = `
     .toonhq-plus-boss-tip__section { margin: 12px 0 4px; }
     .toonhq-plus-boss-tip__row {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: auto 1fr;
       align-items: center;
       column-gap: 8px;
       margin: 0 -4px;
@@ -276,6 +276,7 @@ export const BOSS_TOOLTIP_CSS = `
     }
     .toonhq-plus-boss-tip__row + .toonhq-plus-boss-tip__row { margin-top: 2px; }
     .toonhq-plus-boss-tip__reward { font-weight: 700; color: #fff; }
+    .toonhq-plus-boss-tip__who { text-align: right; }
     /* The group's current threshold is a highlighted block. */
     .toonhq-plus-boss-tip__row.is-active {
       background: var(--boss-accent-bg);
@@ -283,9 +284,12 @@ export const BOSS_TOOLTIP_CSS = `
       color: var(--boss-accent);
       font-weight: 700;
     }
+    .toonhq-plus-boss-tip__row.is-active .toonhq-plus-boss-tip__reward { color: var(--boss-accent); }
     .toonhq-plus-boss-tip__hint {
       grid-column: 1 / -1;
       margin-top: 1px;
+      /* Sits under the suit requirement it describes. */
+      text-align: right;
       font-size: 10px;
       font-weight: 400;
       font-style: italic;
