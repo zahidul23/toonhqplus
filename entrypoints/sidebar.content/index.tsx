@@ -3,7 +3,7 @@ import { browser } from 'wxt/browser';
 import { SidebarApp } from './SidebarApp';
 import { extractToonName, getCogValueFromName, getAverageSuitValue } from './toonUtils';
 import { getCogNameForLevel, getCJDifficultyTier, getCEODifficultyTier, getGroupBossTier } from './bossTiers';
-import { BOSS_TOOLTIP_ARROW_TOP, BOSS_TOOLTIP_CSS, bossTooltipClass, renderBossTooltip } from './bossTooltip';
+import { BOSS_TOOLTIP_ARROW_TOP, BOSS_TOOLTIP_CSS, bossTooltipClass, renderBossTooltip, type BossTooltipInput } from './bossTooltip';
 import { disposeBoardingStatus } from './boardingStatus';
 import { getNativeBridge } from './nativeBridge';
 import { createNativeGroupTracker } from './nativeGroupTracker';
@@ -1099,6 +1099,43 @@ const isBossInfoMutationNode = (node: Node | null | undefined): boolean => {
 
 const renderedBossTooltips = new WeakMap<HTMLElement, string>();
 
+/**
+ * Tier data for an open group details dialog. Uses the same native group data
+ * as the card pill; falls back to the member rows on screen when that data is
+ * unavailable (for example on Corporate Clash).
+ */
+const getDialogBossTooltipInput = (dialog: ParentNode): BossTooltipInput | null => {
+  // ToonHQ opens group details on its /groups/:id/ route (one dialog at a time).
+  const routeMatch = window.location.pathname.match(/^\/(?:cc\/)?groups\/(\d+)\/?$/);
+  const groupId = routeMatch ? Number(routeMatch[1]) : 0;
+  const fromNative = groupId ? getGroupBossTier(groupsState[groupId]) : null;
+  if (fromNative) return fromNative;
+
+  const thisBossName = dialog.querySelector('h4')?.textContent?.trim();
+  const thisBossKey = thisBossName ? BOSS_CONFIG[thisBossName] : null;
+  if (!thisBossKey) return null;
+
+  // Moderators also see members who left; ToonHQ marks those rows with
+  // group-member-row__left. Count only current members, like the card pill.
+  const rows = dialog.querySelectorAll('.group-member-row:not(.group-member-row__left)');
+  const suitNames: string[] = [];
+  for (const row of rows) {
+    const suitImg = row.querySelector('.toon__track--suit');
+    if (suitImg instanceof HTMLElement && (suitImg.title || suitImg.dataset.originalTitle)) {
+      suitNames.push(suitImg.title || suitImg.dataset.originalTitle || '');
+    }
+  }
+  const average = getAverageSuitValue(suitNames);
+  if (average === 0) return null;
+  return {
+    boss: thisBossKey === 'lawbot' ? 'CJ' : 'CEO',
+    average,
+    averageName: getCogNameForLevel(average, thisBossKey),
+    sum: suitNames.map(name => getCogValueFromName(name)).reduce((total, value) => total + value, 0),
+    toonCount: suitNames.length,
+  };
+};
+
 const updateBossInfo = (dialog?: ParentNode | null) => {
   if (bossInfoEnabled === false) {
     const targetDialog = dialog ?? document.querySelector('.group-details-dialog');
@@ -1114,32 +1151,13 @@ const updateBossInfo = (dialog?: ParentNode | null) => {
   const thisBossInfo = targetDialog?.querySelector(".boss-info");
   if (!targetDialog || !thisBossInfo) return;
 
-  const thisBossName = targetDialog.querySelector('h4')?.textContent?.trim();
-  const thisBossKey = thisBossName ? BOSS_CONFIG[thisBossName] : null;
-  if (!thisBossKey) return;
-
-  const rows = targetDialog.querySelectorAll('.group-member-row');
-  const suitNames: string[] = [];
-  for (const row of rows) {
-    const suitImg = row.querySelector('.toon__track--suit');
-    if (suitImg instanceof HTMLElement && (suitImg.title || suitImg.dataset.originalTitle)) {
-      suitNames.push(suitImg.title || suitImg.dataset.originalTitle || '');
-    }
-  }
-
-  const suitValues = suitNames.map(name => getCogValueFromName(name));
-  const currentSum = suitValues.reduce((sum, v) => sum + v, 0);
-  const averageSuitValue = getAverageSuitValue(suitNames);
-  if (averageSuitValue === 0) return;
-  const suitString = getCogNameForLevel(averageSuitValue, thisBossKey);
-
-  const boss: 'CEO' | 'CJ' = thisBossKey === 'lawbot' ? 'CJ' : 'CEO';
+  const input = getDialogBossTooltipInput(targetDialog);
+  if (!input) return;
+  const { boss } = input;
   const infoText = boss === 'CJ'
-    ? `(${getCJDifficultyTier(averageSuitValue).lawyers} lawyers)`
-    : `(${getCEODifficultyTier(averageSuitValue).slips} Pink Slips)`;
-  const html = renderBossTooltip({
-    boss, average: averageSuitValue, averageName: suitString, sum: currentSum, toonCount: suitNames.length,
-  });
+    ? `(${getCJDifficultyTier(input.average).lawyers} lawyers)`
+    : `(${getCEODifficultyTier(input.average).slips} Pink Slips)`;
+  const html = renderBossTooltip(input);
 
   // Ensure tooltip exists
   let tooltipEl = thisBossInfo.querySelector('.boss-info-tooltip') as HTMLElement | null;
@@ -1565,6 +1583,8 @@ function applyBossTierTags() {
     // Refresh an open tooltip when members join or leave.
     if (tag === activeDistrictTooltipAnchor) showBossTierTooltip(tag);
   });
+  // Open details dialogs use the same group data, so keep them in step.
+  document.querySelectorAll<HTMLElement>('.group-details-dialog').forEach(dialog => updateBossInfo(dialog));
 }
 
 function applyCurrentGroupHighlights() {

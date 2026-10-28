@@ -7,12 +7,13 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.3.0',
-    date: 'Oct 26, 2026',
+    date: 'Oct 28, 2026',
     changes: [
       'Reduce ToonHQ server load by reusing its existing data feed',
       'Fix issues with saved Toon data getting lost',
       'Add Defense, Remote Controls, and Oil Cans to the Gag Calculator',
-      'Add Cog Healths and Oil Can Damage reference pages next to Common Gag Combos'
+      'Add Cog Healths and Oil Can Damage reference pages next to Common Gag Combos',
+      'Add CEO and CJ difficulty tiers to group cards on the main page'
     ]
   },
   {

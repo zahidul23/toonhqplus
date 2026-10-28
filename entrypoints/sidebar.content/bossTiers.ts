@@ -99,6 +99,10 @@ export interface GroupBossTier {
   averageName: string;
   /** Sum of member suit values, used for the threshold notes. */
   sum: number;
+  /** The group's player limit (2, 4, 6 or 8). */
+  maxPlayers: number;
+  /** Spots left before the group is full, counted the way ToonHQ does. */
+  openSpots: number;
   toonCount: number;
 }
 
@@ -116,7 +120,14 @@ export function getGroupBossTier(group: any): GroupBossTier | null {
 
   const sum = values.reduce((total: number, value: number) => total + value, 0);
   const average = bankersRound(sum / values.length);
-  const base = { boss: config.boss, average, sum, averageName: getCogNameForLevel(average, config.suit), toonCount: values.length };
+  // ToonHQ counts each current member's party size against max_players.
+  const maxPlayers = Number.isInteger(group.max_players) && group.max_players > 0 && group.max_players <= 8
+    ? group.max_players : 8;
+  const players = group.members
+    .filter((member: any) => member && !member.left)
+    .reduce((total: number, member: any) => total + (Number.isFinite(member.num_players) ? member.num_players : 1), 0);
+  const openSpots = Math.max(0, maxPlayers - players);
+  const base = { boss: config.boss, average, sum, maxPlayers, openSpots, averageName: getCogNameForLevel(average, config.suit), toonCount: values.length };
   if (config.boss === 'CJ') {
     const tier = getCJDifficultyTier(average);
     return { ...base, tier: tier.tier, detail: `${tier.lawyers} Lawyers` };

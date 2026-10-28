@@ -20,18 +20,21 @@ export const getTooltipNoteForThreshold = (
   currentCount: number,
   currentAvg: number,
   isActive: boolean,
-  bossKey: string
+  bossKey: string,
+  maxPlayers = 8,
 ) => {
-  if (currentCount >= 8 || minSuitValue <= 1) return '';
+  // Toons whose suits are not known yet (open spots and extra party members)
+  // fill the group up to its player limit.
+  if (currentCount >= maxPlayers || minSuitValue <= 1) return '';
   if (minSuitValue <= currentAvg && !isActive) return '';
 
-  const targetSum = minSuitValue * 8;
+  const targetSum = minSuitValue * maxPlayers;
   const action = isActive ? 'maintain' : 'reach';
-  const remaining = 8 - currentCount;
+  const remaining = maxPlayers - currentCount;
   const avgNeeded = Math.ceil((targetSum - currentSum) / remaining);
 
   if (avgNeeded > 78) {
-    return `Impossible to ${action} with 8 members`;
+    return `Impossible to ${action} with ${maxPlayers} members`;
   } else if (avgNeeded > 1) {
     return `${getCogNameForLevel(avgNeeded, bossKey)}+ required to ${action}`;
   }
@@ -44,6 +47,10 @@ export interface BossTooltipInput {
   averageName: string;
   sum: number;
   toonCount: number;
+  /** The group's player limit; defaults to 8 when unknown. */
+  maxPlayers?: number;
+  /** Open spots, shown beside the thresholds heading when known. */
+  openSpots?: number | null;
 }
 
 const COG_ASSET_URL = 'https://toonhq.org/static/assets/cogs/';
@@ -52,12 +59,12 @@ const COG_ASSET_URL = 'https://toonhq.org/static/assets/cogs/';
  * Boss tooltip shared by group cards and the group details dialog. The reward
  * (pink slips or lawyers) leads; the tier is secondary.
  */
-export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount }: BossTooltipInput) => {
+export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount, maxPlayers = 8, openSpots = null }: BossTooltipInput) => {
   const bossKey = boss === 'CJ' ? 'lawbot' : 'bossbot';
   const stat = (value: string | number, label: string, extraClass = '') =>
     `<div class="toonhq-plus-boss-tip__stat ${extraClass}"><div class="toonhq-plus-boss-tip__label">${label}</div><div class="toonhq-plus-boss-tip__stat-value">${value}</div></div>`;
   const row = (minSuitValue: number, reward: string, isActive: boolean) => {
-    const note = getTooltipNoteForThreshold(minSuitValue, sum, toonCount, average, isActive, bossKey);
+    const note = getTooltipNoteForThreshold(minSuitValue, sum, toonCount, average, isActive, bossKey, maxPlayers);
     return `
       <div class="toonhq-plus-boss-tip__row ${isActive ? 'is-active' : ''}">
         <span class="toonhq-plus-boss-tip__reward">${reward}</span>
@@ -85,6 +92,10 @@ export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount }
     rows = PINK_SLIP_THRESHOLDS.map(t => row(t.minSuitValue, `${t.slipCount} Slips`, data.slips === t.slipCount)).join('');
   }
 
+  const spots = openSpots == null ? ''
+    : `<div class="toonhq-plus-boss-tip__spots"><span>${openSpots === 0 ? 'Group Full'
+      : `${openSpots} Open Spot${openSpots === 1 ? '' : 's'}`}</span></div>`;
+
   return `
     <div class="toonhq-plus-boss-tip__hero">
       <div class="toonhq-plus-boss-tip__count">${count}</div>
@@ -98,6 +109,7 @@ export const renderBossTooltip = ({ boss, average, averageName, sum, toonCount }
     <div class="toonhq-plus-boss-tip__body">
       <div class="toonhq-plus-boss-tip__label toonhq-plus-boss-tip__section">${thresholdsName}</div>
       ${rows}
+      ${spots}
     </div>
     <div class="toonhq-plus-boss-tip__round">
       <div class="toonhq-plus-boss-tip__label">${roundName} · Tier ${tier}</div>
@@ -271,6 +283,13 @@ export const BOSS_TOOLTIP_CSS = `
     .toonhq-plus-boss-tip__cogs img { width: 20px; height: 20px; }
     .toonhq-plus-boss-tip__cogs img + img { margin-left: -6px; }
     .toonhq-plus-boss-tip__section { margin-bottom: 4px; }
+    .toonhq-plus-boss-tip__spots {
+      margin: 4px 0 -4px;
+      text-align: center;
+      color: var(--boss-accent);
+      font-size: 11px;
+      font-weight: 700;
+    }
     .toonhq-plus-boss-tip__row {
       display: grid;
       grid-template-columns: auto 1fr;

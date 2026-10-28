@@ -37,3 +37,14 @@ test('non-boss groups and groups without suits get no tier', () => {
   assert.equal(getGroupBossTier({ type: 9, members: [member({ lawbot: '8132' })] }), null);
   assert.equal(getGroupBossTier(undefined), null);
 });
+
+test('open spots follow ToonHQ: current members, party sizes and the group limit', () => {
+  const tier = getGroupBossTier({ type: 9, max_players: 4, members: [
+    member({ bossbot: '8132' }, { num_players: 2 }),
+    member({ bossbot: '7109' }, { num_players: 1, left: '2026-10-28T00:00:00Z' }),
+    member({ bossbot: '7109' }, { num_players: 1 }),
+  ] });
+  assert.deepEqual([tier.maxPlayers, tier.openSpots], [4, 1]);
+  const unlimited = getGroupBossTier({ type: 7, max_players: null, members: [member({ lawbot: '8132' })] });
+  assert.deepEqual([unlimited.maxPlayers, unlimited.openSpots], [8, 7]);
+});
