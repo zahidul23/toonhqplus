@@ -17,7 +17,7 @@ export default defineConfig({
   manifest: {
     name: 'ToonHQ+',
     description: 'ToonHQ+ (ToonHQ Plus) is an unofficial independently created browser extension that enhances the ToonHQ experience.',
-    version: '1.3.0',
+    version: '1.3.1',
     permissions: ['storage', 'alarms', 'contextMenus'],
     optional_permissions: ['notifications'],
     host_permissions: [
@@ -27,7 +27,7 @@ export default defineConfig({
 
     web_accessible_resources: [
       {
-        resources: ['vue-logger.js', 'native-bridge.js', 'images/*.webp', 'images/*.png', 'fonts/MinnieFont.woff'],
+        resources: ['vue-logger.js', 'native-bridge.js', 'images/*.webp', 'images/*.png', 'fonts/MinnieFont.woff', 'fonts/Roboto-Bold-latin.woff2'],
         matches: ['*://*.toonhq.org/*', '*://toonhq.org/*'],
       },
     ],

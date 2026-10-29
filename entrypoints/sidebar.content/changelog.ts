@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.1',
+    date: 'Oct 28, 2026',
+    changes: [
+      'Fix blurry bold text in CEO and CJ tooltips and tier pills on Firefox',
+      'Fix Toony Toons, Stinky Toons, and notes not saving on Firefox',
+      'Fix the dark theme notice getting cut off when adding a Toon to a list'
+    ]
+  },
+  {
     version: '1.3.0',
     date: 'Oct 28, 2026',
     changes: [

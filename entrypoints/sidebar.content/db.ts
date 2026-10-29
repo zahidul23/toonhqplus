@@ -488,11 +488,18 @@ export async function getAllFromList(store: ListStore): Promise<ToonId[]> {
     .filter((id): id is ToonId => id !== null);
 }
 
+/** Reads the saved-record metadata as an object we can modify. In Firefox,
+ *  IndexedDB results in a content script belong to the page, and adding our
+ *  own objects to them throws "Not allowed to define cross-origin object". */
+async function readSavedMeta(settings: IDBObjectStore): Promise<SavedRecordMeta> {
+  const saved = await promisifyRequest<any>(settings.get(SAVED_RECORD_META_KEY));
+  return saved?.value ? structuredClone(saved.value) : { writer: crypto.randomUUID(), counter: 0, versions: {} };
+}
+
 async function stampSavedChanges(t: IDBTransaction, changes: { kind: SavedRecordKind; id: string; deleted: boolean }[]) {
   if (!changes.length) return;
   const settings = t.objectStore('settings');
-  const saved = await promisifyRequest<any>(settings.get(SAVED_RECORD_META_KEY));
-  const meta: SavedRecordMeta = saved?.value || { writer: crypto.randomUUID(), counter: 0, versions: {} };
+  const meta = await readSavedMeta(settings);
   meta.writer = crypto.randomUUID(); // Unique operation ID, even after a device backup is cloned.
   meta.counter = Object.values(meta.versions).reduce((counter, version) => Math.max(counter, version.counter), meta.counter) + 1;
   if (!Number.isSafeInteger(meta.counter)) throw new Error('Saved Toon revision limit reached. Export a backup before continuing.');
@@ -660,8 +667,7 @@ export async function applySavedToonData(snapshot: SavedToonDataSnapshot, replac
       }));
     } else {
       const settings = t.objectStore('settings');
-      const saved = await promisifyRequest<any>(settings.get(SAVED_RECORD_META_KEY));
-      const meta: SavedRecordMeta = saved?.value || { writer: crypto.randomUUID(), counter: 0, versions: {} };
+      const meta = await readSavedMeta(settings);
       meta.versions = merged.recordVersions || {};
       meta.counter = Object.values(meta.versions).reduce((counter, version) => Math.max(counter, version.counter), meta.counter);
       settings.put({ key: SAVED_RECORD_META_KEY, value: meta });

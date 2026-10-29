@@ -271,6 +271,16 @@ function injectHighlightStyles() {
   const style = document.createElement('style');
   style.setAttribute('data-toonhq-plus-highlights', '');
   style.textContent = `
+    /* ToonHQ only loads Roboto 400, so our bold labels were faux-bolded,
+       which smears at small sizes in Firefox. Supply the real bold face. */
+    @font-face {
+      font-family: 'Roboto';
+      src: url('${getExtensionResourceUrl('fonts/Roboto-Bold-latin.woff2')}') format('woff2');
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+    }
+
     tr.group-member-row.${ROW_CLASS_FAVORITE},
     tr.group-member-row.${ROW_CLASS_FAVORITE} td { background: rgba(34, 197, 94, 0.12) !important; }
     tr.group-member-row.${ROW_CLASS_BLOCKED},
