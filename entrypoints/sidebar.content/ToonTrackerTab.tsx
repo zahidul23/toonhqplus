@@ -2299,7 +2299,7 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
             <div className="reward-page-header px-6 py-3 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
               <div className="flex items-center gap-3">
                 <h3 className="reward-heading">{activeCategory === 'analytics' ? 'Rewards Stats' : REWARD_CATEGORIES_CONFIG.find(c => c.id === activeCategory)?.label}</h3>
-                {activeCategory !== 'analytics' && <div className="px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-900 text-[11px] font-black">{totals[activeCategory as keyof typeof totals]}</div>}
+                {activeCategory !== 'analytics' && <div className="reward-heading-count">{totals[activeCategory as keyof typeof totals]}</div>}
               </div>
               <div className="flex items-center gap-2">
                 {activeCategory === 'analytics' && (
