@@ -14,8 +14,8 @@ import {
 import type { RewardCategory, RewardHistoryEntry, RewardGroup } from './trackerUtils';
 import { normalizeToonOrderSetting, orderTrackerToons } from './toonOrder';
 import { requestRewardNotificationPermissionWithFallback } from '../lib/rewardNotificationPermission';
-import { UniteInventory } from './components/UniteInventory';
-import type { UniteLayout } from './components/UniteInventory';
+import { UniteInventory, getUniteImage } from './components/UniteInventory';
+import type { UniteLayout, UniteCategory } from './components/UniteInventory';
 import { RemoteInventory } from './components/RemoteInventory';
 
 function getExtensionImageUrl(path: string): string {
@@ -422,6 +422,45 @@ const ToonHeader = React.memo(({
 
 type SOSTableSort = 'default' | 'count';
 
+// Image mapping from CogCalculator.tsx
+const SOS_IMAGES: Record<string, string> = {
+  'Lord Lowden Clear': 'https://rendition.toontownrewritten.com/render/7401010201791b6c1b2c1b02000202010400000000000000000000000000000000/portrait/128x128.webp',
+  'Professor Pete': 'https://rendition.toontownrewritten.com/render/7407010201000400048b0f12001212010400000000000000000000000000000000/portrait/128x128.webp',
+  'Professor Guffaw': 'https://rendition.toontownrewritten.com/render/740005020000060006030704000404010400000000000000000000000000000000/portrait/128x128.webp',
+  'Clerk Ray': 'https://rendition.toontownrewritten.com/render/740e010101010301038b070c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+  'Doctor Drift': 'https://rendition.toontownrewritten.com/render/740902020001040104001b03000303010400000000000000000000000000000000/portrait/128x128.webp',
+  'Melody Wavers': 'https://rendition.toontownrewritten.com/render/740e0201000103010308060e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+  'Shelly Seaweed': 'https://rendition.toontownrewritten.com/render/740c01010001030103191504000404010400000000000000000000000000000000/portrait/128x128.webp',
+  'Rocky': 'https://rendition.toontownrewritten.com/render/7406010101791b6c1b2c1b14001414010400000000000000000000000000000000/portrait/128x128.webp',
+
+  'Sticky Lou': 'https://rendition.toontownrewritten.com/render/740c02000101080108050d04000404010400000000000000000000000000000000/portrait/128x128.webp',
+  'Julius Wheezer': 'https://rendition.toontownrewritten.com/render/740c01010101010101050e12001212010400000000000000000000000000000000/portrait/128x128.webp',
+  'Flippy': 'https://rendition.toontownrewritten.com/render/740101010103110311092011001111010400000000000000000000000000000000/portrait/128x128.webp',
+  'Clerk Clara': 'https://rendition.toontownrewritten.com/render/741101020001090109171502000202010400000000000000000000000000000000/portrait/128x128.webp',
+  'Lil Oldman': 'https://rendition.toontownrewritten.com/render/7411020101010501058b0915001515010400000000000000000000000000000000/portrait/128x128.webp',
+  'Nancy Gas': 'https://rendition.toontownrewritten.com/render/7412000001010101010e1b08000808010400000000000000000000000000000000/portrait/128x128.webp',
+  'Barnacle Bessie': 'https://rendition.toontownrewritten.com/render/7414050200010c010c01190d000d0d010400000000000000000000000000000000/portrait/128x128.webp',
+  'Baker Bridget': 'https://rendition.toontownrewritten.com/render/740c00020000190019171504000404010400000000000000000000000000000000/portrait/128x128.webp',
+
+  'Soggy Nell': 'https://rendition.toontownrewritten.com/render/740301020001000100040c04000404010400000000000000000000000000000000/portrait/128x128.webp',
+  'Mr. Freeze': 'https://rendition.toontownrewritten.com/render/74000002010101010205070c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+  'Daffy Don': 'https://rendition.toontownrewritten.com/render/740c000201010601068b1104000404010400000000000000000000000000000000/portrait/128x128.webp',
+  'Clerk Penny': 'https://rendition.toontownrewritten.com/render/74120201000019001908050c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+  'Stinky Ned': 'https://rendition.toontownrewritten.com/render/7415000001000000008b0206000606010400000000000000000000000000000000/portrait/128x128.webp',
+  'Moe Zart': 'https://rendition.toontownrewritten.com/render/7401000001000000008b010e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+  'Franz Neckvein': 'https://rendition.toontownrewritten.com/render/740d000101000200028b0607000707010400000000000000000000000000000000/portrait/128x128.webp',
+  'Sofie Squirt': 'https://rendition.toontownrewritten.com/render/7415020200001b001b1a150e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+
+  'Soggy Bottom': 'https://rendition.toontownrewritten.com/render/740b00010100080008050415001515010400000000000000000000000000000000/portrait/128x128.webp',
+  'Flim Flam': 'https://rendition.toontownrewritten.com/render/740102020001170117070110001010010400000000000000000000000000000000/portrait/128x128.webp',
+  'Madam Chuckle': 'https://rendition.toontownrewritten.com/render/740705020000040004040415001515010400000000000000000000000000000000/portrait/128x128.webp',
+  'Clerk Will': 'https://rendition.toontownrewritten.com/render/740f010201000b000b05000a000a0a010400000000000000000000000000000000/portrait/128x128.webp',
+  'Sid Sonata': 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp',
+  'Barbara Seville': 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp',
+  'Clumsy Ned': 'https://rendition.toontownrewritten.com/render/740c020201010701078b0a0c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
+  'Loopy Loopenloop': 'https://rendition.toontownrewritten.com/render/7412010201791b6c1b2c1b0e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
+};
+
 const SOSTableView = React.memo(({ sos, sortBy }: { sos: Record<string, number>; sortBy: SOSTableSort }) => {
   const sosGrid = [
     // ['Sticky Lou', 'Julius Wheezer', 'Flippy', 'Clerk Clara', 'Lil Oldman', 'Moe Zart', 'Barnacle Bessie', 'Sofie Squirt'],
@@ -450,51 +489,13 @@ const SOSTableView = React.memo(({ sos, sortBy }: { sos: Record<string, number>;
     return initialOrder;
   }, [cleanSosCounts, initialOrder, sortBy]);
 
-  // Image mapping from CogCalculator.tsx
-  const sosImages: Record<string, string> = {
-    'Lord Lowden Clear': 'https://rendition.toontownrewritten.com/render/7401010201791b6c1b2c1b02000202010400000000000000000000000000000000/portrait/128x128.webp',
-    'Professor Pete': 'https://rendition.toontownrewritten.com/render/7407010201000400048b0f12001212010400000000000000000000000000000000/portrait/128x128.webp',
-    'Professor Guffaw': 'https://rendition.toontownrewritten.com/render/740005020000060006030704000404010400000000000000000000000000000000/portrait/128x128.webp',
-    'Clerk Ray': 'https://rendition.toontownrewritten.com/render/740e010101010301038b070c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
-    'Doctor Drift': 'https://rendition.toontownrewritten.com/render/740902020001040104001b03000303010400000000000000000000000000000000/portrait/128x128.webp',
-    'Melody Wavers': 'https://rendition.toontownrewritten.com/render/740e0201000103010308060e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
-    'Shelly Seaweed': 'https://rendition.toontownrewritten.com/render/740c01010001030103191504000404010400000000000000000000000000000000/portrait/128x128.webp',
-    'Rocky': 'https://rendition.toontownrewritten.com/render/7406010101791b6c1b2c1b14001414010400000000000000000000000000000000/portrait/128x128.webp',
-
-    'Sticky Lou': 'https://rendition.toontownrewritten.com/render/740c02000101080108050d04000404010400000000000000000000000000000000/portrait/128x128.webp',
-    'Julius Wheezer': 'https://rendition.toontownrewritten.com/render/740c01010101010101050e12001212010400000000000000000000000000000000/portrait/128x128.webp',
-    'Flippy': 'https://rendition.toontownrewritten.com/render/740101010103110311092011001111010400000000000000000000000000000000/portrait/128x128.webp',
-    'Clerk Clara': 'https://rendition.toontownrewritten.com/render/741101020001090109171502000202010400000000000000000000000000000000/portrait/128x128.webp',
-    'Lil Oldman': 'https://rendition.toontownrewritten.com/render/7411020101010501058b0915001515010400000000000000000000000000000000/portrait/128x128.webp',
-    'Nancy Gas': 'https://rendition.toontownrewritten.com/render/7412000001010101010e1b08000808010400000000000000000000000000000000/portrait/128x128.webp',
-    'Barnacle Bessie': 'https://rendition.toontownrewritten.com/render/7414050200010c010c01190d000d0d010400000000000000000000000000000000/portrait/128x128.webp',
-    'Baker Bridget': 'https://rendition.toontownrewritten.com/render/740c00020000190019171504000404010400000000000000000000000000000000/portrait/128x128.webp',
-
-    'Soggy Nell': 'https://rendition.toontownrewritten.com/render/740301020001000100040c04000404010400000000000000000000000000000000/portrait/128x128.webp',
-    'Mr. Freeze': 'https://rendition.toontownrewritten.com/render/74000002010101010205070c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
-    'Daffy Don': 'https://rendition.toontownrewritten.com/render/740c000201010601068b1104000404010400000000000000000000000000000000/portrait/128x128.webp',
-    'Clerk Penny': 'https://rendition.toontownrewritten.com/render/74120201000019001908050c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
-    'Stinky Ned': 'https://rendition.toontownrewritten.com/render/7415000001000000008b0206000606010400000000000000000000000000000000/portrait/128x128.webp',
-    'Moe Zart': 'https://rendition.toontownrewritten.com/render/7401000001000000008b010e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
-    'Franz Neckvein': 'https://rendition.toontownrewritten.com/render/740d000101000200028b0607000707010400000000000000000000000000000000/portrait/128x128.webp',
-    'Sofie Squirt': 'https://rendition.toontownrewritten.com/render/7415020200001b001b1a150e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
-
-    'Soggy Bottom': 'https://rendition.toontownrewritten.com/render/740b00010100080008050415001515010400000000000000000000000000000000/portrait/128x128.webp',
-    'Flim Flam': 'https://rendition.toontownrewritten.com/render/740102020001170117070110001010010400000000000000000000000000000000/portrait/128x128.webp',
-    'Madam Chuckle': 'https://rendition.toontownrewritten.com/render/740705020000040004040415001515010400000000000000000000000000000000/portrait/128x128.webp',
-    'Clerk Will': 'https://rendition.toontownrewritten.com/render/740f010201000b000b05000a000a0a010400000000000000000000000000000000/portrait/128x128.webp',
-    'Sid Sonata': 'https://rendition.toontownrewritten.com/render/7401010101000b000b8b0101000101010400000000000000000000000000000000/portrait/128x128.webp',
-    'Barbara Seville': 'https://rendition.toontownrewritten.com/render/7407020201011a011a0a1d17001717010400000000000000000000000000000000/portrait/128x128.webp',
-    'Clumsy Ned': 'https://rendition.toontownrewritten.com/render/740c020201010701078b0a0c000c0c010400000000000000000000000000000000/portrait/128x128.webp',
-    'Loopy Loopenloop': 'https://rendition.toontownrewritten.com/render/7412010201791b6c1b2c1b0e000e0e010400000000000000000000000000000000/portrait/128x128.webp',
-  };
 
   return (
     <div className="flex flex-col gap-3 h-full overflow-y-auto custom-scrollbar p-2">
       <div className="grid grid-cols-4 xl:grid-cols-8 gap-3">
         {sortedSosNames.map(name => {
           const count = Object.entries(sos).find(([n, _]) => n.replace(/\u0003/g, '') === name)?.[1] || 0;
-          const image = sosImages[name] || '';
+          const image = SOS_IMAGES[name] || '';
           const cardData = SOS_DATA[name] || { type: 'Unknown', starRating: 0 };
           const stars = cardData.starRating;
 
@@ -708,13 +709,7 @@ const RewardPieChart = React.memo(({ history, timeframe }: { history: RewardHist
 
   const totalClears = Object.values(stats).reduce((a, b) => a + b.clears, 0);
 
-  const CATEGORIES_CONFIG = [
-    { id: 'sos', boss: 'VP', label: 'SOS Cards', singular: 'SOS Card', color: '#a855f7' },    // Saturated Purple
-    { id: 'unites', boss: 'CFO', label: 'Unites', singular: 'Unite', color: '#22c55e' },    // Saturated Green
-    { id: 'summons', boss: 'CJ', label: 'Summons', singular: 'Summon', color: '#3b82f6' }, // Saturated Blue
-    { id: 'pinkslips', boss: 'CEO', label: 'Pink Slips', singular: 'Pink Slip', color: '#f59e0b' }, // Saturated Amber/Brown
-    { id: 'remotes', boss: 'FO', label: 'Remotes', singular: 'Remote', color: '#ef4444' },     // Saturated Red
-  ];
+  const CATEGORIES_CONFIG = ANALYTICS_CATEGORIES;
 
   const chartData = useMemo(() => {
     let currentAngle = 0;
@@ -870,6 +865,401 @@ const RewardPieChart = React.memo(({ history, timeframe }: { history: RewardHist
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+});
+
+type RewardChartMode = 'clears' | 'rewards';
+const REWARD_CHART_MODE_STORAGE_KEY = 'toonhqplus_reward_chart_mode';
+const ANALYTICS_WINDOW_MS: Record<string, number> = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 };
+const DAY_MS = 86400000;
+
+const ANALYTICS_CATEGORIES: { id: RewardCategory; boss: string; label: string; singular: string; color: string; img: string }[] = [
+  { id: 'sos', boss: 'VP', label: 'SOS Cards', singular: 'SOS Card', color: '#a855f7', img: 'sos.webp' },
+  { id: 'unites', boss: 'CFO', label: 'Unites', singular: 'Unite', color: '#22c55e', img: 'unites.webp' },
+  { id: 'summons', boss: 'CJ', label: 'Summons', singular: 'Summon', color: '#3b82f6', img: 'summons.webp' },
+  { id: 'pinkslips', boss: 'CEO', label: 'Pink Slips', singular: 'Pink Slip', color: '#a47148', img: 'pinkslips.webp' },
+  { id: 'remotes', boss: 'FO', label: 'Remotes', singular: 'Remote', color: '#ef4444', img: 'remotes.webp' },
+];
+
+const UNITE_CATEGORIES: UniteCategory[] = ['Toon-Up', 'Jellybeans', 'Gag-Up', 'Promotions', 'Cartoonival'];
+
+// Name and a short detail line for one reward, as shown in the timeline tooltip.
+function describeReward(entry: RewardHistoryEntry): { name: string; detail: string } {
+  const name = entry.item || entry.message || 'Unknown Item';
+  switch (entry.category) {
+    case 'sos': {
+      const card = SOS_DATA[name];
+      return { name, detail: card ? `${card.type} · ${'★'.repeat(card.starRating)}` : 'SOS Card' };
+    }
+    case 'unites':
+      return { name, detail: entry.metadata?.uniteCategory ? `${entry.metadata.uniteCategory} Unite` : 'Unite' };
+    case 'summons':
+      return { name, detail: `${entry.metadata?.summonType ?? 'Cog'} Summon` };
+    case 'pinkslips':
+      return { name: 'Pink Slips', detail: 'Fires' };
+    case 'remotes':
+      return {
+        name: entry.metadata?.remoteType ?? name,
+        detail: entry.metadata?.remoteLevel ? `${entry.metadata.remoteLevel}-Star Remote` : 'Remote',
+      };
+    default:
+      return { name, detail: '' };
+  }
+}
+
+function getRewardImage(entry: RewardHistoryEntry): string {
+  const fallback = getExtensionImageUrl(`images/${ANALYTICS_CATEGORIES.find(cat => cat.id === entry.category)?.img ?? 'unites.webp'}`);
+  if (entry.category === 'sos') return SOS_IMAGES[entry.item] || fallback;
+  if (entry.category === 'unites') {
+    const category = entry.metadata?.uniteCategory as UniteCategory | undefined;
+    return category && UNITE_CATEGORIES.includes(category) ? getExtensionImageUrl(`images/${getUniteImage(category, entry.item)}`) : fallback;
+  }
+  if (entry.category === 'summons') {
+    for (const suit of cogsData) {
+      const rank = suit.ranks.find((r: { name: string }) => r.name === entry.item);
+      if (rank) return `https://toonhq.org/static/assets/cogs/${rank.image}`;
+    }
+    return fallback;
+  }
+  if (entry.category === 'remotes') {
+    const level = String(entry.metadata?.remoteLevel ?? '');
+    if (!['1', '2', '3'].includes(level)) return fallback;
+    const kind = /heal/i.test(entry.metadata?.remoteType ?? entry.item ?? '') ? 'healing' : 'damage';
+    return getExtensionImageUrl(`images/remotes/${kind}-${level}.webp`);
+  }
+  return fallback;
+}
+
+function startOfDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function niceStep(raw: number): number {
+  if (raw <= 1) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const frac = raw / pow;
+  return (frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10) * pow;
+}
+
+function buildTimeTicks(start: number, end: number, scale: 'hours' | 'days' | 'weeks'): number[] {
+  const ticks: number[] = [];
+  const first = new Date(start);
+  if (scale === 'hours') {
+    first.setMinutes(0, 0, 0);
+    first.setHours(Math.ceil((first.getHours() + 1) / 4) * 4);
+    for (let t = first.getTime(); t <= end; t += 4 * 3600000) ticks.push(t);
+  } else {
+    const stepDays = scale === 'days' ? 1 : 5;
+    first.setHours(0, 0, 0, 0);
+    first.setDate(first.getDate() + 1);
+    for (let d = new Date(first); d.getTime() <= end; d.setDate(d.getDate() + stepDays)) ticks.push(d.getTime());
+  }
+  return ticks;
+}
+
+type TimelinePoint = { timestamp: number; clears: number; rewards: number; gained: number; entries: RewardHistoryEntry[] };
+
+const RewardTimelineChart = React.memo(({ history, timeframe }: { history: RewardHistoryEntry[]; timeframe: string }) => {
+  const [mode, setMode] = useState<RewardChartMode>(() => {
+    try { return localStorage.getItem(REWARD_CHART_MODE_STORAGE_KEY) === 'rewards' ? 'rewards' : 'clears'; } catch { return 'clears'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(REWARD_CHART_MODE_STORAGE_KEY, mode); } catch { /* storage unavailable */ }
+  }, [mode]);
+  const [hidden, setHidden] = useState<Set<RewardCategory>>(() => new Set());
+  const [hover, setHover] = useState<{ category: RewardCategory; index: number } | null>(null);
+  const [hoverDay, setHoverDay] = useState<number | null>(null);
+  // Start of the day being zoomed into (week and month views only).
+  const [focusDay, setFocusDay] = useState<number | null>(null);
+  useEffect(() => { setFocusDay(null); }, [timeframe]);
+
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const canFocusDays = timeframe !== '24h';
+  const now = useMemo(() => Date.now(), [history, timeframe]);
+  const windowStart = now - (ANALYTICS_WINDOW_MS[timeframe] ?? ANALYTICS_WINDOW_MS['7d']);
+  const start = focusDay ?? windowStart;
+  const end = focusDay !== null ? Math.min(focusDay + DAY_MS, now) : now;
+
+  // One point per clear for each boss, oldest first, with running totals for both modes.
+  const seriesPoints = useMemo(() => {
+    const out = {} as Record<RewardCategory, TimelinePoint[]>;
+    ANALYTICS_CATEGORIES.forEach(cat => { out[cat.id] = []; });
+    const inRange = history.filter(entry => entry.timestamp >= start && entry.timestamp <= end);
+    const groups = [...groupRewardHistory(inRange)].sort((a, b) => a.timestamp - b.timestamp);
+    for (const group of groups) {
+      for (const cat of ANALYTICS_CATEGORIES) {
+        const entries = group.entries.filter(entry => entry.category === cat.id);
+        if (!entries.length) continue;
+        const list = out[cat.id];
+        const prev = list[list.length - 1];
+        const gained = entries.reduce((sum, entry) => sum + (entry.amount || 1), 0);
+        list.push({ timestamp: group.timestamp, clears: (prev?.clears ?? 0) + 1, rewards: (prev?.rewards ?? 0) + gained, gained, entries });
+      }
+    }
+    return out;
+  }, [history, start, end]);
+
+  const activeSeries = ANALYTICS_CATEGORIES.filter(cat => seriesPoints[cat.id].length > 0);
+  const visibleSeries = activeSeries.filter(cat => !hidden.has(cat.id));
+
+  const height = 240;
+  const margin = { top: 14, right: 16, bottom: 26, left: 40 };
+  const plotW = Math.max(0, width - margin.left - margin.right);
+  const plotH = height - margin.top - margin.bottom;
+
+  const maxValue = Math.max(0, ...visibleSeries.map(cat => {
+    const list = seriesPoints[cat.id];
+    return list[list.length - 1][mode];
+  }));
+  const yStep = niceStep(Math.max(1, maxValue) / 4);
+  const yTop = Math.max(yStep, Math.ceil(maxValue / yStep) * yStep);
+  const yTicks: number[] = [];
+  for (let v = 0; v <= yTop; v += yStep) yTicks.push(v);
+
+  const span = Math.max(1, end - start);
+  const xOf = (t: number) => margin.left + ((t - start) / span) * plotW;
+  const yOf = (v: number) => margin.top + plotH - (v / yTop) * plotH;
+  const tickScale = focusDay !== null || timeframe === '24h' ? 'hours' : timeframe === '7d' ? 'days' : 'weeks';
+  const xTicks = useMemo(() => buildTimeTicks(start, end, tickScale), [start, end, tickScale]);
+  const formatTick = (t: number) => new Date(t).toLocaleString(undefined, tickScale === 'hours' ? { hour: 'numeric' } : { month: 'short', day: 'numeric' });
+  const formatDay = (t: number) => new Date(t).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const linePath = (points: TimelinePoint[]) => {
+    let d = `M ${xOf(start)} ${yOf(0)}`;
+    for (const p of points) d += ` L ${xOf(p.timestamp)} ${yOf(p[mode])}`;
+    return `${d} L ${xOf(end)} ${yOf(points[points.length - 1][mode])}`;
+  };
+
+  const timeAt = (mouseX: number) => start + ((mouseX - margin.left) / Math.max(1, plotW)) * span;
+
+  const handleMove = (event: React.MouseEvent<SVGRectElement>) => {
+    const rect = event.currentTarget.ownerSVGElement!.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
+    if (canFocusDays && focusDay === null) setHoverDay(startOfDay(timeAt(mx)));
+    let best: { category: RewardCategory; index: number } | null = null;
+    let bestDist = 28;
+    for (const cat of visibleSeries) {
+      seriesPoints[cat.id].forEach((p, index) => {
+        const dist = Math.hypot(xOf(p.timestamp) - mx, yOf(p[mode]) - my);
+        if (dist < bestDist) { bestDist = dist; best = { category: cat.id, index }; }
+      });
+    }
+    setHover(best);
+  };
+
+  const handleClick = (event: React.MouseEvent<SVGRectElement>) => {
+    if (!canFocusDays || focusDay !== null) return;
+    const rect = event.currentTarget.ownerSVGElement!.getBoundingClientRect();
+    setFocusDay(startOfDay(timeAt(event.clientX - rect.left)));
+    setHover(null);
+    setHoverDay(null);
+  };
+
+  const shiftFocus = (days: number) => setFocusDay(current => {
+    if (current === null) return current;
+    const d = new Date(current);
+    d.setDate(d.getDate() + days);
+    return d.getTime();
+  });
+  const canGoBack = focusDay !== null && focusDay > startOfDay(windowStart);
+  const canGoForward = focusDay !== null && focusDay < startOfDay(now);
+
+  const hoveredCat = hover ? ANALYTICS_CATEGORIES.find(cat => cat.id === hover.category) : undefined;
+  const hovered = hover && !hidden.has(hover.category) ? seriesPoints[hover.category][hover.index] : undefined;
+
+  const toggleSeries = (id: RewardCategory) => setHidden(current => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const dayBand = hoverDay !== null && focusDay === null ? {
+    x: Math.max(margin.left, xOf(hoverDay)),
+    right: Math.min(margin.left + plotW, xOf(hoverDay + DAY_MS)),
+  } : null;
+
+  const arrowButton = 'cursor-pointer w-6 h-6 inline-flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-20 disabled:cursor-default disabled:hover:bg-transparent';
+
+  return (
+    <div className="w-full rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-sm font-black text-white uppercase tracking-wider">Rewards Over Time</span>
+          {focusDay !== null ? (
+            <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-1 py-0.5">
+              <button type="button" aria-label="Previous day" disabled={!canGoBack} onClick={() => shiftFocus(-1)} className={arrowButton}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <span className="text-[10px] font-black uppercase tracking-widest text-white px-1">{formatDay(focusDay)}</span>
+              <button type="button" aria-label="Next day" disabled={!canGoForward} onClick={() => shiftFocus(1)} className={arrowButton}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+              <button type="button" onClick={() => setFocusDay(null)} className="cursor-pointer rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-300 hover:bg-emerald-500/10">
+                All days
+              </button>
+            </div>
+          ) : canFocusDays && (
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Click a day to zoom in</span>
+          )}
+        </div>
+        <div className="inline-flex rounded-full border border-emerald-500/20 bg-[#081a0e] p-1" role="group" aria-label="Reward graph mode">
+          {(['clears', 'rewards'] as RewardChartMode[]).map(option => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={mode === option}
+              onClick={() => setMode(option)}
+              className={`cursor-pointer rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${mode === option ? 'bg-emerald-500/20 text-emerald-300' : 'text-white/50 hover:text-white'}`}
+            >
+              By {option === 'clears' ? 'Clears' : 'Rewards'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeSeries.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {activeSeries.map(cat => {
+            const list = seriesPoints[cat.id];
+            const last = list[list.length - 1];
+            const off = hidden.has(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                aria-pressed={!off}
+                onClick={() => toggleSeries(cat.id)}
+                className={`cursor-pointer inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-opacity ${off ? 'border-white/5 opacity-40' : 'border-white/10 bg-white/[0.04]'}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: off ? 'transparent' : cat.color, border: `2px solid ${cat.color}` }} />
+                <span className="text-white">{cat.boss}</span>
+                <span className="text-white/40">{cat.label}</span>
+                <span className="text-white/70 tabular-nums">{mode === 'clears' ? last.clears : last.rewards}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div ref={wrapRef} className="relative w-full" style={{ height }}>
+        {width > 0 && (
+          <svg width={width} height={height} className="block" role="img" aria-label={`Running total of ${mode === 'clears' ? 'clears' : 'rewards'} over time for each boss`}>
+            {dayBand && (
+              <rect x={dayBand.x} y={margin.top} width={Math.max(0, dayBand.right - dayBand.x)} height={plotH} fill="rgba(255,255,255,0.05)" rx={4} />
+            )}
+            {yTicks.map(v => (
+              <g key={`y${v}`}>
+                <line x1={margin.left} x2={margin.left + plotW} y1={yOf(v)} y2={yOf(v)} stroke="rgba(255,255,255,0.07)" strokeWidth={1} />
+                <text x={margin.left - 8} y={yOf(v)} dy="0.32em" textAnchor="end" fontSize={10} fontWeight={700} fill="rgba(255,255,255,0.4)" className="tabular-nums">{v}</text>
+              </g>
+            ))}
+            {xTicks.map(t => (
+              <text key={`x${t}`} x={xOf(t)} y={height - 8} textAnchor="middle" fontSize={10} fontWeight={700} fill="rgba(255,255,255,0.4)">{formatTick(t)}</text>
+            ))}
+            {hovered && (
+              <line x1={xOf(hovered.timestamp)} x2={xOf(hovered.timestamp)} y1={margin.top} y2={margin.top + plotH} stroke="rgba(255,255,255,0.25)" strokeWidth={1} strokeDasharray="3 3" />
+            )}
+            {visibleSeries.map(cat => (
+              <path key={`line-${cat.id}`} d={linePath(seriesPoints[cat.id])} fill="none" stroke={cat.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" opacity={hovered && hover?.category !== cat.id ? 0.35 : 1} />
+            ))}
+            {visibleSeries.map(cat => seriesPoints[cat.id].map((p, i) => {
+              const active = hover?.category === cat.id && hover.index === i;
+              return (
+                <circle
+                  key={`${cat.id}-${p.timestamp}`}
+                  cx={xOf(p.timestamp)}
+                  cy={yOf(p[mode])}
+                  r={active ? 5.5 : 4}
+                  fill={cat.color}
+                  stroke="#0b1220"
+                  strokeWidth={2}
+                  opacity={hovered && hover?.category !== cat.id ? 0.35 : 1}
+                />
+              );
+            }))}
+            <rect
+              x={margin.left}
+              y={margin.top}
+              width={plotW}
+              height={plotH}
+              fill="transparent"
+              style={{ cursor: canFocusDays && focusDay === null ? 'zoom-in' : 'default' }}
+              onMouseMove={handleMove}
+              onMouseLeave={() => { setHover(null); setHoverDay(null); }}
+              onClick={handleClick}
+            />
+          </svg>
+        )}
+
+        {visibleSeries.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-[11px] font-black uppercase tracking-[0.24em] text-white/25">
+              {activeSeries.length > 0 ? 'All bosses hidden' : focusDay !== null ? 'No rewards obtained this day' : 'No rewards obtained in this timeframe'}
+            </span>
+          </div>
+        )}
+
+        {hovered && hoveredCat && (() => {
+          const px = xOf(hovered.timestamp);
+          const py = yOf(hovered[mode]);
+          const flip = px > width * 0.6;
+          const unit = hovered.gained === 1 ? hoveredCat.singular : hoveredCat.label;
+          const total = mode === 'clears' ? hovered.clears : hovered.rewards;
+          const totalUnit = mode === 'clears' ? (total === 1 ? 'Clear' : 'Clears') : (total === 1 ? hoveredCat.singular : hoveredCat.label);
+          return (
+            // Anchored to the bottom of the plot so taller tooltips grow upward instead of off the card.
+            <div
+              className="absolute z-10 pointer-events-none w-[17rem] rounded-2xl border border-white/10 bg-slate-950/95 shadow-2xl overflow-hidden"
+              style={{ left: px, bottom: margin.bottom, transform: `translateX(${flip ? 'calc(-100% - 14px)' : '14px'})` }}
+            >
+              <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/10" style={{ backgroundColor: `${hoveredCat.color}22` }}>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white" style={{ backgroundColor: hoveredCat.color }}>{hoveredCat.boss}</span>
+                  <span className="text-[13px] font-black text-white">Clear #{hovered.clears}</span>
+                </div>
+                <span className="text-[10px] font-bold text-white/50 tabular-nums">
+                  {new Date(hovered.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2 p-3">
+                {hovered.entries.map((entry, i) => {
+                  const { name, detail } = describeReward(entry);
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="w-12 h-12 shrink-0 rounded-xl bg-black/40 border border-white/10 p-1 overflow-hidden">
+                        <img src={getRewardImage(entry)} alt="" className="w-full h-full object-contain" />
+                      </span>
+                      <span className="flex-1 min-w-0 flex flex-col">
+                        <span className="text-[13px] font-black text-white leading-tight truncate">{name}</span>
+                        {detail && <span className="text-[10px] font-bold uppercase tracking-wider text-white/45 truncate">{detail}</span>}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[12px] font-black text-white tabular-nums">×{entry.amount || 1}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest tabular-nums">
+                <span className="text-white/80">+{hovered.gained} {unit}</span>
+                <span className="text-white/45">{total} {totalUnit} {focusDay !== null ? 'this day' : 'total'}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -1185,7 +1575,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
           { id: 'sos', color: '#a855f7' },
           { id: 'unites', color: '#22c55e' },
           { id: 'summons', color: '#3b82f6' },
-          { id: 'pinkslips', color: '#f59e0b' },
+          { id: 'pinkslips', color: '#a47148' },
           { id: 'remotes', color: '#ef4444' },
         ];
 
@@ -1997,11 +2387,14 @@ export const ToonTrackerTab = React.memo(function ToonTrackerTab({
                 {initialSubView === 'main' && <button onClick={() => setSubView('main')} className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-colors border border-white/5">Back to Dashboard</button>}
               </div>
             </div>
-            <div className={`flex-1 ${activeCategory === 'analytics' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'} p-4`}>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
               {activeCategory === 'analytics' && (
-                <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500">
-                  <div className="w-full h-full max-w-4xl mx-auto">
+                <div className="flex flex-col gap-4 animate-in fade-in duration-500">
+                  <div className="w-full max-w-4xl mx-auto h-[23rem] shrink-0">
                     <RewardPieChart history={filteredRewardHistory} timeframe={analyticsTimeframe} />
+                  </div>
+                  <div className="w-full max-w-4xl mx-auto shrink-0">
+                    <RewardTimelineChart history={filteredRewardHistory} timeframe={analyticsTimeframe} />
                   </div>
                 </div>
               )}

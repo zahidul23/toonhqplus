@@ -1,6 +1,6 @@
 import React from 'react';
 
-type UniteCategory = 'Toon-Up' | 'Jellybeans' | 'Gag-Up' | 'Promotions' | 'Cartoonival';
+export type UniteCategory = 'Toon-Up' | 'Jellybeans' | 'Gag-Up' | 'Promotions' | 'Cartoonival';
 export type UniteLayout = 'default' | 'columns';
 type UniteInventoryProps = {
   unites: Record<string, Record<string, number>>;
@@ -32,7 +32,7 @@ function gagIndex(name: string) {
   return index === -1 ? GAG_ORDER.length : index;
 }
 
-function getUniteImage(category: UniteCategory, name: string) {
+export function getUniteImage(category: UniteCategory, name: string) {
   const amount = Number(name.match(/\d+/)?.[0]);
   if (category === 'Toon-Up' && [20, 35, 50, 65, 80].includes(amount)) {
     return `unites/toon-up-${amount}.webp`;
