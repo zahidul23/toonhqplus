@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.2',
+    date: 'Oct 31, 2026',
+    changes: [
+      'Add a Rewards Over Time graph to Rewards Stats, with day zoom and reward images in tooltips',
+      'Show gag track colors and organic gags on the Toons tab',
+      'Make reward icons and the reward page count larger',
+      'Give CEO rewards a brown color in charts'
+    ]
+  },
+  {
     version: '1.3.1',
     date: 'Oct 28, 2026',
     changes: [

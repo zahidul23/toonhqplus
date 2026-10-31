@@ -35,6 +35,14 @@ const gagTracks = gagsConfig as Array<{
   gags: Array<{ name: string; image: string }>;
 }>;
 
+// Same lightening as the dark-mode group details gag tracks (displayMode.css):
+// ToonHQ's 80% gag color flattened onto white, channel = 0.8 * native + 51.
+function getDarkModeTrackColor(hex: string): string {
+  const value = parseInt(hex.replace('#', ''), 16);
+  const channel = (shift: number) => Math.round(0.8 * ((value >> shift) & 255) + 51);
+  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
+}
+
 function getGagImageUrl(image: string): string {
   return `${GAG_ASSET_BASE_URL}/${image}`;
 }
@@ -47,19 +55,39 @@ function ToonGagsStrip({ gags }: { gags?: Record<string, any> }) {
         const level = typeof gagData?.gag?.level === 'number' ? gagData.gag.level : 1;
         const gag = track.gags[Math.max(0, Math.min(track.gags.length - 1, level - 1))] ?? track.gags[0];
         const obtained = !!gagData?.gag;
+        // Matches ToonHQ's group cards: a dimmed "partial" leaf with the organic level
+        // when the organic gag is below the toon's highest gag in that track.
+        const organic = obtained && !!gagData?.organic;
+        const organicLevel = typeof gagData?.organic?.level === 'number' ? gagData.organic.level : level;
+        const partialOrganic = organic && organicLevel < level;
+        const organicLabel = !organic ? '' : partialOrganic ? ` (Organic up to ${gagData.organic.name})` : ' (Organic)';
         const xpRequired = (obtained && level !== 7 && gagData?.experience) ? ` - ${gagData.experience.next - gagData.experience.current} to go` : '';
         const title = obtained
-          ? `${track.name}: ${gagData?.gag?.name} (Lv. ${level}) ${xpRequired}`
+          ? `${track.name}: ${gagData?.gag?.name}${organicLabel} (Lv. ${level}) ${xpRequired}`
           : `${track.name}less`;
 
         return (
           <div
             key={track.id}
-            className={`h-7 w-7 rounded-full border bg-black/35 p-1 flex items-center justify-center shrink-0 transition-all ${obtained ? 'border-white/15' : 'border-white/5 opacity-35 grayscale'}`}
-            style={obtained ? { boxShadow: `inset 0 0 0 1px ${track.color}55` } : undefined}
+            className={`relative h-7 w-7 rounded-full p-[3px] flex items-center justify-center shrink-0 transition-all ${obtained ? '' : 'bg-black/35 opacity-35 grayscale'}`}
+            style={obtained ? { backgroundColor: getDarkModeTrackColor(track.color), ...(organic ? { boxShadow: `0 0 5px 5px ${track.color}` } : {}) } : undefined}
             title={title}
           >
             <img src={getGagImageUrl(gag.image)} alt={title} className="h-full w-full object-contain" />
+            {organic && (
+              <span className="pointer-events-none absolute -bottom-1 -right-1.5 z-10 h-4 w-4 rounded-full bg-[#025952] shadow-[0_2px_2px_rgba(0,0,0,0.5)]">
+                <img
+                  src={getGagImageUrl(partialOrganic ? 'ttr/organic-partial.webp' : 'ttr/organic.webp')}
+                  alt="Organic"
+                  className={`relative -top-0.5 h-full w-full object-contain ${partialOrganic ? 'brightness-75 grayscale-[25%]' : ''}`}
+                />
+                {partialOrganic && (
+                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black leading-none text-white [text-shadow:0_1px_1px_#000]">
+                    {organicLevel}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         );
       })}
@@ -1660,7 +1688,7 @@ const ToonsListView = React.memo(({ savedToons, activeInstances, selectToon, rem
                       return (
                         <div key={cat} className="relative flex items-center justify-center" title={rewardLabels[cat as keyof typeof rewardLabels]}>
                           <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-white/10" style={{ backgroundColor: `${color}15` }}>
-                            <img src={getExtensionImageUrl(`images/${cat}.webp`)} className={`w-4 h-4 object-contain filter drop-shadow-sm ${count === 0 ? 'grayscale opacity-30' : 'opacity-90'}`} />
+                            <img src={getExtensionImageUrl(`images/${cat}.webp`)} className={`w-6 h-6 object-contain filter drop-shadow-sm ${count === 0 ? 'grayscale opacity-30' : 'opacity-90'}`} />
                           </div>
                           {count > 0 && (
                             <div className="absolute -top-1.5 -right-1.5 bg-black border border-white/10 text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-full min-w-[18px] flex items-center justify-center shadow-lg" style={{ color }}>

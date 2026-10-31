@@ -26,8 +26,11 @@ export interface ToonTrackerData {
       gag: {
         level: number;
         name: string;
-        organic: unknown;
       };
+      organic: {
+        level: number;
+        name: string;
+      } | null;
     } | null>;
     tasks: Array<{
       objective: {
