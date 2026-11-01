@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { staticUrl } from './calculatorAssets';
+import { AccuracyReference } from './components/AccuracyReference';
 import { CEO_OIL_HEALTH_OPTIONS, getCeoOilCanHealth, getCeoOilCanHealthPercent } from './ceoOil';
 import type { FieldOfficeDefense } from './gagDamage';
 import {
@@ -194,7 +195,7 @@ function CogHealthReference() {
   );
 }
 
-const REFERENCE_TITLES = ['Common Gag Combos', 'Cog Healths', 'Oil Can Damage'];
+const REFERENCE_TITLES = ['Common Gag Combos', 'Cog Healths', 'Oil Can Damage', 'Accuracy'];
 const SAVED_REFERENCE_KEY = 'toonhqplus:gag-reference:view';
 
 export function GagCombosPanel() {
@@ -253,7 +254,7 @@ export function GagCombosPanel() {
       <div className="-mx-3 mb-3 shrink-0 border-b border-white/15" />
       {referenceView !== 0 ? (
         <div className="flex min-h-0 flex-1 flex-col justify-center">
-          {referenceView === 1 ? <CogHealthReference /> : <OilCanDamageReference />}
+          {referenceView === 1 ? <CogHealthReference /> : referenceView === 2 ? <OilCanDamageReference /> : <AccuracyReference />}
         </div>
       ) : <>
       <div className="grid w-full shrink-0 grid-cols-7 gap-1" aria-label="Select Cog level">

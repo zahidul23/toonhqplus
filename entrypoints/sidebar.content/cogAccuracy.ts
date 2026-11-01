@@ -3,7 +3,7 @@ import { getToonsHitRounds, TOONS_HIT_BONUS } from './toonsHit.ts';
 export const MAX_TRACK_EXP_BONUS = 60;
 export const MAX_TOON_ACCURACY = 95;
 
-const TRACK_BASE_ACCURACY: Record<string, readonly number[]> = {
+export const TRACK_BASE_ACCURACY: Record<string, readonly number[]> = {
   trap: [100, 100, 100, 100, 100, 100, 100],
   lure: [60, 55, 70, 65, 80, 75, 90],
   sound: [95, 95, 95, 95, 95, 95, 95],
@@ -12,12 +12,12 @@ const TRACK_BASE_ACCURACY: Record<string, readonly number[]> = {
   drop: [50, 50, 50, 50, 50, 50, 50],
 };
 
-const COG_DEFENSE: Record<number, number> = {
+export const COG_DEFENSE: Record<number, number> = {
   1: 2, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25, 7: 30, 8: 35, 9: 40, 10: 45,
   11: 50, 12: 55, 13: 60, 14: 60, 15: 60, 16: 65, 17: 65, 18: 65, 19: 65, 20: 65,
 };
 
-const SUPERVISOR_EVASION: Record<string, number> = {
+export const SUPERVISOR_EVASION: Record<string, number> = {
   factory_scrap: 50,
   factory_steel: 50,
   mint_coin: 50,
@@ -66,7 +66,7 @@ export type RoundCogAccuracy = {
   entries: CogAccuracyEntry[];
 };
 
-function applyAccuracySoftCap(rawAccuracy: number) {
+export function applyAccuracySoftCap(rawAccuracy: number) {
   return rawAccuracy <= MAX_TOON_ACCURACY
     ? Math.max(0, rawAccuracy)
     : Math.min(100, MAX_TOON_ACCURACY + (rawAccuracy - MAX_TOON_ACCURACY) * 0.04);
@@ -74,7 +74,7 @@ function applyAccuracySoftCap(rawAccuracy: number) {
 
 function getAccuracyLureType(gagIndex: number) { return gagIndex === 6 || gagIndex % 2 === 1 ? 'group' : 'single'; }
 function getAccuracyLureTier(gagIndex: number) { return Math.min(3, Math.floor(gagIndex / 2) + 1); }
-function getAccuracyMultiLureBonus(lures: NonNullable<AccuracyGag>[], baseline: NonNullable<AccuracyGag>) {
+export function getAccuracyMultiLureBonus(lures: NonNullable<AccuracyGag>[], baseline: NonNullable<AccuracyGag>) {
   const baselineType = getAccuracyLureType(baseline.gagIndex);
   const baselineTier = getAccuracyLureTier(baseline.gagIndex);
   return lures.reduce((bonus, lure) => {
