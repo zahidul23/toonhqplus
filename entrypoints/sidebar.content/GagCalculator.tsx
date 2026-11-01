@@ -1102,8 +1102,9 @@ export function GagCalculator() {
   return <CalculatorPortalProvider>
     <div data-calculator-layout className="gag-calculator-page h-full w-full">
       <div className="gag-calculator-columns flex h-full items-start gap-4">
-      <aside className="gag-combos-sidebar min-h-0 w-[380px] shrink-0 self-stretch"><GagCombosPanel /></aside>
-      <section className="min-w-0 flex-1 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
+      <aside className="gag-combos-sidebar min-h-0 w-[380px] min-w-[280px] shrink self-stretch"><GagCombosPanel /></aside>
+      {/* The calculator keeps its gag picker width; the reference column (380px, down to 280px) gives up space first. */}
+      <section className="min-w-min flex-1 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
         <GagCalculatorContent />
       </section>
       </div>

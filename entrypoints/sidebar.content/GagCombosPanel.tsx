@@ -234,7 +234,7 @@ export function GagCombosPanel() {
   };
 
   return (
-    <section className="flex h-full min-h-0 min-w-[380px] w-full flex-col rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
+    <section className="flex h-full min-h-0 min-w-0 w-full flex-col rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
       <div className="mx-auto mb-2 flex w-full shrink-0 items-center justify-between gap-1">
         <button type="button" aria-label="Previous reference view" onClick={() => setReferenceView(view => (view + REFERENCE_TITLES.length - 1) % REFERENCE_TITLES.length)} className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-black/20 font-black text-white/65 transition hover:bg-white/10 hover:text-white">←</button>
         <div ref={referenceMenuRef} className="relative min-w-0 flex-1">

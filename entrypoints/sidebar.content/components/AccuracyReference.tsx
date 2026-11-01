@@ -111,13 +111,15 @@ function useScrollToLevel(ref: RefObject<HTMLDivElement | null>) {
   }, [ref]);
 }
 
+// Level tables start 10rem tall and grow into spare space. Tab content never shrinks
+// below its own height, so on short screens the tab scrolls instead of overlapping.
 function CogEvasion({ expBonus }: { expBonus: number }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollToLevel(scrollRef);
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <Heading className="text-rose-300">Cog Evasion</Heading>
-      <div ref={scrollRef} className="custom-scrollbar relative min-h-40 flex-1 overflow-y-auto rounded-md border border-white/10" tabIndex={0} aria-label="Cog evasion by level">
+      <div ref={scrollRef} className="custom-scrollbar relative h-40 min-h-40 grow overflow-y-auto rounded-md border border-white/10" tabIndex={0} aria-label="Cog evasion by level">
         <table className={`${TABLE} table-fixed`}>
           <thead className="sticky top-0 z-10 bg-[#13253b]"><tr className="text-[11px] text-white/60">
             <th scope="col" className="w-[44%] border-r border-white/15 py-1.5 text-white">Cog</th>
@@ -150,7 +152,7 @@ function BaseSection() {
   // Highest gag unlocked (0-6 index) in the track; drives the Cog Evasion EXP column.
   const [expIndex, setExpIndex] = useState(6);
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-4">
+    <div className="flex flex-1 flex-col space-y-4">
       <div className="rounded-lg border border-white/10 bg-black/20 p-2 text-center">
         <div className="text-sm font-black text-white">
           Gag <span className="text-lime-300">+ EXP</span> <span className="text-rose-300">− Evasion</span> <span className="text-sky-300">+ Bonuses</span>
@@ -343,7 +345,7 @@ function StunSection() {
   const tableScrollRef = useRef<HTMLDivElement>(null);
   useScrollToLevel(tableScrollRef);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex flex-1 flex-col gap-3">
       <div>
         <div className="grid grid-cols-3 gap-1">
           <StatCard value="+25%" label="per earlier gag that hit" />
@@ -351,7 +353,7 @@ function StunSection() {
           <StatCard value={`+${TOONS_HIT_BONUS}%`} label="Toons Hit SOS" />
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-1 flex-col">
         <Heading>Hit Chance After Stuns</Heading>
         <div className="grid grid-cols-3 gap-1">
           {STUN_TRACKS.map(id => (
@@ -360,7 +362,7 @@ function StunSection() {
               style={track === id ? { backgroundColor: trackOf(id).color } : undefined}>{trackOf(id).name}</button>
           ))}
         </div>
-        <div ref={tableScrollRef} className="custom-scrollbar relative mt-1.5 mb-1 min-h-40 flex-1 overflow-y-auto rounded-md border border-white/10" tabIndex={0} aria-label="Hit chance by Cog level">
+        <div ref={tableScrollRef} className="custom-scrollbar relative mt-1.5 mb-1 h-40 min-h-40 grow overflow-y-auto rounded-md border border-white/10" tabIndex={0} aria-label="Hit chance by Cog level">
           <table className={`${TABLE} table-fixed`}>
             <thead className="sticky top-0 z-10 bg-[#13253b]"><tr className="text-[11px] text-white/60">
               <th scope="col" className="border-r border-white/15 py-1.5 text-white">Lvl</th>

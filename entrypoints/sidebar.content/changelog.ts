@@ -13,7 +13,8 @@ export const changelog: ChangelogEntry[] = [
       'Show gag track colors and organic gags on the Toons tab',
       'Make reward icons and the reward page count larger',
       'Give CEO rewards a brown color in charts',
-      'Fix 3-Star Damage Remote damage in the Gag Calculator'
+      'Fix 3-Star Damage Remote damage in the Gag Calculator',
+      'Add Accuracy Reference sheet to the Gag Calculator'
     ]
   },
   {
