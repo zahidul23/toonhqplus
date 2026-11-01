@@ -5,7 +5,7 @@ export function wakeRemoteControlledCog<T extends { isLured: boolean; lureDurati
 
 export type RemoteStars = 1 | 2 | 3;
 
-export const REMOTE_DAMAGE = { 1: 45, 2: 60, 3: 90 } as const;
+export const REMOTE_DAMAGE = { 1: 45, 2: 60, 3: 75 } as const;
 export const REMOTE_SELF_DAMAGE = { 1: 45, 2: 90, 3: 150 } as const;
 
 export function changeRemoteDamageStars(current: readonly RemoteStars[], stars: RemoteStars, change: 1 | -1): RemoteStars[] {
