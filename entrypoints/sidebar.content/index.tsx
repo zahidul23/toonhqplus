@@ -427,54 +427,6 @@ function injectHighlightStyles() {
       white-space: nowrap;
     }
 
-    .note-bubble {
-      background: #fef3c7;
-      color: #92400e;
-      padding: 4px 10px;
-      border-radius: 8px;
-      font-size: 11px;
-      font-weight: 500;
-      line-height: 1.2;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      border: 1px solid #fde68a;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      margin-top: 8px;
-      white-space: nowrap;
-      max-width: 34em;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      z-index: 100;
-    }
-    .note-bubble:hover {
-      width: max-content;
-      max-width: 34em;
-      overflow: visible;
-      text-overflow: clip;
-      white-space: normal;
-    }
-    .note-bubble::before {
-      content: '';
-      position: absolute;
-      top: -6px;
-      left: 50%;
-      transform: translateX(-50%);
-      border-width: 0 6px 6px 6px;
-      border-style: solid;
-      border-color: transparent transparent #fde68a transparent;
-    }
-    .note-bubble::after {
-      content: '';
-      position: absolute;
-      top: -5px;
-      left: 50%;
-      transform: translateX(-50%);
-      border-width: 0 6px 6px 6px;
-      border-style: solid;
-      border-color: transparent transparent #fef3c7 transparent;
-    }
-
     tr.toonhq-plus-note td {
       border-top: none !important;
       padding: 0 !important;

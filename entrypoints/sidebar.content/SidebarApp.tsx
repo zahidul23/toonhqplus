@@ -704,10 +704,10 @@ const ToonTooltip = memo(({ toon, isFavorited, isBlocked, note }: { toon: ToonDa
   }
 
   return (
-    <div className={`toon-tooltip w-[19rem] ${toonClass} border border-emerald-500/30 rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
+    <div className={`toon-tooltip w-[19rem] ${toonClass} border ${isBlocked ? 'border-red-500/40' : 'border-emerald-500/30'} rounded-xl shadow-2xl p-4 flex flex-col gap-5 text-white pointer-events-none animate-in fade-in duration-200`} >
       <div className="flex items-center gap-3">
         <div className="relative">
-          <div className="absolute inset-0 bg-emerald-500/20 rounded-full" />
+          <div className={`absolute inset-0 rounded-full ${isBlocked ? 'bg-red-500/20' : 'bg-emerald-500/20'}`} />
           {(() => {
             const photo = getToonPhoto(toon);
             return photo ? (
@@ -727,7 +727,7 @@ const ToonTooltip = memo(({ toon, isFavorited, isBlocked, note }: { toon: ToonDa
           <h4 className="font-bold text-lg leading-tight break-words">
             {toon.name}{' '}
             {toon.laff != null && (
-              <span className="text-emerald-400 font-black text-sm tabular-nums">({toon.laff})</span>
+              <span className={`${isBlocked ? 'text-red-300' : 'text-emerald-400'} font-black text-sm tabular-nums`}>({toon.laff})</span>
             )}
           </h4>
         </div>
@@ -850,7 +850,6 @@ const ToonRow = memo(({
   isOwnToon,
   note,
   refresh,
-  isHovered,
   isJustAdded,
   onRequestDialog,
   onMouseEnter,
@@ -862,7 +861,6 @@ const ToonRow = memo(({
   isOwnToon: boolean;
   note?: string;
   refresh: () => void;
-  isHovered: boolean;
   isJustAdded?: boolean;
   onRequestDialog: (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
@@ -878,23 +876,20 @@ const ToonRow = memo(({
 
   const listKey = isFavorited ? STORAGE_KEYS.FAVORITES : isBlocked ? STORAGE_KEYS.BLOCKED : null;
 
-  const defaultHoverClass = isBlocked ? 'blockedToon shadow-md ring-1 ring-red-400' : 'bg-[#e6ffed]/20 shadow-md ring-1 ring-emerald-400';
-  let bgColorClass = isHovered ? defaultHoverClass : 'bg-white/5 hover:bg-[#10462d]/60';
+  let bgColorClass = 'bg-white/5 hover:bg-[#10462d]/60';
   let textColorClass = 'text-white';
 
   if (isJustAdded) {
     bgColorClass = isBlocked ? 'blockedToon ring-2 ring-red-400' : 'bg-emerald-500/60 ring-2 ring-emerald-400';
-  } else if (!isHovered) {
-    if (isOwnToon) {
-      bgColorClass = 'bg-[#cae9fcbd]';
-      textColorClass = 'text-[#cae9fc]';
-    } else if (isFavorited) {
-      bgColorClass = 'bg-[#1f8454]';
-      textColorClass = 'text-[#e6ffed]';
-    } else if (isBlocked) {
-      bgColorClass = 'bg-[#ad130dde]';
-      textColorClass = 'text-[#ffebe9]';
-    }
+  } else if (isOwnToon) {
+    bgColorClass = 'bg-sky-800/60 hover:bg-sky-800/80';
+    textColorClass = 'text-[#e3f3fd]';
+  } else if (isFavorited) {
+    bgColorClass = 'bg-[#1f8454] hover:bg-[#23935e]';
+    textColorClass = 'text-[#e6ffed]';
+  } else if (isBlocked) {
+    bgColorClass = 'bg-[#ad130dde] hover:bg-[#bd1a13e6]';
+    textColorClass = 'text-[#ffebe9]';
   }
 
   const saveNote = () => {
@@ -909,17 +904,8 @@ const ToonRow = memo(({
       });
   };
 
-  const rowRef = React.useRef<HTMLLIElement>(null);
-
-  useEffect(() => {
-    if (isHovered && rowRef.current) {
-      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [isHovered]);
-
   return (
     <li
-      ref={rowRef}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`group relative flex flex-col gap-1 rounded px-2 py-1.5 text-sm transition-all duration-250 ${bgColorClass} ${textColorClass}`}
@@ -945,7 +931,7 @@ const ToonRow = memo(({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-200 overflow-hidden">
+        <div className="flex shrink-0 items-center gap-1 opacity-0 w-0 overflow-hidden group-hover:w-auto group-hover:opacity-100 focus-within:w-auto focus-within:opacity-100 transition-all duration-200">
           {!isOwnToon && (
             <>
               {listKey ? (
@@ -957,7 +943,7 @@ const ToonRow = memo(({
                       setNoteDraft(toon.note || note || '');
                     }}
                     className={`shrink-0 rounded p-1 cursor-pointer transition-colors ${isBlocked
-                      ? 'text-red-400/70 hover:bg-red-600 text-red-300/60'
+                      ? 'text-red-300/60 hover:bg-red-600 hover:text-white'
                       : 'text-green-100/50 hover:bg-[#1f8454] hover:text-white'
                       }`}
                     title="Edit note"
@@ -970,8 +956,9 @@ const ToonRow = memo(({
                       const targetKey = listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
                       onRequestDialog('move', targetKey, toon, 'sidebar');
                     }}
-                    className={`shrink-0 rounded p-1 text-green-100/50 hover:text-white cursor-pointer transition-colors ${isBlocked ? 'hover:bg-red-600' : 'hover:bg-emerald-600'}`}
+                    className={`shrink-0 rounded p-1 text-green-100/50 hover:text-white cursor-pointer transition-colors ${listKey === STORAGE_KEYS.FAVORITES ? 'hover:bg-red-600' : 'hover:bg-emerald-600'}`}
                     title={listKey === STORAGE_KEYS.FAVORITES ? "Move to Stinky Toons" : "Move to Toony Toons"}
+                    aria-label={listKey === STORAGE_KEYS.FAVORITES ? "Move to Stinky Toons" : "Move to Toony Toons"}
                   >
                     {listKey === STORAGE_KEYS.FAVORITES ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
@@ -984,8 +971,9 @@ const ToonRow = memo(({
                     onClick={() => {
                       if (listKey) onRequestDialog('remove', listKey, toon, 'sidebar');
                     }}
-                    className="shrink-0 rounded p-1 text-[#cf222e] text-[#ff7b72] hover:bg-[#ad130dde] cursor-pointer"
-                    title="Remove from list"
+                    className="shrink-0 rounded p-1 text-[#ff7b72] hover:bg-[#ad130dde] hover:text-white cursor-pointer"
+                    title={listKey === STORAGE_KEYS.FAVORITES ? "Remove from Toony Toons" : "Remove from Stinky Toons"}
+                    aria-label={listKey === STORAGE_KEYS.FAVORITES ? "Remove from Toony Toons" : "Remove from Stinky Toons"}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                   </button>
@@ -1064,7 +1052,7 @@ const ToonRow = memo(({
                     setNoteError(error instanceof Error ? error.message : String(error));
                   });
               }}
-              className="mr-auto shrink-0 rounded bg-red-500/10 px-2 py-1 text-xs text-red-300-400 hover:bg-red-500 hover:text-white cursor-pointer transition-all flex items-center gap-1 border border-red-500/20"
+              className="mr-auto shrink-0 rounded bg-red-500/10 px-2 py-1 text-xs text-red-300 hover:bg-red-500 hover:text-white cursor-pointer transition-all flex items-center gap-1 border border-red-500/20"
               title="Remove note"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
@@ -1286,9 +1274,11 @@ const TOOLTIP_GAP = 24; // px gap between tooltip and the anchor row
 
 function TooltipAnchor({
   anchorRect,
+  side,
   children,
 }: {
-  anchorRect: { top: number; left: number; height: number };
+  anchorRect: { top: number; left: number; right: number; height: number };
+  side: 'left' | 'right';
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1300,18 +1290,21 @@ function TooltipAnchor({
     const tooltipHeight = el.offsetHeight;
     const tooltipWidth = el.offsetWidth;
     const vh = window.innerHeight;
+    const vw = window.innerWidth;
     const PADDING = 8; // min distance from viewport edge
 
     // Vertical: centre on the anchor row, clamped within viewport
     const idealTop = anchorRect.top + anchorRect.height / 2 - tooltipHeight / 2;
     const top = Math.max(PADDING, Math.min(vh - tooltipHeight - PADDING, idealTop));
 
-    // Horizontal: place tooltip to the left of the anchor, clamped within viewport
-    const idealLeft = anchorRect.left - tooltipWidth - TOOLTIP_GAP;
-    const left = Math.max(PADDING, idealLeft);
+    // Horizontal: place tooltip on the page side of the sidebar, clamped within viewport
+    const idealLeft = side === 'left'
+      ? anchorRect.left - tooltipWidth - TOOLTIP_GAP
+      : anchorRect.right + TOOLTIP_GAP;
+    const left = Math.max(PADDING, Math.min(vw - tooltipWidth - PADDING, idealLeft));
 
     setStyle({ position: 'fixed', top, left, visibility: 'visible' });
-  }, [anchorRect]);
+  }, [anchorRect, side]);
 
   return (
     <div ref={ref} style={style} className="z-[2147483648] pointer-events-none">
@@ -1385,6 +1378,7 @@ export function SidebarApp() {
   const [openImportMenu, setOpenImportMenu] = useState<'mode' | 'conflicts' | null>(null);
   const [importAnalysisKind, setImportAnalysisKind] = useState<ImportComparisonKind | null>(null);
   const [dialogNote, setDialogNote] = useState('');
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [toonyCollapsed, setToonyCollapsed] = useState(false);
   const [stinkyCollapsed, setStinkyCollapsed] = useState(false);
@@ -1474,9 +1468,29 @@ export function SidebarApp() {
 
   // Tooltip tracking state
   const [hoveredToonId, setHoveredToonId] = useState<string | null>(null);
-  const [hoveredToonName, setHoveredToonName] = useState<string | null>(null);
-  const [hoverSource, setHoverSource] = useState<'sidebar' | 'main' | null>(null);
-  const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; height: number } | null>(null);
+  const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; right: number; height: number } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Show the toon tooltip after a short delay so sweeping across rows doesn't flash it.
+  const showToonTooltip = useCallback((toonId: string, row: HTMLElement) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      const rect = row.getBoundingClientRect();
+      setHoveredToonId(toonId);
+      setHoveredRect({ top: rect.top, left: rect.left, right: rect.right, height: rect.height });
+    }, 200);
+  }, []);
+
+  const hideToonTooltip = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+    setHoveredToonId(null);
+    setHoveredRect(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+  }, []);
 
   const [selectedToonId, setSelectedToonId] = useState<string | null>(null);
 
@@ -1886,7 +1900,20 @@ export function SidebarApp() {
   const handleDeleteGroup = useCallback((e: React.MouseEvent, groupId: number) => {
     e.stopPropagation();
     setDialog({ isOpen: true, type: 'delete_group', groupId, source: 'sidebar' });
+    setDialogError(null);
   }, []);
+
+  // Esc closes the add/move/remove dialog.
+  useEffect(() => {
+    if (!dialog?.isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setDialog(null);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [dialog?.isOpen]);
 
   const handleRequestDialog = useCallback(
     (type: 'add' | 'move' | 'remove', listKey: any, toon: ToonData, source: 'sidebar' | 'main') => {
@@ -1910,6 +1937,7 @@ export function SidebarApp() {
         otherListName,
       });
       setDialogNote(notes[String(toon.id)] || '');
+      setDialogError(null);
 
       if (source === 'main') {
         setOpen(true);
@@ -1925,24 +1953,6 @@ export function SidebarApp() {
   );
 
   useEffect(() => {
-    const handleHover = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      setHoveredToonId(customEvent.detail?.id?.toString() || null);
-      setHoveredToonName(customEvent.detail?.name || null);
-      setHoverSource(customEvent.detail?.source || 'main');
-      if (customEvent.detail?.rect) {
-        setHoveredRect(customEvent.detail.rect);
-      }
-    };
-    const handleUnhover = () => {
-      setHoveredToonId(null);
-      setHoveredToonName(null);
-      setHoverSource(null);
-    };
-
-    window.addEventListener('toonhq-plus-toon-hover', handleHover);
-    window.addEventListener('toonhq-plus-toon-unhover', handleUnhover);
-
     const handleRemoteRequest = (e: Event) => {
       const { type, listKey, toon, source } = (e as CustomEvent).detail;
       handleRequestDialog(type, listKey, toon, source || 'main');
@@ -1950,8 +1960,6 @@ export function SidebarApp() {
     window.addEventListener('toonhqplus-request-dialog', handleRemoteRequest);
 
     return () => {
-      window.removeEventListener('toonhq-plus-toon-hover', handleHover);
-      window.removeEventListener('toonhq-plus-toon-unhover', handleUnhover);
       window.removeEventListener('toonhqplus-request-dialog', handleRemoteRequest);
     };
   }, [handleRequestDialog]);
@@ -2273,9 +2281,6 @@ export function SidebarApp() {
                           <div className="py-8 text-center text-green-200/40 italic">No toons found matching "{searchTerm}"</div>
                         ) : (
                           searchResults.map((toon) => {
-                            const isHovered = hoveredToonId
-                              ? String(toon.id) === hoveredToonId
-                              : (hoveredToonName && toon.name === hoveredToonName);
                             return (
                               <ToonRow
                                 key={toon.id}
@@ -2285,22 +2290,10 @@ export function SidebarApp() {
                                 isOwnToon={activeToonIds.includes(toon.id)}
                                 note={notes[String(toon.id)]}
                                 refresh={refresh}
-                                isHovered={!!isHovered}
                                 isJustAdded={justAddedId === toon.id}
                                 onRequestDialog={handleRequestDialog}
-                                onMouseEnter={(e) => {
-                                  setHoveredToonId(String(toon.id));
-                                  setHoveredToonName(toon.name);
-                                  setHoverSource('sidebar');
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                                }}
-                                onMouseLeave={() => {
-                                  setHoveredToonId(null);
-                                  setHoveredToonName(null);
-                                  setHoverSource(null);
-                                  setHoveredRect(null);
-                                }}
+                                onMouseEnter={(e: React.MouseEvent) => showToonTooltip(String(toon.id), e.currentTarget as HTMLElement)}
+                                onMouseLeave={hideToonTooltip}
                               />
                             );
                           })
@@ -2333,9 +2326,6 @@ export function SidebarApp() {
                             const renderToonRow = (id: string) => {
                               const toon = historyToons[id];
                               if (!toon) return null;
-                              const isHovered = hoveredToonId
-                                ? String(toon.id) === hoveredToonId
-                                : (hoveredToonName && toon.name === hoveredToonName);
                               return (
                                 <ToonRow
                                   key={toon.id}
@@ -2345,22 +2335,10 @@ export function SidebarApp() {
                                   isOwnToon={activeToonIds.includes(toon.id)}
                                   note={notes[String(toon.id)]}
                                   refresh={refresh}
-                                  isHovered={!!isHovered}
                                   isJustAdded={justAddedId === toon.id}
                                   onRequestDialog={handleRequestDialog}
-                                  onMouseEnter={(e) => {
-                                    setHoveredToonId(String(toon.id));
-                                    setHoveredToonName(toon.name);
-                                    setHoverSource('sidebar');
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                                  }}
-                                  onMouseLeave={() => {
-                                    setHoveredToonId(null);
-                                    setHoveredToonName(null);
-                                    setHoverSource(null);
-                                    setHoveredRect(null);
-                                  }}
+                                  onMouseEnter={(e: React.MouseEvent) => showToonTooltip(String(toon.id), e.currentTarget as HTMLElement)}
+                                  onMouseLeave={hideToonTooltip}
                                 />
                               );
                             };
@@ -2596,9 +2574,6 @@ export function SidebarApp() {
                         targetIds.map((id: ToonId) => {
                           const toonData = historyToons[id];
                           if (!toonData) return null;
-                          const isHovered = hoveredToonId
-                            ? String(toonData.id) === hoveredToonId
-                            : (hoveredToonName && toonData.name === hoveredToonName);
                           return (
                             <ToonRow
                               key={toonData.id}
@@ -2608,22 +2583,10 @@ export function SidebarApp() {
                               isOwnToon={activeToonIds.includes(toonData.id)}
                               note={notes[String(toonData.id)]}
                               refresh={refresh}
-                              isHovered={!!isHovered}
                               isJustAdded={justAddedId === toonData.id}
                               onRequestDialog={handleRequestDialog}
-                              onMouseEnter={(e: React.MouseEvent) => {
-                                setHoveredToonId(String(toonData.id));
-                                setHoveredToonName(toonData.name);
-                                setHoverSource('sidebar');
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                setHoveredRect({ top: rect.top, left: rect.left, height: rect.height });
-                              }}
-                              onMouseLeave={() => {
-                                setHoveredToonId(null);
-                                setHoveredToonName(null);
-                                setHoverSource(null);
-                                setHoveredRect(null);
-                              }}
+                              onMouseEnter={(e: React.MouseEvent) => showToonTooltip(String(toonData.id), e.currentTarget as HTMLElement)}
+                              onMouseLeave={hideToonTooltip}
                             />
                           );
                         });
@@ -2937,11 +2900,11 @@ export function SidebarApp() {
       </div>
       {dialog?.isOpen && (
         <div
-          className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : 'items-start justify-end p-4 pt-16'}`}
+          className={`fixed inset-0 z-[2147483647] bg-black/40 animate-in fade-in duration-200 flex ${dialog.source === 'main' ? 'items-center justify-center p-4' : `items-start p-4 pt-16 ${sidebarOnLeft ? 'justify-start' : 'justify-end'}`}`}
           onClick={() => setDialog(null)}
         >
           <div
-            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-[#450a0a]' : 'bg-[#0c3622]'} ${dialog.source === 'main' ? '' : 'mr-4'}`}
+            className={`w-full max-w-xs rounded-xl border border-white/20 p-5 shadow-2xl animate-in zoom-in-95 duration-200 ${dialog.listKey === STORAGE_KEYS.BLOCKED ? 'bg-[#450a0a]' : 'bg-[#0c3622]'} ${dialog.source === 'main' ? '' : sidebarOnLeft ? 'ml-4' : 'mr-4'}`}
             onClick={(e) => e.stopPropagation()}
           >
             {dialog.type === 'delete_group' ? (
@@ -2995,17 +2958,24 @@ export function SidebarApp() {
               </div>
             )}
 
+            {dialogError && (
+              <div role="alert" className="mb-3 rounded-lg border border-red-400/40 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-200">
+                Couldn't save: {dialogError}
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => {
+                  setDialogError(null);
                   if (dialog.type === 'delete_group' && dialog.groupId) {
-                    dbDeleteGroup(dialog.groupId).then(() => {
-                      getAllGroups().then(groups => {
-                        const groupsMap: Record<number, any> = {};
-                        for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
-                        setHistoryGroups(groupsMap);
-                        setDialog(null);
-                      });
+                    dbDeleteGroup(dialog.groupId).then(() => getAllGroups()).then(groups => {
+                      const groupsMap: Record<number, any> = {};
+                      for (const g of groups) groupsMap[g.groupId] = { id: g.groupId, ...g };
+                      setHistoryGroups(groupsMap);
+                      setDialog(null);
+                    }).catch((error) => {
+                      setDialogError(error instanceof Error ? error.message : String(error));
                     });
                   } else if (dialog.toon && dialog.listKey && (dialog.type === 'add' || dialog.type === 'move' || dialog.type === 'remove')) {
                     updateToonList(dialog.type, dialog.listKey!, dialog.toon, dialogNote).then(() => {
@@ -3016,7 +2986,7 @@ export function SidebarApp() {
                       refresh();
                       setDialog(null);
                     }).catch((error) => {
-                      setSyncNotesError(error instanceof Error ? error.message : String(error));
+                      setDialogError(error instanceof Error ? error.message : String(error));
                     });
                   }
                 }}
@@ -3025,14 +2995,15 @@ export function SidebarApp() {
                   : 'bg-emerald-600 hover:bg-emerald-700 ring-emerald-400/50'
                   } focus:outline-none focus:ring-2`}
               >
-                {dialog.type === 'remove' ? 'Remove Toon' :
+                {dialog.type === 'remove' ? 'Remove' :
                   dialog.type === 'delete_group' ? 'Delete Group' :
-                    dialog.type === 'move' ? 'Move Toon' : 'Confirm Add'}
+                    `${dialog.type === 'move' ? 'Move to' : 'Add to'} ${dialog.listKey === STORAGE_KEYS.FAVORITES ? 'Toony' : 'Stinky'}`}
               </button>
               {dialog.type === 'remove' && dialog.listKey && (
                 <button
                   onClick={() => {
                     const otherKey = dialog.listKey === STORAGE_KEYS.FAVORITES ? STORAGE_KEYS.BLOCKED : STORAGE_KEYS.FAVORITES;
+                    setDialogError(null);
                     setDialog({
                       ...dialog,
                       type: 'move',
@@ -3609,14 +3580,12 @@ export function SidebarApp() {
         </div>
       )}
       {(() => {
-        const hoveredToon = (hoveredToonId
+        const hoveredToon = hoveredToonId
           ? historyToons[String(hoveredToonId)] || searchResults.find(t => String(t.id) === String(hoveredToonId))
-          : hoveredToonName
-            ? Object.values(historyToons).find((t) => t.name === hoveredToonName) || searchResults.find(t => t.name === hoveredToonName)
-            : null);
-        if (!hoveredToon || !hoveredRect) return null;
+          : null;
+        if (!hoveredToon || !hoveredRect || dialog?.isOpen) return null;
         return (
-          <TooltipAnchor anchorRect={hoveredRect}>
+          <TooltipAnchor anchorRect={hoveredRect} side={sidebarOnLeft ? 'right' : 'left'}>
             <ToonTooltip
               toon={hoveredToon}
               isFavorited={favorites.includes(hoveredToon.id)}
