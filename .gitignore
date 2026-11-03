@@ -33,3 +33,6 @@ native-toonhq/
 *.njsproj
 *.sln
 *.sw?
+
+# Local ToonHQ captures (contain other players' data)
+/docs/captures/

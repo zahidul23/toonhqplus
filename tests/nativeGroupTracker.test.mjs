@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createNativeGroupTracker } from '../entrypoints/sidebar.content/nativeGroupTracker.ts';
 import { harness, group, toon, clone } from './helpers/nativeBridgeHarness.mjs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 function setup(t, options) {
   const h = harness(options); const groups = {}, ownedToons = {}, toons = {}, calls = [], errors = [];
@@ -179,8 +179,14 @@ test('disposed tracking ignores future native updates', async t => {
   await h.settle(); assert.equal(h.calls.length, count); assert.deepEqual(h.groups, {});
 });
 
-test('the saved 20-minute public capture replays group/member changes without extra networking', async t => {
-  const rows = readFileSync(new URL('../docs/captures/toonhq-groups-2026-08-21-20min.jsonl', import.meta.url), 'utf8')
+// The capture holds other players' data, so it is kept out of the repo. Record one with
+// tools/capture-toonhq-groups.mjs and save it at this path to run this test locally.
+const CAPTURE = new URL('../docs/captures/toonhq-groups-2026-08-21-20min.jsonl', import.meta.url);
+
+test('the saved 20-minute public capture replays group/member changes without extra networking', {
+  skip: !existsSync(CAPTURE) && 'no local ToonHQ capture file',
+}, async t => {
+  const rows = readFileSync(CAPTURE, 'utf8')
     .trim().split(/\r?\n/).map(JSON.parse);
   const initial = rows.find(row => row.kind === 'initial_groups').body.groups;
   const h = setup(t, { groups: initial, authenticated: false });

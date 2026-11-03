@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getSetting, setSetting } from '../sidebar.content/db';
 import './App.css';
 import logo from '@/assets/logo-32.png';
+import { GITHUB_REPO_URL, GitHubMark } from '../lib/github';
 
 function App() {
   const [trackerEnabled, setTrackerEnabled] = useState<boolean>(false);
@@ -69,6 +70,14 @@ function App() {
           </a>
         </div>
       </div>
+
+      <a className="github-link" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+        <GitHubMark size={18} className="github-link-logo" />
+        <span className="github-link-text">
+          <span className="github-link-title">View on GitHub</span>
+          <span className="github-link-repo">zahidul23/toonhqplus</span>
+        </span>
+      </a>
 
       <div className="disclaimer">
         <div>

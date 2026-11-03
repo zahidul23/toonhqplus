@@ -7,14 +7,20 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '1.3.2',
-    date: 'Nov 1, 2026',
+    date: 'Nov 2, 2026',
     changes: [
-      'Add a Rewards Over Time graph to Rewards Stats, with day zoom and reward images in tooltips',
+      'ToonHQ+ is now open source on GitHub',
+      'Updated About page with the full feature list',
+      'Add a Rewards timeline in Rewards Stats',
       'Show gag track colors and organic gags on the Toons tab',
       'Make reward icons and the reward page count larger',
       'Give CEO rewards a brown color in charts',
       'Fix 3-Star Damage Remote damage in the Gag Calculator',
-      'Add Accuracy Reference sheet to the Gag Calculator'
+      'Add Accuracy Reference sheet to the Gag Calculator',
+      'Fix Toon tooltips and menus showing on the wrong side when the sidebar is on the left',
+      'Stinky Toon tooltips are now red',
+      'Clearer buttons in Toon list menus',
+      "Make your own Toon's row easier to read"
     ]
   },
   {
