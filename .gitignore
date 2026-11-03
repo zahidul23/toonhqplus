@@ -36,3 +36,6 @@ native-toonhq/
 
 # Local ToonHQ captures (contain other players' data)
 /docs/captures/
+
+# Personal reference notes (kept local)
+/notes/
