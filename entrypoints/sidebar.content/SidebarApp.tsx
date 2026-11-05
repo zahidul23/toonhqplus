@@ -33,7 +33,7 @@ import {
   type ToonId,
   type SavedToonDataSnapshot,
 } from './db';
-import { DARK_MODE_NOTICE_DISMISSED_KEY, DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
+import { DISPLAY_MODE_SETTING, normalizeDisplayMode, type DisplayMode } from '../lib/displayMode';
 import { buildSavedToonMap, withSavedToonLock } from './savedToonRecords';
 import { SavedToonSyncStatus } from './SavedToonSyncStatus';
 import { useSystemDisplayMode } from '../lib/useSystemDisplayMode';
@@ -1384,8 +1384,6 @@ export function SidebarApp() {
   const [stinkyCollapsed, setStinkyCollapsed] = useState(false);
   const [neutralCollapsed, setNeutralCollapsed] = useState(false);
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
-  const [showDarkModeNotice, setShowDarkModeNotice] = useState(false);
-  const hasInitializedDarkModeNoticeRef = useRef(false);
   const [searchPage, setSearchPage] = useState(1);
   const [toonyPage, setToonyPage] = useState(1);
   const [stinkyPage, setStinkyPage] = useState(1);
@@ -1400,19 +1398,6 @@ export function SidebarApp() {
   useEffect(() => { toonyListRef.current?.scrollTo({ top: 0 }); }, [toonyPage]);
   useEffect(() => { stinkyListRef.current?.scrollTo({ top: 0 }); }, [stinkyPage]);
   useEffect(() => { notesListRef.current?.scrollTo({ top: 0 }); }, [notesPage]);
-  useEffect(() => {
-    if (!hasLoadedSettings || displayMode !== 'auto' || systemDisplayMode !== 'Dark') return;
-    if (hasInitializedDarkModeNoticeRef.current) return;
-    hasInitializedDarkModeNoticeRef.current = true;
-    try {
-      if (localStorage.getItem(DARK_MODE_NOTICE_DISMISSED_KEY) === 'true') return;
-    } catch {
-      // Show the notice when the dismissal preference cannot be read.
-    }
-    setShowDarkModeNotice(true);
-    setOpen(true);
-    setSetting('sidebar-open', true).catch(console.error);
-  }, [displayMode, hasLoadedSettings, systemDisplayMode]);
   const [isAnimatingCollapse, setIsAnimatingCollapse] = useState(false);
   const collapseTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -2142,59 +2127,7 @@ export function SidebarApp() {
         </div>
 
         {open && (
-          <aside className={`relative w-80 flex flex-col ${showDarkModeNotice ? 'min-h-[min(28rem,90vh)]' : 'min-h-0'} max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0`}>
-            {/* The panel keeps a minimum height while this shows, since short tabs like Toons would clip it. */}
-            {showDarkModeNotice && (
-              <div className="absolute inset-0 z-[1000] flex items-start justify-center overflow-y-auto bg-black/60 px-4 pb-4 pt-12">
-                <section role="dialog" aria-modal="true" aria-labelledby="toonhq-plus-theme-notice-title" className="w-full rounded-xl border border-emerald-300/20 bg-[#103d29] p-4 text-white shadow-2xl">
-                  
-                  <h2 id="toonhq-plus-theme-notice-title" className="mt-1 text-lg font-bold">Dark theme applied</h2>
-                  <p className="mt-2 text-xs leading-relaxed text-green-100/75">
-                    Your system is set to dark mode, so ToonHQ+ has applied a dark theme to ToonHQ.
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-green-100/75">
-                    This is a temporary feature until the official dark mode for ToonHQ is available.
-                  </p>
-
-                  <div className="mt-4 text-[10px] font-bold text-green-100/80">Choose your display mode</div>
-                  <div className="mt-1.5 grid w-full grid-cols-3 gap-0.5 rounded-lg border border-white/10 bg-black/30 p-0.5" role="radiogroup" aria-label="Display Mode">
-                    {(['light', 'dark', 'auto'] as DisplayMode[]).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="radio"
-                        aria-checked={displayMode === mode}
-                        onClick={() => {
-                          setDisplayMode(mode);
-                          setSetting(DISPLAY_MODE_SETTING, mode).catch(console.error);
-                          browser.runtime.sendMessage({ type: 'DISPLAY_MODE_CHANGED', mode }).catch(console.error);
-                        }}
-                        className={`min-w-0 cursor-pointer rounded-md px-1 py-2 text-[10px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${displayMode === mode ? 'bg-emerald-600 text-white shadow-md' : 'text-green-100/60 hover:bg-white/5 hover:text-white'}`}
-                      >
-                        {mode === 'auto' ? `System (${systemDisplayMode})` : mode[0].toUpperCase() + mode.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-
-                  <p className="mt-3 text-[10px] leading-relaxed text-green-100/55">You can change this at any time in ToonHQ+ settings.</p>
-                  <button
-                    type="button"
-                    data-dismiss
-                    onClick={() => {
-                      try {
-                        localStorage.setItem(DARK_MODE_NOTICE_DISMISSED_KEY, 'true');
-                      } catch {
-                        // Still dismiss for the current page if storage is unavailable.
-                      }
-                      setShowDarkModeNotice(false);
-                    }}
-                    className="mt-4 w-full cursor-pointer rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
-                  >
-                    Got it
-                  </button>
-                </section>
-              </div>
-            )}
+          <aside className={`relative w-80 flex flex-col min-h-0 max-h-[90vh] rounded-lg border border-[#0a2e1d] bg-[#10462d] shadow-xl overflow-hidden pointer-events-auto shrink-0`}>
             <div className="flex border-b border-[#0a2e1d]/80 bg-[#0c3622]">
               {hasLoadedSettings && trackerEnabled !== false && (
                 <button
