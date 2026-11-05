@@ -8,7 +8,7 @@ const FEATURE_COLUMNS: { title: string; items: string[] }[][] = [
   [
     {
       title: 'Groups',
-      items: ['CEO/CJ Tier Info', 'Toon Notes', 'Stinky & Toony Lists', 'Group History', 'District Indicators', 'Quick Teleport', 'Toon Details'],
+      items: ['CEO/CJ Tier Info', 'Toon Notes', 'Stinky & Toony Lists', 'Group History', 'District Indicators', 'Quick Create', 'Toon Details'],
     },
   ],
   [

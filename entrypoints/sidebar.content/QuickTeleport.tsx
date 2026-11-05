@@ -5,7 +5,7 @@ import { getSettings, setSetting } from './db';
 import { getToonSuitLevel } from './toonUtils';
 import { getToonHqActiveToonId } from './toonHqPageState';
 import { pageFetch } from './pageFetch';
-import { getNativeBridge, validBoardingStatus } from './nativeBridge';
+import { getNativeBridge, isToonInListedGroup, validBoardingStatus } from './nativeBridge';
 import { NativeStatusText } from './NativeConnectionStatus';
 
 type SuitKey = 'sellbot' | 'cashbot' | 'lawbot' | 'bossbot';
@@ -165,7 +165,6 @@ const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
 const BOARDING_GROUP_COOLDOWN_SECONDS = 5 * 60;
 const AUTO_BOARDING_CHECK_COOLDOWN_MS = 60_000;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
-const AUTO_DELIST_SETTING = 'quick-teleport-auto-delist';
 const DESTINATION_SETTING = 'quick-teleport-destination';
 const LAST_AUTO_BOARDING_CHECK_KEY = 'toonhqplus-quick-teleport-last-auto-boarding-check';
 const MANUAL_REFRESH_STATUS = 'Use Refresh to check this Toon\'s current location and boarding-group status.';
@@ -198,6 +197,18 @@ function HoverTooltip({ id, children, placement = 'center' }: { id: string; chil
       : 'left-1/2 -translate-x-1/2';
   return (
     <div id={id} role="tooltip" className={`pointer-events-none invisible absolute bottom-full z-[90] mb-2 w-max max-w-[min(12rem,calc(100vw-1rem))] rounded-lg border border-rose-200/20 bg-[#3a2028] px-2.5 py-2 text-center text-[10px] font-medium leading-relaxed text-rose-50 opacity-0 shadow-2xl transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${positionClass}`}>
+      {children}
+    </div>
+  );
+}
+
+// Like HoverTooltip, but tied to one of the two action buttons.
+function ActionHint({ id, children, placement }: { id: string; children: React.ReactNode; placement: 'left' | 'right' }) {
+  const visibility = placement === 'left'
+    ? 'group-hover/teleport:visible group-hover/teleport:opacity-100 group-focus-within/teleport:visible group-focus-within/teleport:opacity-100 left-0'
+    : 'group-hover/list:visible group-hover/list:opacity-100 group-focus-within/list:visible group-focus-within/list:opacity-100 right-0';
+  return (
+    <div id={id} role="tooltip" className={`pointer-events-none invisible absolute bottom-full z-[90] mb-2 w-max max-w-[min(12rem,calc(100vw-1rem))] rounded-lg border border-rose-200/20 bg-[#3a2028] px-2.5 py-2 text-center text-[10px] font-medium leading-relaxed text-rose-50 opacity-0 shadow-2xl transition-opacity ${visibility}`}>
       {children}
     </div>
   );
@@ -239,6 +250,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
   const [toons, setToons] = useState<Toon[]>([]);
   const [nativeState, setNativeState] = useState(() => getNativeBridge().state);
   useEffect(() => getNativeBridge().subscribe(update => setNativeState(update.state)), []);
+  const [inListedGroup, setInListedGroup] = useState(false);
   const initialToonHqActiveId = useMemo(getToonHqActiveToonId, []);
   const [toonId, setToonId] = useState(initialToonHqActiveId || '');
   const [districtId, setDistrictId] = useState('');
@@ -248,7 +260,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
   const [boardingStatus, setBoardingStatus] = useState<BoardingGroupStatus | undefined>(undefined);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
-  const [autoDelist, setAutoDelist] = useState(true);
+  const [listing, setListing] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [infoTooltipOpen, setInfoTooltipOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -294,17 +306,11 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     setSetting(DESTINATION_SETTING, destination.label).catch(error => console.error('Could not save the Quick Teleport destination.', error));
   };
 
-  const updateAutoDelist = (value: boolean) => {
-    setAutoDelist(value);
-    setSetting(AUTO_DELIST_SETTING, value).catch(error => console.error('Could not save the Quick Teleport auto-delist preference.', error));
-  };
-
   useEffect(() => {
     let cancelled = false;
-    getSettings([AUTO_DELIST_SETTING, DESTINATION_SETTING])
+    getSettings([DESTINATION_SETTING])
       .then(values => {
         if (cancelled) return;
-        if (typeof values[AUTO_DELIST_SETTING] === 'boolean') setAutoDelist(values[AUTO_DELIST_SETTING]);
         if (typeof values[DESTINATION_SETTING] === 'string') {
           const savedDestinationIndex = DESTINATIONS.findIndex(destination => destination.label === values[DESTINATION_SETTING]);
           if (savedDestinationIndex >= 0) setDestinationIndex(savedDestinationIndex);
@@ -349,6 +355,13 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
 
   const hasActiveBoardingGroup = !!boardingStatus?.type;
 
+  // Watch ToonHQ's live group list for a group this Toon is still a member of.
+  useEffect(() => {
+    if (!toonId) { setInListedGroup(false); return; }
+    const bridge = getNativeBridge();
+    return bridge.subscribe(() => setInListedGroup(isToonInListedGroup(bridge.groups, toonId)));
+  }, [toonId]);
+
   useEffect(() => {
     if (!hasActiveBoardingGroup) {
       return;
@@ -356,7 +369,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
 
     const timer = window.setTimeout(() => {
       setBoardingStatus(undefined);
-      setStatus('The boarding-group cooldown expired. You can try Quick Teleport again.');
+      setStatus('The boarding-group cooldown expired. You can try Quick Create again.');
     }, BOARDING_GROUP_COOLDOWN_SECONDS * 1000);
     return () => window.clearTimeout(timer);
   }, [hasActiveBoardingGroup, toonId]);
@@ -449,26 +462,38 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
   const selectedSuitLevel = getToonSuitLevel(selectedToon?.[selectedDestination.suitKey]);
   const selectedDestinationEligible = selectedSuitLevel >= 13;
   const selectedDepartment = selectedDestination.suitKey[0].toUpperCase() + selectedDestination.suitKey.slice(1);
-  const disguiseRequirement = `Requires a Level 13 ${selectedDepartment} disguise. Current level: ${selectedSuitLevel}.`;
+  // Without a selected Toon there's no disguise level to report, so ask for a Toon instead of showing level 0.
+  const noToonReason = selectedToon ? null
+    : !nativeState.connected ? nativeState.reason || 'Connecting to ToonHQ Groups…'
+    : 'Select an active Toon to use Quick Create.';
+  const disguiseRequirement = noToonReason ?? `Requires a Level 13 ${selectedDepartment} disguise. Current level: ${selectedSuitLevel}.`;
   const selectedDistrict = districts.find(district => String(district.id) === districtId);
   const toonIsOffline = boardingStatus === null;
-  const teleportDisabledReason = !nativeState.connected
+  // Both buttons create a ToonHQ group, so neither works while the Toon is already in one.
+  const sharedDisabledReason = !nativeState.connected
     ? nativeState.reason || 'Connecting to ToonHQ Groups…'
     : busy
     ? 'Teleport is in progress.'
-    : checkingStatus
-      ? 'Checking your Toon’s status. Please wait.'
-      : !toonId
-        ? 'Select an active Toon to use Quick Teleport.'
-        : toonIsOffline
-          ? 'Your active Toon appears to be offline.'
-        : !districtId || districts.length === 0
-          ? 'Select a destination district.'
-          : hasActiveBoardingGroup
-            ? 'Your Toon is already in a boarding group.'
-            : !selectedDestinationEligible
-              ? disguiseRequirement
-              : undefined;
+    : !toonId
+      ? 'Select an active Toon to use Quick Create.'
+      : inListedGroup
+        ? 'Your Toon is already in a group on ToonHQ.'
+        : undefined;
+  // Teleport also depends on where the Toon is in-game; List on HQ doesn't.
+  const teleportDisabledReason = sharedDisabledReason ?? (checkingStatus
+    ? 'Checking your Toon’s status. Please wait.'
+    : boardingStatus === undefined
+      ? 'Couldn’t check your Toon’s location yet. Use Refresh to try again.'
+    : toonIsOffline
+      ? 'Your active Toon appears to be offline.'
+      : !districtId || districts.length === 0
+        ? 'Select a destination district.'
+        : hasActiveBoardingGroup
+          ? 'Your Toon is already in a boarding group.'
+          : !selectedDestinationEligible ? disguiseRequirement : undefined);
+  const listDisabledReason = sharedDisabledReason ?? (!districtId || districts.length === 0
+    ? 'Select a destination district.'
+    : !selectedDestinationEligible ? disguiseRequirement : undefined);
   const refreshDisabled = !nativeState.connected || !toonId || busy || checkingStatus || refreshCooldown > 0;
   const refreshTooltip = !nativeState.connected
     ? nativeState.reason || 'Connecting to ToonHQ Groups…'
@@ -507,9 +532,11 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     }
   };
 
-  const teleport = async () => {
+  // Teleport removes the ToonHQ listing right after creating the group; List keeps it.
+  const teleport = async (delist = true) => {
     const requestContext = nativeState.context;
-    if (!isCurrentToonContext(requestContext) || !toonId || !districtId || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup) return;
+    if (!isCurrentToonContext(requestContext) || !toonId || !districtId || busy || inListedGroup) return;
+    if (delist && (checkingStatus || boardingStatus === undefined || toonIsOffline || hasActiveBoardingGroup)) return;
     const destination = DESTINATIONS[destinationIndex];
     const destinationFullName = getDestinationFullName(destination);
     const suitLevel = getToonSuitLevel(selectedToon?.[destination.suitKey]);
@@ -525,7 +552,8 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     }
 
     setBusy(true);
-    setStatus(`Creating a temporary group for ${destinationFullName}…`);
+    setListing(!delist);
+    setStatus(delist ? `Creating a temporary group for ${destinationFullName}…` : `Listing a ${destinationFullName} group on ToonHQ…`);
     try {
       const createResponse = await pageFetch(new URL('/api/groups/create/', window.location.origin).href, {
         method: 'POST',
@@ -549,7 +577,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       const createdGroupId = Number(group?.id);
       if (!Number.isFinite(createdGroupId)) throw new Error('ToonHQ did not return the new group ID.');
 
-      if (autoDelist) {
+      if (delist) {
         const leaveResponse = await pageFetch(new URL(`/api/groups/${createdGroupId}/leave/`, window.location.origin).href, {
           method: 'POST',
           credentials: 'include',
@@ -559,6 +587,12 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       }
 
       if (!isCurrentToonContext(requestContext)) return;
+      // A listing doesn't depend on the Toon's in-game location, so there's no boarding check.
+      if (!delist) {
+        setInListedGroup(true);
+        setStatus(`Your ${destinationFullName} group is now listed on ToonHQ.`);
+        return;
+      }
       setStatus('Teleport requested. Checking the in-game boarding group in 10 seconds…');
       await new Promise(resolve => window.setTimeout(resolve, TELEPORT_VERIFICATION_DELAY_MS));
       if (!isCurrentToonContext(requestContext)) return;
@@ -569,7 +603,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       if (!verifiedStatus?.type) throw new Error('Something went wrong. We were not able to create a boarding group.');
 
       setBoardingStatus(verifiedStatus);
-      setStatus(`Teleport requested to ${destinationFullName}.\nThe in-game boarding group is active${autoDelist ? ' and the ToonHQ listing was removed' : ''}.`);
+      setStatus(`Teleport requested to ${destinationFullName}.\nThe in-game boarding group is active${delist ? ' and the ToonHQ listing was removed' : ' and listed on ToonHQ'}.`);
     } catch (error) {
       if (!isCurrentToonContext(requestContext)) return;
       setStatus(error instanceof Error && error.message.startsWith('Teleport was requested, but')
@@ -577,6 +611,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
         : 'Something went wrong. We were not able to create a boarding group.');
     } finally {
       setBusy(false);
+      setListing(false);
     }
   };
 
@@ -586,23 +621,18 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     <>
       <div className="relative mb-2 ml-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-sm font-medium text-green-50">{autoDelist ? 'Quick Teleport' : 'Quick Create'}</h3>
+          <h3 className="text-sm font-medium text-green-50">Quick Create</h3>
           <div className="flex items-center">
-            <button type="button" aria-label="About Quick Teleport" aria-describedby="quick-teleport-tooltip" onMouseEnter={() => setInfoTooltipOpen(true)} onMouseLeave={() => setInfoTooltipOpen(false)} onFocus={() => setInfoTooltipOpen(true)} onBlur={() => setInfoTooltipOpen(false)} className="flex h-4 w-4 cursor-help items-center justify-center rounded-full text-green-100/55 transition-colors hover:text-green-100 focus:text-green-100 focus:outline-none">
+            <button type="button" aria-label="About Quick Create" aria-describedby="quick-teleport-tooltip" onMouseEnter={() => setInfoTooltipOpen(true)} onMouseLeave={() => setInfoTooltipOpen(false)} onFocus={() => setInfoTooltipOpen(true)} onBlur={() => setInfoTooltipOpen(false)} className="flex h-4 w-4 cursor-help items-center justify-center rounded-full text-green-100/55 transition-colors hover:text-green-100 focus:text-green-100 focus:outline-none">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
             </button>
           </div>
         </div>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[9px] font-bold text-green-100/70">
-          <span>Auto-delist</span>
-          <input type="checkbox" checked={autoDelist} disabled={busy} onChange={event => updateAutoDelist(event.target.checked)} className="peer sr-only" />
-          <span className="relative h-4 w-7 rounded-full bg-white/15 transition-colors peer-checked:bg-emerald-500/70 peer-disabled:cursor-not-allowed peer-disabled:opacity-40 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-3" />
-        </label>
         {infoTooltipOpen && (
           <div id="quick-teleport-tooltip" role="tooltip" className="pointer-events-none absolute left-0 right-0 top-full z-[80] mt-1.5 rounded-lg border border-rose-200/20 bg-[#3a2028] p-2.5 text-[11px] font-normal leading-relaxed text-rose-50 shadow-2xl">
-            <p>Quick Teleport creates a ToonHQ group to teleport you into the selected boss or facility lobby.</p>
-            <p className="mt-1.5">With Auto-delist enabled, the listing is removed immediately after the teleport request. The in-game group remains for you to invite your friends.</p>
-            <p className="mt-1.5">With Auto-delist disabled, Quick Create simply serves as a shortcut for creating and listing a group.</p>
+            <p>Quick Create makes a ToonHQ group to teleport you into the selected boss or facility lobby.</p>
+            <p className="mt-1.5">Teleport removes the ToonHQ listing right away. The in-game group stays so you can invite friends.</p>
+            <p className="mt-1.5">List on HQ keeps the group listed on ToonHQ so others can join.</p>
           </div>
         )}
       </div>
@@ -613,7 +643,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
           aria-labelledby="teleport-district-label teleport-district-value"
           aria-haspopup="listbox"
           aria-expanded={districtMenuOpen}
-          disabled={busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
+          disabled={busy}
           onClick={() => setDistrictMenuOpen(open => !open)}
           className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/20 px-2.5 py-2 text-left text-xs font-bold text-white transition-colors enabled:cursor-pointer enabled:hover:bg-black/30 focus:border-emerald-500/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -622,7 +652,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
           </span>
           <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-white/40 transition-transform ${districtMenuOpen ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
         </button>
-        {districtMenuOpen && !toonIsOffline && (
+        {districtMenuOpen && (
           <div role="listbox" aria-labelledby="teleport-district-label" className="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-[#152c22] p-1 shadow-2xl custom-scrollbar">
             {districts.map(district => {
               const value = String(district.id);
@@ -655,23 +685,24 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
             <div key={row.label} className="group relative" tabIndex={!isEligible ? 0 : -1}>
               <button
                 type="button"
-                disabled={!isEligible || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
+                disabled={!isEligible || busy}
                 aria-describedby={!isEligible ? rowTooltipId : undefined}
                 onClick={() => selectDestination(row.indices[0])}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy && !checkingStatus && !toonIsOffline && !hasActiveBoardingGroup ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-transparent p-0.5 transition-all ${isSelected ? 'border-[3px] border-[#ffd539] scale-105' : 'border-0'} ${isEligible && !busy ? 'cursor-pointer hover:scale-105 hover:brightness-110' : 'cursor-not-allowed grayscale opacity-35'}`}
                 style={{
                   boxShadow: isSelected ? '0 0 0 3px rgba(255, 213, 57, 0.2), 0 3px 9px rgba(0, 0, 0, 0.25)' : 'none',
                 }}
               >
                 <img src={row.image} alt={row.label} className="h-7 w-7 object-contain drop-shadow-md" />
               </button>
-              {!isEligible && <HoverTooltip id={rowTooltipId} placement={rowIndex === 0 ? 'left' : rowIndex === DESTINATION_ROWS.length - 1 ? 'right' : 'center'}>Requires a Level 13 {row.label} disguise. Current level: {suitLevel}.</HoverTooltip>}
+              {!isEligible && <HoverTooltip id={rowTooltipId} placement={rowIndex === 0 ? 'left' : rowIndex === DESTINATION_ROWS.length - 1 ? 'right' : 'center'}>{noToonReason ?? `Requires a Level 13 ${row.label} disguise. Current level: ${suitLevel}.`}</HoverTooltip>}
             </div>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5">
+      {/* A switch, not buttons, so picking a lobby doesn't look like Teleport / List on HQ. */}
+      <div role="radiogroup" aria-label="Lobby" className="grid grid-cols-3 gap-0.5 rounded-lg border border-white/10 bg-black/30 p-0.5">
         {selectedSuitRow.indices.map((index, columnIndex) => {
           const destination = DESTINATIONS[index];
           const isSelected = destinationIndex === index;
@@ -680,18 +711,14 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
             <div key={destination.label} className="group relative flex" tabIndex={!selectedDestinationEligible ? 0 : -1}>
               <button
                 type="button"
-                aria-pressed={isSelected}
+                role="radio"
+                aria-checked={isSelected}
                 aria-describedby={!selectedDestinationEligible ? tooltipId : undefined}
-                disabled={!selectedDestinationEligible || busy || checkingStatus || toonIsOffline || hasActiveBoardingGroup}
+                disabled={!selectedDestinationEligible || busy}
                 onClick={() => selectDestination(index)}
                 title={destination.description}
-                className={`flex min-h-9 w-full items-center justify-center overflow-hidden rounded-lg px-2 py-1 text-center text-xs font-black leading-tight text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer enabled:hover:brightness-110 ${isSelected ? 'border-[3px] border-[#ffd539] scale-[1.03] brightness-110' : 'border-0 opacity-80'}`}
-                style={{
-                  backgroundColor: destination.cardBg,
-                  boxShadow: isSelected
-                    ? '0 0 0 2px rgba(255, 213, 57, 0.28), 0 0 12px rgba(255, 213, 57, 0.45)'
-                    : 'none',
-                }}
+                className={`min-w-0 w-full truncate rounded-md px-1 py-1.5 text-center text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-40 enabled:cursor-pointer ${isSelected ? 'text-white shadow-md' : 'text-green-100/60 enabled:hover:bg-white/5 enabled:hover:text-white'}`}
+                style={isSelected ? { backgroundColor: destination.cardBg } : undefined}
               >
                 {destination.label}
               </button>
@@ -701,11 +728,19 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
         })}
       </div>
 
-      <div className="group relative w-full" tabIndex={teleportDisabledReason ? 0 : -1}>
-        <button type="button" aria-describedby={teleportDisabledReason ? 'quick-teleport-disabled-reason' : undefined} disabled={!!teleportDisabledReason} onClick={teleport} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-          {checkingStatus ? 'Checking…' : busy ? (autoDelist ? 'Teleporting…' : 'Creating…') : autoDelist ? `Teleport to ${selectedDestinationFullName}` : `Create ${selectedDestinationFullName} Group`}
-        </button>
-        {teleportDisabledReason && <HoverTooltip id="quick-teleport-disabled-reason">{teleportDisabledReason}</HoverTooltip>}
+      <div className="flex w-full gap-1.5">
+        <div className="group/teleport relative flex-1" tabIndex={teleportDisabledReason ? 0 : -1}>
+          <button type="button" aria-describedby="quick-teleport-teleport-hint" disabled={!!teleportDisabledReason} onClick={() => teleport(true)} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
+            {checkingStatus ? 'Checking…' : busy && !listing ? 'Teleporting…' : 'Teleport'}
+          </button>
+          <ActionHint id="quick-teleport-teleport-hint" placement="left">{teleportDisabledReason ?? `Teleports you to ${selectedDestinationFullName} without listing the group. Invite friends in-game.`}</ActionHint>
+        </div>
+        <div className="group/list relative flex-1" tabIndex={listDisabledReason ? 0 : -1}>
+          <button type="button" aria-describedby="quick-teleport-list-hint" disabled={!!listDisabledReason} onClick={() => teleport(false)} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
+            {busy && listing ? 'Listing…' : 'List on HQ'}
+          </button>
+          <ActionHint id="quick-teleport-list-hint" placement="right">{listDisabledReason ?? `Posts a ${selectedDestinationFullName} group on ToonHQ so others can join.`}</ActionHint>
+        </div>
       </div>
 
       {status && (

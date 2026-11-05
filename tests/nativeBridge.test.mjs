@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { harness, group, toon, clone } from './helpers/nativeBridgeHarness.mjs';
-import { createNativeBridgeClient, GROUPS_PAGE_LINK_TEXT } from '../entrypoints/sidebar.content/nativeBridge.ts';
+import { createNativeBridgeClient, GROUPS_PAGE_LINK_TEXT, isToonInListedGroup } from '../entrypoints/sidebar.content/nativeBridge.ts';
 
 function setup(t, options) { const h = harness(options); t.after(() => h.close()); return h; }
 
@@ -376,4 +376,15 @@ test('runtime paths contain no duplicate ToonHQ socket, bootstrap fetch or owned
   assert.doesNotMatch(index, /WebSocket|socket_auth|api\/groups\/list/);
   assert.doesNotMatch(boarding, /pageFetch|fetch\(|WebSocket|boarding_request|nextNonce/);
   assert.doesNotMatch(quickTeleport, /api\/toons\/|loadTtrToons/);
+});
+
+test('isToonInListedGroup only counts current members of active groups', () => {
+  const groups = [
+    { id: 1, members: [{ toon: { id: 101 }, left: null }, { toon: { id: 202 }, left: '2026-11-05T00:00:00Z' }] },
+    { id: 2, members: [{ name: 'Guest' }] },
+  ];
+  assert.equal(isToonInListedGroup(groups, '101'), true);
+  assert.equal(isToonInListedGroup(groups, '202'), false);
+  assert.equal(isToonInListedGroup(groups, '303'), false);
+  assert.equal(isToonInListedGroup([], '101'), false);
 });

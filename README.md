@@ -20,7 +20,7 @@
 - **Toon Notes**: Keep track of which toons are Toony and which are Stinky with private notes. These toons are highlighted when they join your groups.
 - **Group History**: Check your past groups in the sidebar and add notes for past teammates, even after the group has disbanded.
 - **District Indicators**: See district population and chat limitations at a glance on group cards, invasion cards and district menus.
-- **Quick Teleport**: Teleport to bosses and facilities right from the Groups tab. Quick Create mode and auto-delist make it a one-click shortcut.
+- **Quick Create**: Create boss and facility groups right from the Groups tab. Teleport takes you in unlisted, or List on HQ posts the group for others to join.
 - **Toon Details**: Hover over toons for laff, gags and suit levels. Right click a toon's picture to open it in the Toontown Help styling app.
 
 ### Shticker Book

@@ -90,7 +90,7 @@
         subscriptionToonId: validId(state.groups.toonBoardingGroupSubscription) ? state.groups.toonBoardingGroupSubscription : null,
         ownedToons,
         reason: ready ? null : gameId !== 1 ? 'Live history only works for Toontown Rewritten. Switch ToonHQ to Toontown Rewritten to resume.'
-          : !onGroups ? 'Open the ToonHQ Groups page to use the Quick Teleport and Quick Create functionality.'
+          : !onGroups ? 'Open the ToonHQ Groups page to use Quick Create.'
             : 'Connecting to ToonHQ Groups…',
       },
     };
@@ -233,7 +233,7 @@
     const reply = data => { if (!disposed && client === owner) send(Object.assign({ type: 'boarding-result', id: request.id }, data)); };
     if (!state || !state.connected || !state.authenticated || !state.ownedToons.some(toon => toon.id === toonId && toon.external === true && toon.game === 1) ||
         !store._actions || !store._actions.loadExistingBoardingGroup) {
-      reply({ error: state && state.reason || 'Quick Teleport status checks are unavailable for this Toon.' }); return;
+      reply({ error: state && state.reason || 'Quick Create status checks are unavailable for this Toon.' }); return;
     }
     const requestContext = state.context;
     const key = requestContext + ':' + toonId;

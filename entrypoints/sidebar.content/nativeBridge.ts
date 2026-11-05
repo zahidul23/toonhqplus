@@ -45,6 +45,14 @@ const stateMessage = (message: any) => {
     Array.isArray(message.archived) && message.archived.length <= 5000 && message.archived.every(group) &&
     (!candidate.connected || candidate.gameId === 1);
 };
+/** True when the Toon is a current (not yet left) member of an active ToonHQ group. */
+export function isToonInListedGroup(groups: Iterable<any>, toonId: string): boolean {
+  for (const group of groups) {
+    if (Array.isArray(group?.members) && group.members.some((member: any) => member && !member.left && member.toon && String(member.toon.id) === toonId)) return true;
+  }
+  return false;
+}
+
 export function validBoardingStatus(value: any): boolean {
   return value === null || record(value) && ['district', 'location', 'type', 'num_players'].every(key =>
     value[key] === undefined || Number.isFinite(value[key])) && (value.options === undefined || record(value.options));
@@ -127,6 +135,7 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
   return {
     get state() { return state; },
     get disposed() { return disposed; },
+    get groups() { return Array.from(groups.values()); },
     requestSnapshot() { send({ type: 'snapshot' }); },
     subscribe(listener: (update: NativeUpdate) => void) {
       updates.add(listener);
@@ -138,7 +147,7 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
       return () => { boardingListeners.delete(listener); };
     },
     requestBoarding(toonId: number, timeoutMs = 12_000): Promise<any> {
-      if (disposed || !state.connected || !state.authenticated || !id(toonId)) return Promise.reject(new Error(state.reason || 'Quick Teleport status checks are unavailable right now.'));
+      if (disposed || !state.connected || !state.authenticated || !id(toonId)) return Promise.reject(new Error(state.reason || 'Quick Create status checks are unavailable right now.'));
       if (!state.ownedToons.some(toon => toon.id === toonId && toon.game === 1 && toon.external === true)) return Promise.reject(new Error('Only Toontown Rewritten Toons linked to your ToonHQ account can be checked.'));
       const requestId = `${clientId}:${++nextRequest}`;
       return new Promise((resolve, reject) => {

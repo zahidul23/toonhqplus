@@ -12,14 +12,14 @@ const actions = ts.transpileModule(`(() => {
   return { refreshLocation, teleport };
 })()`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
-function setup(t) {
+function setup(t, overrides = {}) {
   const h = harness(), service = createBoardingStatusService(h.client), view = {}, timers = [], requests = [];
   const active = { current: true };
   t.after(() => { active.current = false; service.dispose(); h.close(); });
   const handlers = vm.runInNewContext(actions, {
     nativeState: h.client.state, getNativeBridge: () => h.client, quickTeleportActiveRef: active,
     toonId: '1', districtId: '21', busy: false, checkingStatus: false, refreshCooldown: 0,
-    toonIsOffline: false, hasActiveBoardingGroup: false, autoDelist: true,
+    boardingStatus: { district: 21 }, toonIsOffline: false, hasActiveBoardingGroup: false, inListedGroup: false, setInListedGroup: () => {},
     selectedToon: { sellbot: '13' }, destinationIndex: 0,
     DESTINATIONS: [{ suitKey: 'sellbot', type: 3, location: 23, options: {}, maxPlayers: 8 }],
     getDestinationFullName: () => 'VP', getToonSuitLevel: () => 13, getCsrfToken: () => 'test-token',
@@ -28,9 +28,10 @@ function setup(t) {
     getBoardingGroupStatus: (id, force) => service.get(id, force),
     setStatus: value => { view.status = value; }, setBoardingStatus: value => { view.boarding = value; },
     setDistrictId: value => { view.district = value; }, setCheckingStatus: value => { view.checking = value; },
-    setRefreshCooldown: value => { view.cooldown = value; }, setBusy: value => { view.busy = value; },
+    setRefreshCooldown: value => { view.cooldown = value; }, setBusy: value => { view.busy = value; }, setListing: () => {},
     window: { location: { origin: 'https://toonhq.org' }, setTimeout: callback => { timers.push(callback); } },
     URL, pageFetch: async url => { requests.push(url); return { ok: true, json: async () => ({ id: 42 }) }; },
+    ...overrides,
   });
   const switchToon = async () => {
     h.commit('switchToon', 2, state => { state.accounts.currentToon = 2; }); await h.flush();
@@ -85,4 +86,26 @@ test('teleport completes normally when the connected Toon context is unchanged',
   assert.equal(h.view.boarding.type, 3);
   assert.equal(h.view.busy, false);
   assert.equal(h.requests.length, 2);
+});
+
+test('List on HQ creates the group without delisting or waiting on the Toon location', async t => {
+  const h = setup(t, { toonIsOffline: true, hasActiveBoardingGroup: true, checkingStatus: true });
+  await h.teleport(false);
+  assert.equal(h.requests.length, 1);
+  assert.match(h.requests[0], /\/api\/groups\/create\/$/);
+  assert.equal(h.timers.length, 0);
+  assert.match(h.view.status, /now listed on ToonHQ/);
+  assert.equal(h.view.busy, false);
+});
+
+test('neither action creates a group while the Toon is already in a ToonHQ group', async t => {
+  const h = setup(t, { inListedGroup: true });
+  await h.teleport(true); await h.teleport(false);
+  assert.equal(h.requests.length, 0);
+});
+
+test('Teleport Only waits until the Toon location is known', async t => {
+  const h = setup(t, { boardingStatus: undefined });
+  await h.teleport(true);
+  assert.equal(h.requests.length, 0);
 });
