@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.3',
+    date: 'Nov 5, 2026',
+    changes: [
+      "Fix an error when adding a Toon to lists on Firefox",
+      'Fix saved Toon lists not growing to fit more Toons on Firefox'
+    ]
+  },
+  {
     version: '1.3.2',
     date: 'Nov 2, 2026',
     changes: [

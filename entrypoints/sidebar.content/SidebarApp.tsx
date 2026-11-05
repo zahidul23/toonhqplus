@@ -2306,7 +2306,7 @@ export function SidebarApp() {
                       {favorites.length === 0 && blocked.length === 0 && Object.keys(notes).length === 0 ? (
                         <div className="py-8 text-center text-green-200/40 italic">No saved toons yet.</div>
                       ) : (
-                        <div className="flex-1 flex flex-col min-h-0 gap-2">
+                        <div className="flex-1 grid min-h-0 gap-2 content-start" style={{ gridAutoRows: 'minmax(0, max-content)' }}>
                           {(() => {
                             const toonyToons = [...new Set(favorites)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
                             const stinkyToons = [...new Set(blocked)].filter(id => historyToons[id]).sort((a, b) => historyToons[a].name.localeCompare(historyToons[b].name));
@@ -2316,12 +2316,13 @@ export function SidebarApp() {
                             const currentStinkyPage = clampPage(stinkyPage, stinkyToons.length);
                             const currentNotesPage = clampPage(notesPage, neutralToons.length);
                             const pageItems = (items: string[], page: number) => items.slice((page - 1) * SAVED_TOONS_PAGE_SIZE, page * SAVED_TOONS_PAGE_SIZE);
-                            const getSectionClass = (collapsed: boolean) =>
-                              `transition-all duration-300 ease-in-out flex flex-col min-h-2 ${collapsed ? 'flex-[0_0_auto]' : 'flex-[1_1_0%]'}`;
-                            const sectionStyle = (collapsed: boolean): React.CSSProperties | undefined =>
-                              collapsed ? undefined : { maxHeight: 'max-content' };
+                            // Grid rows split the space evenly but stop at each list's content
+                            // height, so long lists get the leftover room. (Firefox ignores
+                            // max-height: max-content, so a flex version doesn't work there.)
+                            const sectionClass =
+                              'flex flex-col min-h-2';
                             const getSectionBodyClass = (collapsed: boolean) =>
-                              `transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${collapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-1 mb-1'}`;
+                              `transition-all duration-300 ease-in-out flex flex-col min-h-0 overflow-hidden ${collapsed ? 'opacity-0 flex-[0_0_0px] mb-0' : 'opacity-100 flex-[1_1_auto] mb-1'}`;
 
                             const renderToonRow = (id: string) => {
                               const toon = historyToons[id];
@@ -2346,7 +2347,7 @@ export function SidebarApp() {
                             return (
                               <>
                                 {toonyToons.length > 0 && (
-                                  <section className={getSectionClass(toonyCollapsed)} style={sectionStyle(toonyCollapsed)}>
+                                  <section className={sectionClass}>
                                     <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
                                       <button onClick={() => { startCollapseAnimation(); const next = !toonyCollapsed; setToonyCollapsed(next); setSetting('toony-collapsed', next).catch(console.error); }} className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white">
                                         <span>Toony Toons</span>
@@ -2355,14 +2356,14 @@ export function SidebarApp() {
                                       {!toonyCollapsed && <SavedToonsPagination page={currentToonyPage} totalItems={toonyToons.length} onPageChange={setToonyPage} />}
                                     </div>
                                     <div className={getSectionBodyClass(toonyCollapsed)}>
-                                      <ul ref={toonyListRef} className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                      <ul ref={toonyListRef} className={`flex-[1_1_auto] flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {pageItems(toonyToons, currentToonyPage).map(renderToonRow)}
                                       </ul>
                                     </div>
                                   </section>
                                 )}
                                 {stinkyToons.length > 0 && (
-                                  <section className={getSectionClass(stinkyCollapsed)} style={sectionStyle(stinkyCollapsed)}>
+                                  <section className={sectionClass}>
                                     <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
                                     <button
                                       onClick={() => {
@@ -2379,14 +2380,14 @@ export function SidebarApp() {
                                     {!stinkyCollapsed && <SavedToonsPagination page={currentStinkyPage} totalItems={stinkyToons.length} onPageChange={setStinkyPage} />}
                                     </div>
                                     <div className={getSectionBodyClass(stinkyCollapsed)}>
-                                      <ul ref={stinkyListRef} className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                      <ul ref={stinkyListRef} className={`flex-[1_1_auto] flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {pageItems(stinkyToons, currentStinkyPage).map(renderToonRow)}
                                       </ul>
                                     </div>
                                   </section>
                                 )}
                                 {neutralToons.length > 0 && (
-                                  <section className={getSectionClass(neutralCollapsed)} style={sectionStyle(neutralCollapsed)}>
+                                  <section className={sectionClass}>
                                     <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
                                     <button
                                       onClick={() => {
@@ -2403,7 +2404,7 @@ export function SidebarApp() {
                                     {!neutralCollapsed && <SavedToonsPagination page={currentNotesPage} totalItems={neutralToons.length} onPageChange={setNotesPage} />}
                                     </div>
                                     <div className={getSectionBodyClass(neutralCollapsed)}>
-                                      <ul ref={notesListRef} className={`flex-1 flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
+                                      <ul ref={notesListRef} className={`flex-[1_1_auto] flex flex-col gap-1.5 p-2 overflow-y-auto custom-scrollbar min-h-0 border border-white/5 rounded-lg bg-black/10 transition-colors ${isAnimatingCollapse ? 'pointer-events-none' : ''}`}>
                                         {pageItems(neutralToons, currentNotesPage).map(renderToonRow)}
                                       </ul>
                                     </div>

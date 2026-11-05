@@ -72,10 +72,14 @@ export function mergeSavedToonSnapshots(local: SavedToonDataSnapshot, remote: Sa
 }
 
 /** Local origin tabs use Web Locks; transactional record revisions also protect
- * data when this API is unavailable. There is no cross-device cloud lock. */
+ * data when this API is unavailable. There is no cross-device cloud lock.
+ * Firefox content scripts skip Web Locks: navigator.locks belongs to the page,
+ * which can't read `.then` on the extension's promise, so the request rejects
+ * with "Permission denied to access property 'then'" after the work runs. */
 let queue = Promise.resolve();
+const canUseWebLocks = !(import.meta as any).env?.FIREFOX;
 export async function withSavedToonLock<T>(work: () => Promise<T>): Promise<T> {
-  if (typeof navigator !== 'undefined' && navigator.locks?.request) return await navigator.locks.request('toonhqplus-saved-toons', work);
+  if (canUseWebLocks && typeof navigator !== 'undefined' && navigator.locks?.request) return await navigator.locks.request('toonhqplus-saved-toons', work);
   const operation = queue.then(work, work);
   queue = operation.then(() => undefined, () => undefined);
   return operation;
