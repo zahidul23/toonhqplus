@@ -10,7 +10,7 @@ import React, { useState, useId, useMemo, useEffect, useRef, useLayoutEffect } f
 import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
 import { calculateRoundAccuracy as calculateRoundAccuracyCore } from './cogAccuracy';
-import { wakeRemoteControlledCog } from './remoteRules';
+import { clearRemoteIfDestroyed, wakeRemoteControlledCog } from './remoteRules';
 import { applyDefenseUp, getFacilityDefenseDownStacks } from './facilityDamage';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
@@ -1239,9 +1239,7 @@ function CogCalculatorContent() {
             currentCogs[idx].lureDuration = 0;
             currentCogs[idx].isTrapped = false;
             currentCogs[idx].trapDamage = 0;
-            currentCogs[idx].remote = undefined;
-            currentCogs[idx].isRemoteDmg = false;
-            currentCogs[idx].isRemoteHeal = false;
+            clearRemoteIfDestroyed(currentCogs[idx], state.layer);
             trapDamageOnCog[idx] = 0;
           } else {
             state.damageOnCurrentLayer += dmg;
@@ -1312,9 +1310,7 @@ function CogCalculatorContent() {
                 currentCogs[idx].lureDuration = 0;
                 currentCogs[idx].isTrapped = false;
                 currentCogs[idx].trapDamage = 0;
-                currentCogs[idx].remote = undefined;
-                currentCogs[idx].isRemoteDmg = false;
-                currentCogs[idx].isRemoteHeal = false;
+                clearRemoteIfDestroyed(currentCogs[idx], s.layer);
               } else {
                 s.damageOnCurrentLayer += d;
                 s.totalEffectiveDamage += d;
@@ -1341,9 +1337,7 @@ function CogCalculatorContent() {
               currentCogs[idx].lureDuration = 0;
               currentCogs[idx].isTrapped = false;
               currentCogs[idx].trapDamage = 0;
-              currentCogs[idx].remote = undefined;
-              currentCogs[idx].isRemoteDmg = false;
-              currentCogs[idx].isRemoteHeal = false;
+              clearRemoteIfDestroyed(currentCogs[idx], s.layer);
             } else {
               s.damageOnCurrentLayer += d;
               s.totalEffectiveDamage += d;

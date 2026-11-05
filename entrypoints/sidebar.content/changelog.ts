@@ -11,7 +11,8 @@ export const changelog: ChangelogEntry[] = [
     changes: [
       "Fix an error when adding a Toon to lists on Firefox",
       'Fix saved Toon lists not growing to fit more Toons on Firefox',
-      'Remove the dark theme popup'
+      'Remove the dark theme popup',
+      'Fix an issue with Remote Statuses for 2.0 cogs'
     ]
   },
   {
