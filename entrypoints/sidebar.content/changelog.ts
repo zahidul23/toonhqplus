@@ -6,6 +6,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.4',
+    date: 'Nov 6, 2026',
+    changes: [
+      'Fix Pink Slip and Lawyer tooltips not showing when District Indicators are off'
+    ]
+  },
+  {
     version: '1.3.3',
     date: 'Nov 5, 2026',
     changes: [

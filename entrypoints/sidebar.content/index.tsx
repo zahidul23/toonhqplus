@@ -194,7 +194,8 @@ function renderDistrictIndicators(districtLine: HTMLElement, districtName: strin
 
 function applyDistrictIndicators() {
   if (!districtIndicatorsEnabled) {
-    hideDistrictTooltip();
+    // Boss tooltips share this slot, so only close one that belongs to a district indicator.
+    if (activeDistrictTooltipAnchor?.closest('.toonhq-plus-district-indicators')) hideDistrictTooltip();
     document.querySelectorAll('.toonhq-plus-district-indicators').forEach(indicators => indicators.remove());
     return;
   }
