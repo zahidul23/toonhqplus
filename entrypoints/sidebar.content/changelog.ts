@@ -10,7 +10,9 @@ export const changelog: ChangelogEntry[] = [
     date: 'Nov 6, 2026',
     changes: [
       'Fix Pink Slip and Lawyer tooltips not showing when District Indicators are off',
-      'Fix Recent Groups showing every Toon as left after the group goes in'
+      'Fix Recent Groups showing every Toon as left after the group goes in',
+      'Hover a round in the Facilities Calculator to see its damage on each Cog, with bonuses broken down',
+      "Fix the Club President's Defense Down counting Cogs defeated by the same gag that hits it"
     ]
   },
   {

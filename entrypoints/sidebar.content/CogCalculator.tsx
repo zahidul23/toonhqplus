@@ -11,7 +11,8 @@ import { createPortal } from 'react-dom';
 import { gags as gagsConfig } from './gags';
 import { calculateRoundAccuracy as calculateRoundAccuracyCore } from './cogAccuracy';
 import { clearRemoteIfDestroyed, wakeRemoteControlledCog } from './remoteRules';
-import { applyDefenseUp, getFacilityDefenseDownStacks } from './facilityDamage';
+import { applyDefenseUp, getFacilityDefenseDownStacks, getLayersBeforeLastHit, isClubPresident } from './facilityDamage';
+import type { TrackHit } from './facilityDamage';
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
 
@@ -714,6 +715,29 @@ function SpecialGagColumn({ mode, onSelectGag, cogs, activePreset, cogDamages, g
   );
 }
 
+const DAMAGE_BONUS_KINDS = [
+  { id: 'same', label: 'Same-gag', color: '#fde047' },
+  { id: 'defense', label: 'Defense Down', color: '#ea580c' },
+  { id: 'knockback', label: 'Knockback', color: '#fb923c' },
+  { id: 'bull', label: 'Bull Market', color: '#fbbf24' },
+] as const;
+
+function getDamageBonusKind(label: string) {
+  if (label.startsWith('Same-gag')) return DAMAGE_BONUS_KINDS[0];
+  if (label.startsWith('Knockback')) return DAMAGE_BONUS_KINDS[2];
+  if (label.startsWith('Bull Market')) return DAMAGE_BONUS_KINDS[3];
+  return DAMAGE_BONUS_KINDS[1];
+}
+
+type DamageLogEntry = { source: string; label: string; amount: number; isBonus: boolean };
+
+function addDamageLog(log: DamageLogEntry[], entry: DamageLogEntry) {
+  if (entry.amount <= 0) return;
+  const existing = log.find(e => e.source === entry.source && e.label === entry.label);
+  if (existing) existing.amount += entry.amount;
+  else log.push({ ...entry });
+}
+
 const FACILITY_PRESETS = [
   { name: "Scrap Factory", bossId: 'factory_scrap', cogs: [{ id: 'factory_scrap', isV2: false }, { id: '5', isV2: false }, { id: '5', isV2: false }, { id: '6', isV2: false }] },
   { name: "Steel Factory", bossId: 'factory_steel', cogs: [{ id: 'factory_steel', isV2: false }, { id: '11', isV2: false }, { id: '11', isV2: false }, { id: '12', isV2: false }] },
@@ -781,6 +805,7 @@ function CogCalculatorContent() {
   const [roundAccuracyTooltip, setRoundAccuracyTooltip] = useState<{ result: ReturnType<typeof calculateRoundAccuracy>; round: number; anchor: { left: number; top: number; bottom: number }; root: Element | DocumentFragment } | null>(null);
   const [roundAccuracyTooltipPosition, setRoundAccuracyTooltipPosition] = useState<{ left: number; top: number } | null>(null);
   const roundAccuracyTooltipRef = useRef<HTMLDivElement>(null);
+  const [roundDamageTooltip, setRoundDamageTooltip] = useState<{ round: number; left: number; top: number; placement: 'above' | 'below'; maxHeight: number } | null>(null);
 
   useLayoutEffect(() => {
     const tooltip = roundAccuracyTooltipRef.current;
@@ -898,6 +923,7 @@ function CogCalculatorContent() {
       const cogDamagesThisRound = Array(currentCogCount).fill(0);
       const trackDamages: Record<string, number> = {};
       const trapDamageOnCog = currentCogs.map(c => c.trapDamage || 0);
+      const damageLog = currentCogs.map(() => [] as DamageLogEntry[]);
 
       const getRemainingHp = (idx: number) => {
         const state = cogStates[idx];
@@ -979,6 +1005,9 @@ function CogCalculatorContent() {
           totalEffectiveDamage: 0,
         });
         cumulativeDamages.push(0);
+        // Keep this round's per-cog arrays the same length as currentCogs.
+        cogDamagesThisRound.push(0);
+        damageLog.push([]);
         clerk.pendingOfficeSupportLevel = undefined;
         clerk.immunitySupportCount = countAliveOfficeSupports(clerkIdx);
       };
@@ -1025,6 +1054,11 @@ function CogCalculatorContent() {
         ? activeMintAuditor.id === 'mint_bullion' ? 0.5 : 0.25
         : 0;
       const isBullMarketActive = bullMarketMultiplier > 0;
+      const getDefenseBonusLabel = (multiplier: number) => {
+        const percent = Math.round(multiplier * 100);
+        if (!isBullMarketActive) return `Defense Down (${percent}%)`;
+        return multiplier > bullMarketMultiplier ? `Defense Down + Bull Market (${percent}%)` : `Bull Market (${percent}%)`;
+      };
 
       const getDefenseDownStacks = (cog: Cog) => {
         // Earlier tracks can defeat Cogs and buff later tracks in this round.
@@ -1069,10 +1103,13 @@ function CogCalculatorContent() {
         const luredAtStartOfPhase = currentCogs.map(c => c.isLured);
         const trappedAtStartOfPhase = currentCogs.map(c => c.isTrapped);
         const phaseDamage = Array(currentCogCount).fill(0);
+        const phaseLog = currentCogs.map(() => [] as DamageLogEntry[]);
         const instaKillThisPhase = Array(currentCogCount).fill(false);
+        const trackHits: TrackHit[] = [];
 
         gagsInTrack.forEach(gag => {
           if (!gag) return;
+          const slot = selectedGags.indexOf(gag);
           let baseDmg = getGagDamage(gag);
           const isPinkSlip = gag.trackId === 'special' && gag.gagIndex === 0;
           const sosData = gag.variant === 'sos' ? (SOS_GAGS[gag.trackId] || []).find(s => s.gagIndex === gag.gagIndex) : null;
@@ -1108,6 +1145,7 @@ function CogCalculatorContent() {
 
             if (isInstaKill && !isTenured && !isImmune) {
               instaKillThisPhase[cogIdx] = true;
+              trackHits.push({ slot, gagIndex: gag.gagIndex, cogIdx, damage: 0, instaKill: true });
               return;
             }
 
@@ -1117,6 +1155,9 @@ function CogCalculatorContent() {
             // Negative facility modifiers apply before knockback and same-gag bonus.
             if (!['trap', 'lure', 'special'].includes(trackId) && !isPinkSlip) {
               trackBaseDamages[cogIdx] += currentDmg;
+              // Drop misses lured cogs, so it can't defeat them.
+              const landed = !(trackId === 'drop' && luredAtStartOfPhase[cogIdx]);
+              trackHits.push({ slot, gagIndex: gag.gagIndex, cogIdx, damage: landed ? currentDmg : 0 });
             }
 
             if (isImmune && !['trap', 'lure'].includes(trackId)) {
@@ -1143,6 +1184,7 @@ function CogCalculatorContent() {
             } else if (trackId === 'lure') {
               if (trappedAtStartOfPhase[cogIdx]) {
                 let trapDmg = trapDamageOnCog[cogIdx];
+                addDamageLog(phaseLog[cogIdx], { source: 'trap', label: 'base', amount: trapDmg, isBonus: false });
                 let trapOrangeMultiplier = 0;
                 if (defenseDownStacks > 0) {
                   trapOrangeMultiplier += DEFENSE_DOWN_MULTIPLIERS[defenseDownStacks] ?? (defenseDownStacks * 0.2);
@@ -1151,7 +1193,9 @@ function CogCalculatorContent() {
                   trapOrangeMultiplier += bullMarketMultiplier;
                 }
                 if (trapOrangeMultiplier > 0) {
-                  trapDmg += Math.ceil(trapDmg * trapOrangeMultiplier);
+                  const trapBonus = Math.ceil(trapDmg * trapOrangeMultiplier);
+                  addDamageLog(phaseLog[cogIdx], { source: 'trap', label: getDefenseBonusLabel(trapOrangeMultiplier), amount: trapBonus, isBonus: true });
+                  trapDmg += trapBonus;
                 }
                 phaseDamage[cogIdx] += trapDmg;
                 trackDamages['trap'] = (trackDamages['trap'] || 0) + trapDmg;
@@ -1176,17 +1220,20 @@ function CogCalculatorContent() {
               }
             } else if (trackId === 'sound') {
               phaseDamage[cogIdx] += currentDmg;
+              addDamageLog(phaseLog[cogIdx], { source: trackId, label: 'base', amount: currentDmg, isBonus: false });
               trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               cog.isLured = false;
               cog.lureDuration = 0;
             } else if (trackId === 'throw' || trackId === 'squirt') {
               phaseDamage[cogIdx] += currentDmg;
+              addDamageLog(phaseLog[cogIdx], { source: trackId, label: 'base', amount: currentDmg, isBonus: false });
               trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               cog.isLured = false;
               cog.lureDuration = 0;
             } else if (trackId === 'drop') {
               if (!luredAtStartOfPhase[cogIdx]) {
                 phaseDamage[cogIdx] += currentDmg;
+                addDamageLog(phaseLog[cogIdx], { source: trackId, label: 'base', amount: currentDmg, isBonus: false });
                 trackDamages[trackId] = (trackDamages[trackId] || 0) + currentDmg;
               }
             }
@@ -1195,34 +1242,65 @@ function CogCalculatorContent() {
 
         // Positive Defense Down is added to orange damage. For Throw/Squirt on a
         // lured cog, it combines with the 50% knockback multiplier.
-        if (!['trap', 'lure'].includes(trackId)) {
-          trackBaseDamages.forEach((totalBase, idx) => {
-            if (totalBase <= 0) return;
+        const applyOrangeBonus = (idx: number) => {
+          const totalBase = trackBaseDamages[idx];
+          if (totalBase <= 0) return;
+          if (trackId === 'drop' && luredAtStartOfPhase[idx]) return;
+
+          const knockbackMultiplier =
+            (trackId === 'throw' || trackId === 'squirt') && luredAtStartOfPhase[idx] ? 0.5 : 0;
+          const orangeBonus = Math.ceil(totalBase * (defenseDownMultipliers[idx] + knockbackMultiplier));
+          if (orangeBonus > 0) {
+            const knockbackBonus = knockbackMultiplier > 0 ? Math.min(orangeBonus, Math.ceil(totalBase * knockbackMultiplier)) : 0;
+            addDamageLog(phaseLog[idx], { source: trackId, label: 'Knockback (50%)', amount: knockbackBonus, isBonus: true });
+            addDamageLog(phaseLog[idx], { source: trackId, label: getDefenseBonusLabel(defenseDownMultipliers[idx]), amount: orangeBonus - knockbackBonus, isBonus: true });
+            phaseDamage[idx] += orangeBonus;
+            trackDamages[trackId] = (trackDamages[trackId] || 0) + orangeBonus;
+          }
+        };
+
+        const applyComboBonus = (idx: number) => {
+          const totalBase = trackBaseDamages[idx];
+          if (hitCounts[idx] >= 2) {
+            // If drop hits a lured cog, it does 0 damage including bonus
             if (trackId === 'drop' && luredAtStartOfPhase[idx]) return;
 
-            const knockbackMultiplier =
-              (trackId === 'throw' || trackId === 'squirt') && luredAtStartOfPhase[idx] ? 0.5 : 0;
-            const orangeBonus = Math.ceil(totalBase * (defenseDownMultipliers[idx] + knockbackMultiplier));
-            if (orangeBonus > 0) {
-              phaseDamage[idx] += orangeBonus;
-              trackDamages[trackId] = (trackDamages[trackId] || 0) + orangeBonus;
-            }
-          });
-        }
+            // Same-gag bonus is 20% of the track's base damage, rounded up.
+            // Positive Defense Down is not applied to this bonus.
+            const baseBonus = Math.ceil(totalBase * 0.2);
 
-        // Apply Combo Bonuses separately based on intervals of 5
+            addDamageLog(phaseLog[idx], { source: trackId, label: 'Same-gag bonus (20%)', amount: baseBonus, isBonus: true });
+            phaseDamage[idx] += baseBonus;
+            trackDamages[trackId] = (trackDamages[trackId] || 0) + baseBonus;
+          }
+        };
+
         if (!['trap', 'lure'].includes(trackId)) {
-          trackBaseDamages.forEach((totalBase, idx) => {
-            if (hitCounts[idx] >= 2) {
-              // If drop hits a lured cog, it does 0 damage including bonus
-              if (trackId === 'drop' && luredAtStartOfPhase[idx]) return;
-
-              const baseBonus = Math.ceil(totalBase * 0.2);
-
-              phaseDamage[idx] += baseBonus;
-              trackDamages[trackId] = (trackDamages[trackId] || 0) + baseBonus;
-            }
+          // A Club President's Defense Down counts cogs defeated by the earlier
+          // gags of this track, read just before its last gag lands. E.g. 4
+          // organic Foghorns: the first 3 (165) kill all supports, so 3 stacks.
+          const presidentIdxs = currentCogIndexes.filter(idx => isClubPresident(currentCogs[idx].id));
+          currentCogIndexes.forEach(idx => {
+            if (presidentIdxs.includes(idx)) return;
+            applyOrangeBonus(idx);
+            applyComboBonus(idx);
           });
+
+          if (presidentIdxs.length > 0) {
+            const killStates = cogStates.map((state, idx) => ({
+              layer: state.layer,
+              remainingHpOnLayer: state.maxHp - state.damageOnCurrentLayer,
+              isImmune: !!currentCogs[idx].isImmunity,
+            }));
+            presidentIdxs.forEach(idx => {
+              const projectedLayers = getLayersBeforeLastHit(trackHits, idx, killStates);
+              const stacks = getFacilityDefenseDownStacks(currentCogs[idx].id, projectedLayers, !!currentCogs[idx].isDefenseDown);
+              const statusMultiplier = stacks > 0 ? DEFENSE_DOWN_MULTIPLIERS[stacks] ?? (stacks * 0.2) : 0;
+              defenseDownMultipliers[idx] = statusMultiplier + bullMarketMultiplier;
+              applyOrangeBonus(idx);
+              applyComboBonus(idx);
+            });
+          }
         }
 
         const resolveDamage = (dmg: number, idx: number) => {
@@ -1258,6 +1336,7 @@ function CogCalculatorContent() {
             const hpLeftForKill = (cog.isV2 ? state.maxHp * 2 : state.maxHp) - (cumulativeDamages[idx] + cogDamagesThisRound[idx]);
             state.totalEffectiveDamage += hpLeftForKill;
             cogDamagesThisRound[idx] += hpLeftForKill;
+            addDamageLog(damageLog[idx], { source: 'instakill', label: 'Insta-kill', amount: hpLeftForKill, isBonus: false });
             state.layer = 0;
             state.damageOnCurrentLayer = 0;
             currentCogs[idx].isLured = false;
@@ -1272,6 +1351,7 @@ function CogCalculatorContent() {
           }
 
           if (dmg === 0) return;
+          if (!currentCogs[idx].isImmunity) phaseLog[idx].forEach(entry => addDamageLog(damageLog[idx], entry));
           resolveDamage(dmg, idx);
         });
 
@@ -1300,6 +1380,7 @@ function CogCalculatorContent() {
             const applyDmg = (d: number, idx: number) => {
               const s = cogStates[idx];
               if (currentCogs[idx].isImmunity) return;
+              addDamageLog(damageLog[idx], { source: 'remote', label: 'Remote', amount: d, isBonus: false });
               const rHp = s.maxHp - s.damageOnCurrentLayer;
               if (d >= rHp) {
                 s.totalEffectiveDamage += rHp;
@@ -1327,6 +1408,7 @@ function CogCalculatorContent() {
           const applyDmg = (d: number, idx: number) => {
             const s = cogStates[idx];
             if (currentCogs[idx].isImmunity) return;
+            addDamageLog(damageLog[idx], { source: 'remote', label: 'Remote', amount: d, isBonus: false });
             const rHp = s.maxHp - s.damageOnCurrentLayer;
             if (d >= rHp) {
               s.totalEffectiveDamage += rHp;
@@ -1378,6 +1460,8 @@ function CogCalculatorContent() {
           remote: c.remote ? { ...c.remote } : undefined
         })),
         cogDamages: [...cumulativeDamages],
+        roundCogDamages: [...cogDamagesThisRound],
+        roundDamageLog: damageLog,
         trackDamages,
         isBullMarketActive,
         bullMarketMultiplier
@@ -1409,6 +1493,129 @@ function CogCalculatorContent() {
     setRoundAccuracyTooltip({ result: roundAccuracyResults[index], round: index + 1,
       anchor: { left: bounds.left + bounds.width / 2, top: bounds.top, bottom: bounds.bottom }, root });
   };
+
+  const roundRowHoverProps = (roundIndex: number) => ({
+    onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {
+      if (mobileAccuracy || !selectedGagsByRound[roundIndex].some(Boolean)) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const cogCount = roundResults[roundIndex]?.finalCogs.length ?? 4;
+      // 8rem columns + 0.75rem gaps + 1.5rem padding.
+      const tooltipWidth = cogCount * 128 + (cogCount - 1) * 12 + 26;
+      const margin = 8;
+      const center = bounds.left + bounds.width / 2;
+      const left = Math.min(window.innerWidth - margin - tooltipWidth / 2, Math.max(margin + tooltipWidth / 2, center));
+      const spaceBelow = window.innerHeight - bounds.bottom - 10 - margin;
+      const spaceAbove = bounds.top - 10 - margin;
+      const placement: 'above' | 'below' = spaceBelow >= 260 || spaceBelow >= spaceAbove ? 'below' : 'above';
+      setRoundDamageTooltip({
+        round: roundIndex,
+        left,
+        top: placement === 'below' ? bounds.bottom + 10 : bounds.top - 10,
+        placement,
+        maxHeight: placement === 'below' ? spaceBelow : spaceAbove,
+      });
+    },
+    onMouseLeave: () => setRoundDamageTooltip(null),
+  });
+
+  const roundDamageTooltipJsx = roundDamageTooltip && !roundAccuracyTooltip && !mobileAccuracy ? (() => {
+    const roundIndex = roundDamageTooltip.round;
+    const result = roundResults[roundIndex];
+    const startCogs = roundIndex === 0 ? cogs : roundResults[roundIndex - 1].finalCogs;
+    const roundDamages = result.roundCogDamages;
+    const isAbove = roundDamageTooltip.placement === 'above';
+    const usedBonusIds = new Set(result.roundDamageLog.flat().filter(e => e.isBonus).map(e => getDamageBonusKind(e.label).id));
+    const legendKinds = DAMAGE_BONUS_KINDS.filter(kind => usedBonusIds.has(kind.id));
+    return createPortal(
+      <div role="tooltip" className={`gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/10 bg-[#0c3622] px-3 py-2 text-left shadow-xl ${isAbove ? '-translate-y-full' : ''}`}
+        style={{ left: roundDamageTooltip.left, top: roundDamageTooltip.top, maxHeight: roundDamageTooltip.maxHeight }}>
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <span className="text-sm font-black text-white">Round {roundIndex + 1} Damage</span>
+          {legendKinds.length > 0 && (
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5">
+              <span className="flex items-center gap-1 text-[10px] font-bold text-white/65">
+                <span className="h-2 w-2 rounded-full bg-white/65" aria-hidden="true" />
+                Base
+              </span>
+              {legendKinds.map(kind => (
+                <span key={kind.id} className="flex items-center gap-1 text-[10px] font-bold text-white/65">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: kind.color }} aria-hidden="true" />
+                  {kind.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="grid gap-x-3" style={{ gridTemplateColumns: `repeat(${result.finalCogs.length}, 8rem)` }}>
+          {result.finalCogs.map((cog, idx) => {
+            const choice = COG_CHOICES.find(c => c.id === cog.id);
+            const name = choice?.label ?? `Cog ${idx + 1}`;
+            const cogImage = choice?.type === 'normal' ? getSkelecogImage(activePreset) : choice?.img;
+            const wasDead = !!(startCogs[idx] as { isDead?: boolean } | undefined)?.isDead;
+            const maxHp = cog.simMaxHp ?? getCogMaxHp(cog, result.finalCogs);
+            const remainingTotal = cog.simRemainingHp ?? 0;
+            const outerHp = cog.isV2 ? Math.max(0, remainingTotal - maxHp) : 0;
+            const innerHp = Math.min(maxHp, remainingTotal);
+            const showOuter = cog.isV2 && outerHp > 0;
+            const hpPercent = ((showOuter ? outerHp : innerHp) / maxHp) * 100;
+            // One line per gag track: base damage, then each bonus in its legend color.
+            const lines: { source: string; base: number; bonuses: DamageLogEntry[] }[] = [];
+            if (!wasDead) (result.roundDamageLog[idx] ?? []).forEach(entry => {
+              let line = lines.find(l => l.source === entry.source);
+              if (!line) { line = { source: entry.source, base: 0, bonuses: [] }; lines.push(line); }
+              if (entry.isBonus) line.bonuses.push(entry);
+              else line.base += entry.amount;
+            });
+            return (
+              <div key={idx} className="flex min-w-0 flex-col text-[11px] font-black text-white">
+                <div className={`relative aspect-square w-full overflow-hidden rounded-lg border border-white/10 bg-black/40 ${cog.isDead ? 'grayscale opacity-40' : ''}`}>
+                  {cog.isDead && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
+                      <span className="text-xs font-black uppercase tracking-tighter text-red-500 [text-shadow:_0_1px_4px_rgb(0_0_0_/_100%)]">Defeated</span>
+                    </div>
+                  )}
+                  {cogImage && <img src={cogImage as string} alt={name} className="absolute inset-0 h-full w-full object-cover" style={cog.isOfficeSpawnedSupport ? { filter: 'sepia(1) saturate(5.5) hue-rotate(-45deg) brightness(0.92)' } : undefined} />}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                  {cog.isV2 && <div className="absolute right-0 top-0 rounded-bl bg-fuchsia-600/90 px-1 py-0.5 text-[7px] font-black uppercase tracking-widest text-white shadow">v2.0</div>}
+                  <span className="absolute inset-x-0 bottom-0 block bg-black/70 px-1 py-1 text-center text-[11px] font-black leading-tight text-white">
+                    {choice?.type === 'normal' ? `Level ${choice.id}` : name}
+                  </span>
+                </div>
+                <div className="flex h-5 items-center justify-center text-sm font-black tabular-nums text-red-500">{wasDead ? '' : `-${roundDamages[idx] ?? 0}`}</div>
+                <div className="relative mb-1 h-4 w-full overflow-hidden rounded bg-white/5">
+                  <div className={`absolute inset-y-0 left-0 ${showOuter ? 'bg-fuchsia-500' : getHealthColor(hpPercent)}`} style={{ width: `${hpPercent}%` }} />
+                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+                    {showOuter ? outerHp : innerHp} / {maxHp}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-col gap-1 leading-tight">
+                  {lines.map(line => {
+                    const isSos = line.source === 'remote' || line.source === 'instakill';
+                    const track = gagTracks.find(t => t.id === line.source);
+                    const name = line.source === 'remote' ? 'Remote' : line.source === 'instakill' ? 'Insta-kill' : track?.name ?? line.source;
+                    return (
+                      <div key={line.source}>
+                        <div className="flex items-baseline justify-between gap-2 text-sm font-black" style={{ color: isSos ? REMOTE_FIRE_COLOR : track?.color ?? '#c4b5fd' }}>
+                          <span>{name}</span>
+                          <span className="tabular-nums">{line.base + line.bonuses.reduce((sum, bonus) => sum + bonus.amount, 0)}</span>
+                        </div>
+                        {line.bonuses.length > 0 && (
+                          <div className="flex flex-wrap justify-end gap-x-1 pl-2 text-[9px] font-bold tabular-nums">
+                            <span className="text-white/65">{line.base}</span>
+                            {[...line.bonuses].sort((a, b) => DAMAGE_BONUS_KINDS.indexOf(getDamageBonusKind(a.label)) - DAMAGE_BONUS_KINDS.indexOf(getDamageBonusKind(b.label))).map(bonus => <span key={bonus.label} style={{ color: getDamageBonusKind(bonus.label).color }}>+{bonus.amount}</span>)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!wasDead && lines.length === 0 && <div className="text-[10px] font-bold text-white/40">No damage</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>, root);
+  })() : null;
 
   const roundAccuracyContent = roundAccuracyTooltip ? <>
           {roundAccuracyTooltip.result.perCog.map((cog) => (
@@ -1473,6 +1680,7 @@ function CogCalculatorContent() {
           {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(rIdx => (
             <div
               key={rIdx}
+              {...roundRowHoverProps(rIdx)}
               onClick={() => {
                 setActiveRound(rIdx);
                 setActiveGagSlot(0);
@@ -1671,7 +1879,7 @@ function CogCalculatorContent() {
                         }
                         return (
                           <>
-                            <img src={choice.img as string} alt={choice.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" style={spawnedSupportStyle} />
+                            <img src={choice.img as string} alt={choice.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" style={spawnedSupportStyle} />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
                             <div className="absolute bottom-0 inset-x-0 pointer-events-none">
                               <span className="block bg-black/70 px-2 py-1.5 text-center text-sm font-black text-white leading-tight">{choice.label}</span>
@@ -1930,10 +2138,11 @@ function CogCalculatorContent() {
           </div>
         </div>
       </div>
-      {roundAccuracyTooltip && <AccuracyDetails title={`Round ${roundAccuracyTooltip.round} accuracy`} onClose={() => setRoundAccuracyTooltip(null)}
+      {roundDamageTooltipJsx}
+      {roundAccuracyTooltip && <AccuracyDetails title={`Round ${roundAccuracyTooltip.round} Accuracy`} onClose={() => setRoundAccuracyTooltip(null)}
         desktop={createPortal(
           <div ref={roundAccuracyTooltipRef} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] max-h-[calc(100vh-1rem)] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltipPosition?.left ?? roundAccuracyTooltip.anchor.left, top: roundAccuracyTooltipPosition?.top ?? roundAccuracyTooltip.anchor.bottom + 12, visibility: roundAccuracyTooltipPosition ? 'visible' : 'hidden' }}>
-            <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} accuracy</div>
+            <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} Accuracy</div>
             {roundAccuracyContent}
           </div>, root)}>
         {roundAccuracyContent}
