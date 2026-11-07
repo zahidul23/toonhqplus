@@ -26,10 +26,10 @@ const FEATURE_COLUMNS: { title: string; items: string[] }[][] = [
 
 export function AboutTabContent() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6 text-white pb-10">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
+    <div className="mx-auto max-w-6xl space-y-6 text-white pb-10 lg:h-full lg:pb-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] lg:grid-rows-[minmax(0,1fr)] lg:h-full gap-6">
         {/* Main Info Card */}
-        <div className="rounded-2xl border border-white/10 bg-black/30 shadow-xl overflow-hidden flex flex-col max-h-[calc(95vh-8rem)]">
+        <div className="rounded-2xl border border-white/10 bg-black/30 shadow-xl overflow-hidden flex flex-col max-h-[calc(95vh-8rem)] lg:max-h-none lg:min-h-0">
           <div className="p-8 overflow-y-auto custom-scrollbar flex flex-col flex-1">
             <div className="mb-8 flex flex-col items-center gap-4 text-center">
               <div>
@@ -144,7 +144,7 @@ export function AboutTabContent() {
         </div>
 
         {/* Changelog Card */}
-        <div className="rounded-2xl border border-white/10 bg-black/30 shadow-xl overflow-hidden flex flex-col max-h-[calc(95vh-8rem)]">
+        <div className="rounded-2xl border border-white/10 bg-black/30 shadow-xl overflow-hidden flex flex-col max-h-[calc(95vh-8rem)] lg:max-h-none lg:min-h-0">
           <div className="bg-white/5 px-6 py-4 border-b border-white/10">
             <h5 className="text-sm font-black uppercase tracking-widest text-emerald-400">Changelog</h5>
           </div>

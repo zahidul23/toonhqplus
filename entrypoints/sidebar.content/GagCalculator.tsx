@@ -736,13 +736,13 @@ function CogCarousel({
                   Oil −{oilDamage}
                 </span>}
               </div>
-              <div className="text-base font-black leading-tight text-white sm:text-3xl">Level {level}</div>
-              <div className="text-sm font-black tabular-nums text-white sm:text-2xl">{hp} HP</div>
-              <div className={`text-[10px] font-black tabular-nums sm:text-sm ${defeated ? 'text-red-300' : 'text-amber-300'}`}>
+              <div className="text-base font-black leading-tight text-white sm:text-[1.875em]">Level {level}</div>
+              <div className="text-sm font-black tabular-nums text-white sm:text-[1.5em]">{hp} HP</div>
+              <div className={`text-[10px] font-black tabular-nums sm:text-[0.875em] ${defeated ? 'text-red-300' : 'text-amber-300'}`}>
                 {defeated ? `+${difference} Over` : `-${difference} Short`}
               </div>
               <div
-                className="whitespace-nowrap rounded px-1 text-[10px] font-black tabular-nums text-sky-300 underline decoration-dotted decoration-sky-300/60 underline-offset-2 sm:text-sm"
+                className="whitespace-nowrap rounded px-1 text-[10px] font-black tabular-nums text-sky-300 underline decoration-dotted decoration-sky-300/60 underline-offset-2 sm:text-[0.875em]"
                 onMouseEnter={(event) => {
                   if (mobileAccuracy) return;
                   const bounds = event.currentTarget.getBoundingClientRect();
@@ -1104,7 +1104,7 @@ export function GagCalculator() {
       <div className="gag-calculator-columns flex h-full items-start gap-4">
       <aside className="gag-combos-sidebar min-h-0 w-[380px] min-w-[280px] shrink self-stretch"><GagCombosPanel /></aside>
       {/* The calculator keeps its gag picker width; the reference column (380px, down to 280px) gives up space first. */}
-      <section className="min-w-min flex-1 rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
+      <section className="min-w-min flex-1 self-stretch flex items-center justify-center rounded-xl border border-white/5 bg-[#082416] p-3 shadow-inner">
         <GagCalculatorContent />
       </section>
       </div>

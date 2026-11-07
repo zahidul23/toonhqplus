@@ -612,7 +612,7 @@ function GagTrackRow({ track, mode, onSelectGag, cogs, activePreset, cogDamages,
 
   return (
     <div
-      className={fillWidth ? 'gag-track-fill gap-0.5' : 'gag-track-row flex gap-0.5 sm:gap-1 h-12 items-center'}
+      className={fillWidth ? 'gag-track-fill gap-0.5' : 'gag-track-row flex gap-0.5 sm:gap-1 h-16 items-center'}
       style={fillWidth ? { gridTemplateColumns: `repeat(${items.length}, 1fr)` } : undefined}
     >
       {!fillWidth && !hideDivider && mode === 'sos' && items.length > 0 && <div className="hidden sm:block w-px h-8 bg-white/10 mx-1" />}
@@ -1846,7 +1846,7 @@ function CogCalculatorContent() {
           const spawnedSupportStyle = cog.isOfficeSpawnedSupport ? { filter: 'sepia(1) saturate(5.5) hue-rotate(-45deg) brightness(0.92)' } : undefined;
 
               return (
-                <div key={idx} className="flex flex-col gap-2">
+                <div key={idx} className="flex flex-col gap-1">
                   <div className="relative group">
                     <button
                       onClick={(e) => { e.stopPropagation(); setActiveCogSlot(activeCogSlot === idx ? null : idx); }}
@@ -1982,7 +1982,7 @@ function CogCalculatorContent() {
                       </div>
                     )}
                   </div>
-                  <div className="bg-black/20 border border-white/5 rounded-lg p-2 flex flex-col gap-2">
+                  <div className="bg-black/20 border border-white/5 rounded-lg p-1.5 flex flex-col gap-1.5">
                     <div className="h-8 w-full bg-white/5 rounded-md overflow-hidden relative">
                       <div
                         className={`absolute top-0 left-0 bottom-0 transition-all duration-500 ${cog.isV2 && outerHp > 0 ? 'bg-fuchsia-500' : getHealthColor(pInner)}`}
@@ -1998,8 +1998,8 @@ function CogCalculatorContent() {
                       </div>
                     </div>
                     {/* Status Indicators Area */}
-                    <div className="flex flex-col gap-1.5 items-center justify-center py-1 text-center">
-                      <div className="flex flex-wrap gap-2 min-h-8 items-center justify-center px-1">
+                    <div className="flex flex-col items-center justify-center text-center">
+                      <div className="flex flex-wrap gap-2 min-h-6 items-center justify-center px-1">
                         {STATUS_EFFECTS.map(effect => {
                           const isSupervisor = COG_CHOICES.find(c => c.id === finalCog.id)?.type === 'boss';
                           const hasMintSupervisorAny = cogs.some(c => c.id === 'mint_coin' || c.id === 'mint_bullion');
@@ -2117,13 +2117,13 @@ function CogCalculatorContent() {
                 {gagTracks.map(track => track.id === 'throw' ? (
                   <div key={track.id} className="flex gap-1">
                     <div aria-hidden="true" className="flex flex-col gap-1">
-                      {[0, 1].map(row => <div key={row} className="facility-reward-row flex h-12 items-center"><div className="w-px h-8 bg-white/10 mx-1" /></div>)}
+                      {[0, 1].map(row => <div key={row} className="facility-reward-row flex h-16 items-center"><div className="w-px h-8 bg-white/10 mx-1" /></div>)}
                     </div>
                     <div className="-mx-[4px] flex w-fit flex-col gap-1 rounded-lg px-[4px] ring-1 ring-inset ring-white/20" style={{ backgroundColor: REWARD_CONTAINER_COLOR }}>
-                    <div className="facility-reward-row relative flex h-12 items-center">
+                    <div className="facility-reward-row relative flex h-16 items-center">
                       <GagTrackRow track={{ id: 'toonsHit', name: 'Toons Hit', color: TOONS_HIT_COLOR, gags: [] }} mode="sos" hideDivider={true} onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                     </div>
-                    <div className="facility-reward-row relative flex h-12 items-center gap-1">
+                    <div className="facility-reward-row relative flex h-16 items-center gap-1">
                     <SpecialGagColumn mode="remotes" horizontal={true} onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                     <SpecialGagColumn mode="slips" horizontal={true} onSelectGag={handleSelectGag} cogs={selectionCogs} activePreset={activePreset} cogDamages={selectionDamages} getHealthColor={getHealthColor} activePopup={activePopup} setActivePopup={setActivePopup} currentRoundGags={selectedGagsByRound[activeRound]} />
                     </div>

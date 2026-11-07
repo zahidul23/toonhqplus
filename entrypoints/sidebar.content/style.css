@@ -195,19 +195,22 @@
 }
 [data-calculator-layout] { container-type: inline-size; }
 .gag-calculator-page { font-family: 'Nunito', sans-serif; }
-.boiler-calc-container .gag-btn-base { width: 48px; height: 42px; }
-.boiler-calc-container .gag-btn-base img { width: 28px; height: 38px; }
-.boiler-rounds { container-type: inline-size; }
-@container (max-width: 720px) {
-  .boiler-phase-group { flex-direction: column; }
-}
+/* ToonCalc's text size. The carousel cards are sized in em, so at 16px their
+   level titles wrap and the cards grow taller. */
+.gag-calculator { font-size: 14px; }
+.boiler-calc-container .round-slot-btn { width: 64px; height: 48px; }
+/* The gag picker gives up width first so Fired Up and Defense stay side by side. */
+.boiler-calc-container > section:first-child { flex: 0 1 auto; min-width: 0; }
+.boiler-calc-container > .boiler-rounds { flex: 1 0 auto; }
+.boiler-calc-container .gag-btn-base { max-width: 100%; border-width: 0; }
+.boiler-calc-container .gag-btn-base img { max-width: 100%; object-fit: contain; }
 @media (max-width: 1000px) {
-  .boiler-calc-container { grid-template-columns: minmax(0, 1fr); }
+  .boiler-calc-container { flex-direction: column; }
 }
 
-@media (min-width: 768px) and (max-width: 1600px),
-       (min-width: 768px) and (max-height: 900px) {
-  [data-book-calculator] .w-48 { width: 160px; }
+/* ToonCalc's compact sizes. The book panel is never wider than 1440px, so
+   they always apply here, not only on small screens like on the website. */
+@media (min-width: 768px) {
   [data-calculator-layout] .gag-btn-base,
   [data-calculator-layout] .facility-selected-gag { width: 56px; height: 42px; }
   [data-calculator-layout] .gag-btn-base img { width: 28px; height: 38px; }
@@ -219,13 +222,21 @@
   [data-calculator-layout] .gag-cog-card img { width: 80px; height: 80px; }
   [data-calculator-layout] .facility-rounds { padding: 10px; min-height: 480px; }
   [data-calculator-layout] .facility-cogs { padding: 10px; gap: 10px; }
+  [data-calculator-layout] .facility-cogs > .grid > div > .relative > button { height: clamp(140px, 20dvh, 180px); }
   [data-calculator-layout] .facility-picker,
   [data-calculator-layout] .gag-picker-container { padding: 8px; }
   [data-calculator-layout] .gag-track-row,
   [data-calculator-layout] .facility-reward-row { height: 48px; }
-  .boiler-calc-container .gag-btn-base { width: 44px; height: 40px; }
+  /* The Facilities and Gag Calculator pickers have room for full-size gags. */
+  .facility-picker .gag-btn-base,
+  .gag-calculator .gag-btn-base { width: 64px; height: 48px; }
+  .facility-picker .gag-btn-base img,
+  .gag-calculator .gag-btn-base img { width: 32px; height: 44px; }
+  .facility-picker .gag-track-row,
+  .facility-picker .facility-reward-row { height: 56px; }
+  .boiler-calc-container .round-slot-btn { width: 56px; height: 42px; }
   .boiler-rounds-header { margin-block: 8px; }
-  .boiler-summary-health { max-width: 260px; }
+  .boiler-summary-health { max-width: 380px; }
 }
 
 @container (max-width: 1020px) {

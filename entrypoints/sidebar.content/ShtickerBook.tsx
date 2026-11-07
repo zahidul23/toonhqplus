@@ -426,7 +426,7 @@ const MultiLayerBoilerHealthBar = memo(({ remaining, max, stars }: { remaining: 
       : clampNumber(safeRemaining / (redMax || 1), 0, 1);
 
   return (
-    <div className="relative h-[50px] w-[300px] overflow-hidden rounded-md bg-black/40 border border-white/10">
+    <div className="relative h-full w-full overflow-hidden rounded-md bg-black/40 border border-white/10">
       <div className="absolute inset-y-0 left-0 bg-red-500 transition-all duration-500 ease-in-out" style={{ width: `${redWidth * 100}%` }} />
       <div className="absolute inset-y-0 left-0 bg-orange-500 transition-all duration-500 ease-in-out" style={{ width: `${orangeWidth * 100}%` }} />
       <div className="absolute inset-y-0 left-0 bg-yellow-400 transition-all duration-500 ease-in-out" style={{ width: `${yellowWidth * 100}%` }} />
@@ -518,12 +518,20 @@ type GagButtonProps = {
 };
 
 const GagButton = memo(({ imageSrc, imageAlt, color, title, damage, stars, disabled = false, onClick, overlayBottomRight, overlayBottom, overlayTopLeft }: GagButtonProps) => (
-  <SharedGagButton imageSrc={imageSrc} imageAlt={imageAlt} color={color} title={title}
-    tooltipContent={{ name: imageAlt, damage, accuracy: stars ? 100 : undefined }}
-    stars={stars} disabled={disabled} onClick={onClick}
-    overlayTopRight={<MinusDamageBubble value={damage} />}
-    overlayBottom={<>{overlayBottomRight}{overlayBottom}{overlayTopLeft}</>}
-  />
+  <div className="boiler-gag relative min-w-0">
+    <SharedGagButton imageSrc={imageSrc} imageAlt={imageAlt} color={color} title={title}
+      tooltipContent={{ name: imageAlt, damage, accuracy: stars ? 100 : undefined }}
+      stars={stars} disabled={disabled} onClick={onClick}
+      overlayTopRight={<MinusDamageBubble value={damage} />}
+      overlayBottom={overlayBottom || overlayTopLeft ? <>{overlayBottom}{overlayTopLeft}</> : undefined}
+    />
+    {/* Outside the button so the .gag-btn-base img sizing doesn't stretch the badge. */}
+    {overlayBottomRight && (
+      <div className="pointer-events-none absolute -top-1.5 -right-1.5 z-10 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+        {overlayBottomRight}
+      </div>
+    )}
+  </div>
 ));
 
 // ─── Boiler Calculator subcomponents ──────────────────────────────────────────
@@ -561,10 +569,10 @@ function SosSoundPicker({
 }) {
   return (
     <div className="flex gap-1">
-      <div className='gag-btn-base border-transparent'></div>
-      <div className='gag-btn-base border-transparent'></div>
-      <div className='gag-btn-base border-transparent'></div>
-      <div className='gag-btn-base border-transparent'></div>
+      <div className='gag-btn-base invisible' aria-hidden="true"></div>
+      <div className='gag-btn-base invisible' aria-hidden="true"></div>
+      <div className='gag-btn-base invisible' aria-hidden="true"></div>
+      <div className='gag-btn-base invisible' aria-hidden="true"></div>
       {SOS_SOUND_GAGS.map((sos) => {
         const gag = track.gags[sos.gagIndex];
         const roundType = roundStats[activeCell.round]?.roundType;
@@ -604,7 +612,7 @@ function GagTrackPicker({
 }) {
   return (
     //border border-white/10 bg-black/20 rounded-lg
-    <div className="flex flex-col gap-2 p-2">
+    <div className="flex flex-col gap-1 px-1">
       {/* <div className="mb-1 flex items-center justify-between">
         <div className="text-xs font-black uppercase tracking-widest text-white/80">{track.name}</div>
       </div> */}
@@ -707,8 +715,8 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
   ];
 
   return (
-    <div className="mb-4 rounded-xl bg-black/40 p-3">
-      <div className="mb-4 flex items-center justify-between mx-2">
+    <div className="mb-2 rounded-xl bg-black/40 p-2.5">
+      <div className="mb-2 flex items-center justify-between mx-1">
         <h4 className="text-base font-bold text-white">Boiler - {starsText}</h4>
         <StarSelector stars={stars} onSetStars={onSetStars} />
       </div>
@@ -717,10 +725,10 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
         <table className="w-full text-left text-[12px]">
           <thead>
             <tr className="border-b border-white/10 bg-white/5 font-black uppercase tracking-wider text-white/40">
-              <th className="px-2 py-1.5">Attack</th>
-              <th className="px-2 py-1.5 text-center">Base</th>
-              <th className="px-2 py-1.5 text-center text-orange-400/80">Fired Up</th>
-              <th className="px-2 py-1.5 text-center text-red-400">+ Burn</th>
+              <th className="px-2 py-1">Attack</th>
+              <th className="px-2 py-1 text-center">Base</th>
+              <th className="px-2 py-1 text-center text-orange-400/80">Fired Up</th>
+              <th className="px-2 py-1 text-center text-red-400">+ Burn</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -731,10 +739,10 @@ function BoilerInfoSection({ stars, onSetStars, maxHp }: { stars: number; onSetS
               const showFired = attack.firedUpMultiplier !== 1;
               return (
                 <tr key={attack.name} className="hover:bg-white/5 transition-colors">
-                  <td className="px-2 py-1.5 font-semibold text-white/80">{attack.name}</td>
-                  <td className="px-2 py-1.5 text-center font-black text-white/60 tabular-nums">{showBase ? attack.base : ' - '}</td>
-                  <td className="px-2 py-1.5 text-center font-black text-orange-300 tabular-nums">{showFired ? fired : ' - '}</td>
-                  <td className="px-2 py-1.5 text-center font-black text-red-400 tabular-nums">
+                  <td className="px-2 py-1 font-semibold text-white/80">{attack.name}</td>
+                  <td className="px-2 py-1 text-center font-black text-white/60 tabular-nums">{showBase ? attack.base : ' - '}</td>
+                  <td className="px-2 py-1 text-center font-black text-orange-300 tabular-nums">{showFired ? fired : ' - '}</td>
+                  <td className="px-2 py-1 text-center font-black text-red-400 tabular-nums">
                     <span className='text-[9px]'>(+{burnDmg}) = </span> {firedBurn}
                   </td>
                 </tr>
@@ -775,14 +783,14 @@ function GagPickerPanel({
     <section className="rounded-xl flex flex-col min-h-0 h-full overflow-hidden">
       <BoilerInfoSection stars={stars} onSetStars={onSetStars} maxHp={maxHp} />
 
-      <div className="min-h-0 rounded-xl flex flex-col p-2 overflow-hidden bg-black/40" >
-        <div className="flex items-center justify-between gap-2 p-2 mx-2">
+      <div className="min-h-0 rounded-xl flex flex-col p-1.5 overflow-hidden bg-black/40" >
+        <div className="flex items-center justify-between gap-2 px-1.5 py-1">
           <div className="text-base font-bold text-white">Gags</div>
           <div className="text-base font-bold text-white tabular-nums">
             Round {activeCell.round + 1} - Gag {activeCell.slot + 1}
           </div>
         </div>
-        <div className="overflow-y-auto custom-scrollbar p-2 space-y-3  rounded-lg ">
+        <div className="overflow-y-auto custom-scrollbar p-1.5 space-y-3 rounded-lg">
           {gagTracks.map((track) => (
             <GagTrackPicker
               key={track.id}
@@ -887,7 +895,7 @@ const RoundSlotButton = memo(({
         </div>
       )}
       {cell?.variant === 'organic' && (
-        <div className="absolute -bottom-1 -right-1 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+        <div className="absolute -top-2 -right-2 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
           <img src="https://toonhq.org/static/assets/gags/ttr/organic.webp" alt="Organic" draggable="false" className="h-5 w-5 object-contain" />
         </div>
       )}
@@ -933,7 +941,7 @@ function RoundRow({
         } ${isActiveRound ? 'ring-2 ring-emerald-500/60' : ''}`}
       ref={rowRef}
     >
-      <div className="flex items-center gap-2 p-2">
+      <div className="flex items-center gap-[5px] p-[5px]">
         {/* Round number + icon */}
         <div className="w-7 shrink-0 flex flex-col items-center justify-center gap-1">
           <div className="text-xs font-black text-white tabular-nums">{roundIndex + 1}</div>
@@ -943,22 +951,24 @@ function RoundRow({
         {/* Gag slots */}
         <div className="flex gap-1">
           {round.map((cell, slotIndex) => (
-            <RoundSlotButton
-              key={slotIndex}
-              cell={cell}
-              slotIndex={slotIndex}
-              roundIndex={roundIndex}
-              gagTracks={gagTracks}
-              activeCell={activeCell}
-              getCellDamage={getCellDamage}
-              onSetActiveCell={onSetActiveCell}
-              onClearSlot={onClearSlot}
-            />
+            // Earlier slots sit above later ones so top-right badges aren't covered.
+            <div key={slotIndex} className="relative" style={{ zIndex: round.length - slotIndex }}>
+              <RoundSlotButton
+                cell={cell}
+                slotIndex={slotIndex}
+                roundIndex={roundIndex}
+                gagTracks={gagTracks}
+                activeCell={activeCell}
+                getCellDamage={getCellDamage}
+                onSetActiveCell={onSetActiveCell}
+                onClearSlot={onClearSlot}
+              />
+            </div>
           ))}
         </div>
 
         {/* Remaining HP after this round */}
-        <div className="ml-auto shrink-0 text-right">
+        <div className="ml-auto shrink-0 text-right w-[4em]">
           <div className="text-sm font-black tabular-nums text-red-300"> {rowDamage != 0 && `-${rowDamage}`}</div>
         </div>
       </div>
@@ -1027,7 +1037,7 @@ function RoundPhaseGroup({
 }) {
   if (group.kind === 'neutral') {
     return (
-      <div className="flex flex-col gap-1 m-1 min-w-0">
+      <div className="flex flex-col gap-1 m-1 w-[380px] max-w-full">
         {group.rounds.map((roundIndex) => (
           <RoundRow
             key={roundIndex}
@@ -1132,7 +1142,7 @@ function RoundsPanel({
     <section className="boiler-rounds rounded-xl bg-black/40 p-2 flex flex-col min-w-0 h-full relative">
       {/* Header: health bar */}
       <div className="boiler-rounds-header my-4 flex items-center justify-center h-[50px] relative">
-        <div className="boiler-summary-health relative w-[300px]">
+        <div className="boiler-summary-health relative h-[50px] w-[380px] max-w-full">
           <MultiLayerBoilerHealthBar remaining={remainingHp} max={maxHp} stars={stars} />
           <div className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
             {remainingHp} / {maxHp}
@@ -1395,7 +1405,7 @@ function BoilerCalculator() {
   }, [lastAddedRound]);
 
   return (
-    <div data-calculator-layout className="boiler-calc-container grid grid-cols-[minmax(380px,38fr)_minmax(0,62fr)] gap-3 h-full">
+    <div data-calculator-layout className="boiler-calc-container flex gap-3 h-full">
       <GagPickerPanel
         stars={stars}
         onSetStars={handleSetStars}
