@@ -53,9 +53,10 @@ export function isToonInListedGroup(groups: Iterable<any>, toonId: string): bool
   return false;
 }
 
+// ToonHQ sends null for fields it doesn't know, such as the location of a Toon on an estate.
 export function validBoardingStatus(value: any): boolean {
   return value === null || record(value) && ['district', 'location', 'type', 'num_players'].every(key =>
-    value[key] === undefined || Number.isFinite(value[key])) && (value.options === undefined || record(value.options));
+    value[key] == null || Number.isFinite(value[key])) && (value.options == null || record(value.options));
 }
 
 /** Local DOM transport only; deliberately has no fetch/WebSocket fallback. */
@@ -126,8 +127,11 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
       const request = pending.get(message.id);
       if (!request) return;
       if (typeof message.error === 'string') { clearTimeout(request.timer); pending.delete(message.id); request.reject(new Error(message.error.slice(0, 300))); }
-      else if (message.context === request.context && message.context === state.context && validBoardingStatus(message.result)) {
-        clearTimeout(request.timer); pending.delete(message.id); request.resolve(message.result);
+      else if (message.context === request.context && message.context === state.context) {
+        clearTimeout(request.timer); pending.delete(message.id);
+        // Fail with a clear error instead of waiting out the timeout.
+        if (validBoardingStatus(message.result)) request.resolve(message.result);
+        else request.reject(new Error('ToonHQ sent a boarding status Quick Create couldn’t read.'));
       }
     }
   };
@@ -137,6 +141,8 @@ export function createNativeBridgeClient(target: Window, clientId = crypto.rando
     get disposed() { return disposed; },
     get groups() { return Array.from(groups.values()); },
     requestSnapshot() { send({ type: 'snapshot' }); },
+    /** Asks the page to open ToonHQ's own window for this group. */
+    openGroup(groupId: number) { send({ type: 'open-group', groupId }); },
     subscribe(listener: (update: NativeUpdate) => void) {
       updates.add(listener);
       listener({ state, full: true, groups: Array.from(groups.values()), archived: [] });

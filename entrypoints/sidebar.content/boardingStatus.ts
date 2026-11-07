@@ -1,11 +1,11 @@
 import { getNativeBridge } from './nativeBridge.ts';
 
 export type BoardingGroupStatus = null | {
-  district?: number;
-  location?: number;
-  type?: number;
-  options?: Record<string, number>;
-  num_players?: number;
+  district?: number | null;
+  location?: number | null;
+  type?: number | null;
+  options?: Record<string, number> | null;
+  num_players?: number | null;
   [key: string]: unknown;
 };
 

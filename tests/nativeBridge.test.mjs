@@ -388,3 +388,33 @@ test('isToonInListedGroup only counts current members of active groups', () => {
   assert.equal(isToonInListedGroup(groups, '303'), false);
   assert.equal(isToonInListedGroup([], '101'), false);
 });
+
+test('open-group waits for the new group to reach the page, then opens its window', async t => {
+  const h = harness(); t.after(() => h.close()); await h.flush();
+  const opened = [];
+  h.root.$children = [{ resumeGroup: id => opened.push(id) }];
+  h.client.openGroup(77);
+  h.runTimers(500);
+  assert.deepEqual(opened, []);
+  h.store.state.groups.groups[77] = { id: 77, game: 1, members: [] };
+  h.runTimers(500);
+  assert.deepEqual(opened, [77]);
+  h.runTimers(5000);
+  assert.deepEqual(opened, [77]);
+});
+
+test('a boarding check ToonHQ never answers does not block the next check', async t => {
+  const h = harness(); t.after(() => h.close()); await h.flush();
+  const first = assert.rejects(h.client.requestBoarding(1), /in time/);
+  await h.flush(); h.runTimers(10000); await h.flush(); await first;
+  const second = h.client.requestBoarding(1); await h.flush();
+  h.emit('boarding_response', { nonce: 2, success: true, result: { district: 21 } });
+  assert.equal((await second).district, 21);
+});
+
+test('a boarding status with a null location (Toon on an estate) is accepted', async t => {
+  const h = harness(); t.after(() => h.close()); await h.flush();
+  const request = h.client.requestBoarding(1); await h.flush();
+  h.emit('boarding_response', { nonce: 1, success: true, result: { location: null, district: 29 } });
+  assert.deepEqual(await request, { location: null, district: 29 });
+});

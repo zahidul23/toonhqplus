@@ -10,6 +10,11 @@ export const changelog: ChangelogEntry[] = [
     date: 'Nov 6, 2026',
     changes: [
       'Fix Pink Slip and Lawyer tooltips being hidden with District Indicators',
+      'List on HQ now lists your in-game boarding group, with everyone in it, when you are in one',
+      'Open the group window after listing a group on HQ',
+      'Quick Create buttons now show the lobby name in department colors',
+      'Fix location checks timing out when your Toon is on an estate',
+      'Show when your Toon is in a ToonHQ group in the Quick Create status',
       'Fix Recent Groups showing every Toon as toons that left',
       'Hover a round in the Facilities Calculator to see its damage on each Cog, with bonuses broken down',
       "Fix the Club President's Defense Down logic",

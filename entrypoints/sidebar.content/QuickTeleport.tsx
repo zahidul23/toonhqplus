@@ -203,8 +203,10 @@ function HoverTooltip({ id, children, placement = 'center' }: { id: string; chil
 }
 
 // Like HoverTooltip, but tied to one of the two action buttons.
-function ActionHint({ id, children, placement }: { id: string; children: React.ReactNode; placement: 'left' | 'right' }) {
-  const visibility = placement === 'left'
+function ActionHint({ id, children, action }: { id: string; children: React.ReactNode; action: 'teleport' | 'list' }) {
+  // Tailwind needs the full class names written out. Each hint is pinned to its outer
+  // edge so it stays inside the sidebar, which clips anything past its border.
+  const visibility = action === 'teleport'
     ? 'group-hover/teleport:visible group-hover/teleport:opacity-100 group-focus-within/teleport:visible group-focus-within/teleport:opacity-100 left-0'
     : 'group-hover/list:visible group-hover/list:opacity-100 group-focus-within/list:visible group-focus-within/list:opacity-100 right-0';
   return (
@@ -212,6 +214,39 @@ function ActionHint({ id, children, placement }: { id: string; children: React.R
       {children}
     </div>
   );
+}
+
+// Half-width action button; the department colors are set inline. 11px text with px-2 leaves
+// ~113px, enough for the longest labels ("Teleport to Fairway", "List Fairway on HQ").
+const ACTION_BUTTON_CLASS = 'w-full truncate whitespace-nowrap rounded-lg border px-2 py-2 text-[11px] font-black text-white shadow transition-all [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] enabled:cursor-pointer enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40';
+
+type GroupFields = { type: number; district: number; location: number; options: Record<string, number>; max_players: number | null; num_players: number };
+
+// The lobby matching an in-game boarding group: same type and every option equal.
+function findDestinationForBoarding(type: unknown, options: Record<string, number>): Destination | undefined {
+  return DESTINATIONS.find(destination => destination.type === type &&
+    Object.entries(destination.options).every(([key, value]) => options[key] === value));
+}
+
+// ToonHQ group fields copied from the Toon's in-game boarding group, or null if they can't be read.
+function getInGameGroup(status: Exclude<BoardingGroupStatus, null>): { fields: GroupFields; name: string; destination?: Destination } | null {
+  const options: Record<string, number> = {};
+  for (const [key, value] of Object.entries(status.options || {})) {
+    const number = Number(value); // The game may send option values as strings.
+    if (!Number.isSafeInteger(number) || number <= 0) return null;
+    options[key] = number;
+  }
+  const destination = findDestinationForBoarding(status.type, options);
+  const location = status.location ?? destination?.location;
+  if (!status.type || !status.district || !location) return null;
+  const maxPlayers = destination?.maxPlayers ?? null;
+  const players = Number.isSafeInteger(status.num_players) && status.num_players! > 0 ? status.num_players! : 1;
+  return {
+    destination,
+    name: destination ? getDestinationFullName(destination) : 'in-game',
+    fields: { type: status.type, district: status.district, location, options, max_players: maxPlayers,
+      num_players: maxPlayers ? Math.min(players, maxPlayers) : players },
+  };
 }
 
 function getCsrfToken(): string {
@@ -241,9 +276,9 @@ function describeBoardingStatus(result: BoardingGroupStatus, districts: District
   const district = districts.find(item => item.id === result.district)?.name || `district ${result.district}`;
   const rawLocation = locations.find(item => item.id === result.location)?.name;
   const location = rawLocation ? formatLocationName(rawLocation) : undefined;
-  if (result.type) return `Online in ${district}${location ? ` at ${location}` : ''}.\nAlready in a boarding group.`;
-  if (result.location) return `Online in ${district} at ${location || `location ${result.location}`}.\nNot in a boarding group.`;
-  return `Online in ${district}.\nPrecise location unavailable.\nNot in a boarding group.`;
+  if (result.type) return `Online in ${district}${location ? ` at ${location}` : ''}.\nAlready in an in-game boarding group.`;
+  if (result.location) return `Online in ${district} at ${location || `location ${result.location}`}.\nNot in an in-game boarding group.`;
+  return `Online in ${district}.\nPrecise location unavailable.\nNot in an in-game boarding group.`;
 }
 
 export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictIndicators?: boolean }) {
@@ -491,9 +526,14 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
         : hasActiveBoardingGroup
           ? 'Your Toon is already in a boarding group.'
           : !selectedDestinationEligible ? disguiseRequirement : undefined);
+  // List on HQ lists the in-game group when there is one, so name and color the button after it.
+  const inGameGroup = boardingStatus?.type ? getInGameGroup(boardingStatus) : null;
+  const listDestination = inGameGroup ? inGameGroup.destination ?? selectedDestination : selectedDestination;
+  const listLabel = inGameGroup ? inGameGroup.destination?.label ?? 'group' : selectedDestination.label;
+  // An in-game group is listed as-is, so the picked lobby's disguise doesn't apply.
   const listDisabledReason = sharedDisabledReason ?? (!districtId || districts.length === 0
     ? 'Select a destination district.'
-    : !selectedDestinationEligible ? disguiseRequirement : undefined);
+    : !hasActiveBoardingGroup && !selectedDestinationEligible ? disguiseRequirement : undefined);
   const refreshDisabled = !nativeState.connected || !toonId || busy || checkingStatus || refreshCooldown > 0;
   const refreshTooltip = !nativeState.connected
     ? nativeState.reason || 'Connecting to ToonHQ Groups…'
@@ -537,14 +577,6 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     const requestContext = nativeState.context;
     if (!isCurrentToonContext(requestContext) || !toonId || !districtId || busy || inListedGroup) return;
     if (delist && (checkingStatus || boardingStatus === undefined || toonIsOffline || hasActiveBoardingGroup)) return;
-    const destination = DESTINATIONS[destinationIndex];
-    const destinationFullName = getDestinationFullName(destination);
-    const suitLevel = getToonSuitLevel(selectedToon?.[destination.suitKey]);
-    if (suitLevel < 13) {
-      const department = destination.suitKey[0].toUpperCase() + destination.suitKey.slice(1);
-      setStatus(`${selectedToon?.name || 'This Toon'} needs a level 13 ${department} disguise for ${destinationFullName}.`);
-      return;
-    }
     const csrfToken = getCsrfToken();
     if (!csrfToken) {
       setStatus('Could not read ToonHQ\'s CSRF token. Refresh the page and try again.');
@@ -553,24 +585,51 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
 
     setBusy(true);
     setListing(!delist);
-    setStatus(delist ? `Creating a temporary group for ${destinationFullName}…` : `Listing a ${destinationFullName} group on ToonHQ…`);
     try {
+      const destination = DESTINATIONS[destinationIndex];
+      let destinationFullName = getDestinationFullName(destination);
+      let fields: GroupFields = { type: destination.type, district: Number(districtId), location: destination.location,
+        options: destination.options, max_players: destination.maxPlayers, num_players: 1 };
+      let inGame = false;
+
+      // List on HQ lists the Toon's in-game boarding group when it has one, instead of the
+      // picked lobby. Check fresh: the saved status can predate Toons who joined in-game.
+      if (!delist) {
+        setStatus('Checking your in-game group…');
+        let current: BoardingGroupStatus;
+        try {
+          current = await getBoardingGroupStatus(Number(toonId), true);
+        } catch (error) {
+          if (isCurrentToonContext(requestContext)) setStatus(`Couldn’t check your in-game group: ${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+        if (!isCurrentToonContext(requestContext)) return;
+        setBoardingStatus(current);
+        if (current?.type) {
+          const group = getInGameGroup(current);
+          if (!group) {
+            setStatus('Couldn’t read your in-game group’s details. Use Refresh and try again.');
+            return;
+          }
+          fields = group.fields;
+          destinationFullName = group.name;
+          inGame = true;
+        }
+      }
+
+      if (!inGame && getToonSuitLevel(selectedToon?.[destination.suitKey]) < 13) {
+        const department = destination.suitKey[0].toUpperCase() + destination.suitKey.slice(1);
+        setStatus(`${selectedToon?.name || 'This Toon'} needs a level 13 ${department} disguise for ${destinationFullName}.`);
+        return;
+      }
+
+      setStatus(delist ? `Creating a temporary group for ${destinationFullName}…`
+        : inGame ? `Listing your in-game ${destinationFullName} group on ToonHQ…` : `Listing a ${destinationFullName} group on ToonHQ…`);
       const createResponse = await pageFetch(new URL('/api/groups/create/', window.location.origin).href, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json;charset=UTF-8', 'X-CSRFToken': csrfToken },
-        body: JSON.stringify({
-          toon: Number(toonId),
-          type: destination.type,
-          district: Number(districtId),
-          location: destination.location,
-          options: destination.options,
-          max_players: destination.maxPlayers,
-          num_players: 1,
-          note: null,
-          id: null,
-          game: 1,
-        }),
+        body: JSON.stringify({ toon: Number(toonId), ...fields, note: null, id: null, game: 1 }),
       });
       if (!createResponse.ok) throw new Error(await readError(createResponse));
       const group = await createResponse.json();
@@ -587,10 +646,10 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       }
 
       if (!isCurrentToonContext(requestContext)) return;
-      // A listing doesn't depend on the Toon's in-game location, so there's no boarding check.
       if (!delist) {
         setInListedGroup(true);
         setStatus(`Your ${destinationFullName} group is now listed on ToonHQ.`);
+        getNativeBridge().openGroup(createdGroupId);
         return;
       }
       setStatus('Teleport requested. Checking the in-game boarding group in 10 seconds…');
@@ -729,24 +788,28 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       </div>
 
       <div className="flex w-full gap-1.5">
-        <div className="group/teleport relative flex-1" tabIndex={teleportDisabledReason ? 0 : -1}>
-          <button type="button" aria-describedby="quick-teleport-teleport-hint" disabled={!!teleportDisabledReason} onClick={() => teleport(true)} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-            {checkingStatus ? 'Checking…' : busy && !listing ? 'Teleporting…' : 'Teleport'}
+        <div className="group/teleport relative min-w-0 flex-1" tabIndex={teleportDisabledReason ? 0 : -1}>
+          <button type="button" aria-describedby="quick-teleport-teleport-hint" disabled={!!teleportDisabledReason} onClick={() => teleport(true)} className={ACTION_BUTTON_CLASS} style={{ backgroundColor: selectedDestination.cardBg, borderColor: selectedDestination.cardBorder }}>
+            {checkingStatus ? 'Checking…' : busy && !listing ? 'Teleporting…' : `Teleport to ${selectedDestination.label}`}
           </button>
-          <ActionHint id="quick-teleport-teleport-hint" placement="left">{teleportDisabledReason ?? `Teleports you to ${selectedDestinationFullName} without listing the group. Invite friends in-game.`}</ActionHint>
+          <ActionHint id="quick-teleport-teleport-hint" action="teleport">{teleportDisabledReason ?? `Teleports you to ${selectedDestinationFullName} without listing the group. Invite friends in-game.`}</ActionHint>
         </div>
-        <div className="group/list relative flex-1" tabIndex={listDisabledReason ? 0 : -1}>
-          <button type="button" aria-describedby="quick-teleport-list-hint" disabled={!!listDisabledReason} onClick={() => teleport(false)} className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-emerald-950 shadow transition-all enabled:cursor-pointer enabled:hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">
-            {busy && listing ? 'Listing…' : 'List on HQ'}
+        <div className="group/list relative min-w-0 flex-1" tabIndex={listDisabledReason ? 0 : -1}>
+          <button type="button" aria-describedby="quick-teleport-list-hint" disabled={!!listDisabledReason} onClick={() => teleport(false)} className={ACTION_BUTTON_CLASS} style={{ backgroundColor: listDestination.cardBg, borderColor: listDestination.cardBorder }}>
+            {busy && listing ? 'Listing…' : `List ${listLabel} on HQ`}
           </button>
-          <ActionHint id="quick-teleport-list-hint" placement="right">{listDisabledReason ?? `Posts a ${selectedDestinationFullName} group on ToonHQ so others can join.`}</ActionHint>
+          <ActionHint id="quick-teleport-list-hint" action="list">{listDisabledReason ?? (hasActiveBoardingGroup
+            ? 'Lists your in-game boarding group on ToonHQ so others can join.'
+            : `Posts a ${selectedDestinationFullName} group on ToonHQ so others can join.`)}</ActionHint>
         </div>
       </div>
 
-      {status && (
+      {(status || inListedGroup) && (
         <div className="flex items-center gap-2 px-1">
           <div role="status" className="min-w-0 flex-1 text-[10px] leading-snug text-green-100/75">
-            {status.split('\n').map((line, index) => <div key={`${index}:${line}`}><NativeStatusText text={line} /></div>)}
+            {/* The location check only covers the game; this comes from ToonHQ's live group list. */}
+            {inListedGroup && <div className="text-amber-200/90">In a group on ToonHQ.</div>}
+            {status.split('\n').filter(Boolean).map((line, index) => <div key={`${index}:${line}`}><NativeStatusText text={line} /></div>)}
           </div>
           <div className="group relative shrink-0" tabIndex={refreshDisabled ? 0 : -1}>
             <button

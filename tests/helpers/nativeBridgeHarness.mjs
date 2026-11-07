@@ -121,6 +121,7 @@ export function harness({ mounted = true, groups = [group()], authenticated = tr
     },
     raw(message) { target.dispatchEvent(new CustomEvent('toonhqplus-native-request', { detail: JSON.stringify(message) })); },
     get disconnectedObservers() { return disconnectedObservers; },
+    get root() { return root; },
     close() { client.dispose(); target.__TOONHQ_PLUS_NATIVE_BRIDGE_DISCONNECT__?.(); },
   };
 }

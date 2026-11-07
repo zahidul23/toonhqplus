@@ -89,7 +89,7 @@ test('teleport completes normally when the connected Toon context is unchanged',
 });
 
 test('List on HQ creates the group without delisting or waiting on the Toon location', async t => {
-  const h = setup(t, { toonIsOffline: true, hasActiveBoardingGroup: true, checkingStatus: true });
+  const h = setup(t, { toonIsOffline: true, checkingStatus: true, getBoardingGroupStatus: async () => null });
   await h.teleport(false);
   assert.equal(h.requests.length, 1);
   assert.match(h.requests[0], /\/api\/groups\/create\/$/);
@@ -108,4 +108,61 @@ test('Teleport Only waits until the Toon location is known', async t => {
   const h = setup(t, { boardingStatus: undefined });
   await h.teleport(true);
   assert.equal(h.requests.length, 0);
+});
+
+// The real lobby list and in-game helpers, so these tests cover the matching too.
+const inGameHelpers = vm.runInNewContext(ts.transpileModule(`(() => {
+  ${source.slice(source.indexOf('function getDestinationFullName'), source.indexOf('function getExtensionImageUrl'))}
+  ${source.slice(source.indexOf('const DESTINATIONS'), source.indexOf('const TTR_DISTRICTS'))}
+  ${source.slice(source.indexOf('type GroupFields'), source.indexOf('function getCsrfToken'))}
+  return { getInGameGroup, getDestinationFullName, DESTINATIONS };
+})()`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+
+function listSetup(t, status, overrides = {}) {
+  const bodies = [];
+  const h = setup(t, {
+    ...inGameHelpers, hasActiveBoardingGroup: !!status?.type,
+    getBoardingGroupStatus: async () => status,
+    pageFetch: async (url, init) => { h.requests.push(url); if (init?.body) bodies.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ id: 42 }) }; },
+    ...overrides,
+  });
+  return { ...h, bodies };
+}
+
+test('List on HQ lists the in-game boarding group instead of the picked lobby', async t => {
+  // A Scrap Factory group with 2 Toons, where the saved status predates the second Toon.
+  const h = listSetup(t, { district: 30, location: 23, type: 2, options: { 3: '10', 4: '12' }, num_players: 2 });
+  await h.teleport(false);
+  assert.equal(h.requests.length, 1);
+  assert.deepEqual(h.bodies[0], { toon: 1, type: 2, district: 30, location: 23, options: { 3: 10, 4: 12 },
+    max_players: 4, num_players: 2, note: null, id: null, game: 1 });
+  assert.match(h.view.status, /Scrap Factory group is now listed/);
+  assert.equal(h.view.boarding.num_players, 2);
+});
+
+test('List on HQ lists the picked lobby when the Toon is not in an in-game group', async t => {
+  const h = listSetup(t, { district: 29, location: null });
+  await h.teleport(false);
+  assert.equal(h.bodies[0].type, 3);
+  assert.equal(h.bodies[0].district, 21);
+});
+
+test('List on HQ lists an in-game group without needing the picked lobby disguise', async t => {
+  const h = listSetup(t, { district: 30, location: 4, type: 9, options: {}, num_players: 5 }, { getToonSuitLevel: () => 0 });
+  await h.teleport(false);
+  assert.equal(h.bodies[0].type, 9);
+  assert.equal(h.bodies[0].num_players, 5);
+});
+
+test('List on HQ does not list when the in-game check fails or its details are unreadable', async t => {
+  const failed = setup(t, { getBoardingGroupStatus: async () => { throw new Error('ToonHQ did not answer the boarding check in time.'); } });
+  await failed.teleport(false);
+  assert.equal(failed.requests.length, 0);
+  assert.match(failed.view.status, /Couldn’t check your in-game group/);
+  assert.equal(failed.view.busy, false);
+
+  const unreadable = listSetup(t, { district: 30, location: 5, type: 4, options: { 7: 0 } });
+  await unreadable.teleport(false);
+  assert.equal(unreadable.requests.length, 0);
+  assert.match(unreadable.view.status, /details/);
 });

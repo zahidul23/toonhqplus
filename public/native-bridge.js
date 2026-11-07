@@ -249,8 +249,9 @@
         () => { if (inFlight.get(key) === promise) inFlight.delete(key); });
     }
     let timeout;
+    const shared = inFlight.get(key);
     try {
-      const result = await Promise.race([inFlight.get(key), new Promise((_, reject) => {
+      const result = await Promise.race([shared, new Promise((_, reject) => {
         timeout = setTimeout(() => reject(new Error('ToonHQ did not answer the boarding check in time.')), 10_000);
         requestTimers.add(timeout);
       })]);
@@ -258,8 +259,30 @@
       if (!publishedState || publishedState.context !== requestContext) throw new Error('ToonHQ connection or active Toon changed. Try again.');
       if (result !== null && (!result || typeof result !== 'object' || Array.isArray(result))) throw new Error('ToonHQ returned an invalid boarding status.');
       reply({ context: requestContext, result: result === null ? null : pick(result, ['district', 'location', 'type', 'options', 'num_players']) });
-    } catch (error) { reply({ error: String(error && error.message || error).slice(0, 300) }); }
+    } catch (error) {
+      // If ToonHQ never answers, its action never settles; drop it so the next check starts fresh.
+      if (inFlight.get(key) === shared) inFlight.delete(key);
+      reply({ error: String(error && error.message || error).slice(0, 300) });
+    }
     finally { clearTimeout(timeout); requestTimers.delete(timeout); }
+  }
+  // Opens a group's window the way the site's /groups/<id>/ links do. A group made
+  // by Quick Create reaches the page through the socket shortly after, so retry briefly.
+  function openGroup(groupId, attempt) {
+    if (disposed || !store || !root) return;
+    const groups = store.state.groups && store.state.groups.groups;
+    if (groups && groups[groupId]) {
+      const queue = [root];
+      for (let seen = 0; queue.length && seen < 3000; seen++) {
+        const vm = queue.shift();
+        if (vm && typeof vm.resumeGroup === 'function') { vm.resumeGroup(groupId); return; }
+        if (vm && Array.isArray(vm.$children)) vm.$children.forEach(child => queue.push(child));
+      }
+      return;
+    }
+    if (attempt >= 20) return;
+    const retry = setTimeout(function () { requestTimers.delete(retry); openGroup(groupId, attempt + 1); }, 500);
+    requestTimers.add(retry);
   }
   function receive(event) {
     if (disposed || typeof event.detail !== 'string' || event.detail.length > 2048) return;
@@ -272,6 +295,8 @@
     } else if (request.client === client && request.type === 'boarding' &&
         typeof request.id === 'string' && request.id.length <= 100 && validId(request.toonId)) {
       void boarding(request);
+    } else if (request.client === client && request.type === 'open-group' && validId(request.groupId)) {
+      try { openGroup(request.groupId, 0); } catch (error) { console.warn('[ToonHQ+] Could not open the group window.', error); }
     } else if (request.client === client && request.type === 'dispose') disconnect();
   }
   function disconnect() {
