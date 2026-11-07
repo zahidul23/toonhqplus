@@ -10,16 +10,12 @@ export const changelog: ChangelogEntry[] = [
     date: 'Nov 6, 2026',
     changes: [
       'Fix Pink Slip and Lawyer tooltips being hidden with District Indicators',
-      'List on HQ now lists your in-game boarding group, with everyone in it, when you are in one',
-      'Open the group window after listing a group on HQ',
-      'Quick Create buttons now show the lobby name in department colors',
-      'Fix location checks timing out when your Toon is on an estate',
-      'Show when your Toon is in a ToonHQ group in the Quick Create status',
-      'Bolder section headers and sidebar button, so they no longer look thin in Firefox',
       'Fix Recent Groups showing every Toon as toons that left',
-      'Hover a round in the Facilities Calculator to see its damage on each Cog, with bonuses broken down',
+      'Show per round damage breakdowns in Facilities Calculator',
       "Fix the Club President's Defense Down logic",
-      'Fix up styling on various pages in the Shticker Book'
+      'Fix up styling on various pages in the Shticker Book',
+      'Adjust some fonts weights in Firefox',
+      'Bug fixes and styling changes for Quick Create'
     ]
   },
   {
