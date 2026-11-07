@@ -121,7 +121,7 @@ function CogEvasion({ expBonus }: { expBonus: number }) {
       <Heading className="text-rose-300">Cog Evasion</Heading>
       <div ref={scrollRef} className="custom-scrollbar relative h-40 min-h-40 grow overflow-y-auto rounded-md border border-white/10" tabIndex={0} aria-label="Cog evasion by level">
         <table className={`${TABLE} table-fixed`}>
-          <thead className="sticky top-0 z-10 bg-[#13253b]"><tr className="text-[11px] text-white/60">
+          <thead className="sticky top-0 z-10 bg-[#0b2a1c]"><tr className="text-[11px] text-white/60">
             <th scope="col" className="w-[44%] border-r border-white/15 py-1.5 text-white">Cog</th>
             <th scope="col" className="py-1.5 text-rose-300">Evasion</th>
             <th scope="col" className="py-1.5 text-lime-300">+{expBonus} EXP</th>
@@ -364,7 +364,7 @@ function StunSection() {
         </div>
         <div ref={tableScrollRef} className="custom-scrollbar relative mt-1.5 mb-1 h-40 min-h-40 grow overflow-y-auto rounded-md border border-white/10" tabIndex={0} aria-label="Hit chance by Cog level">
           <table className={`${TABLE} table-fixed`}>
-            <thead className="sticky top-0 z-10 bg-[#13253b]"><tr className="text-[11px] text-white/60">
+            <thead className="sticky top-0 z-10 bg-[#0b2a1c]"><tr className="text-[11px] text-white/60">
               <th scope="col" className="border-r border-white/15 py-1.5 text-white">Lvl</th>
               {[0, 1, 2, 3].map(stuns => <th key={stuns} scope="col" className="py-1.5">{stuns === 0 ? 'No stun' : `${stuns} stun${stuns > 1 ? 's' : ''}`}</th>)}
             </tr></thead>

@@ -46,7 +46,7 @@ export function AccuracyDetails({ title, onClose, children, desktop }: {
   return createPortal(<div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/70 p-4"
     onClick={event => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}>
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId}
-      className="gag-calculator-tooltip flex max-h-[calc(100dvh-32px)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/15 bg-[#081827] shadow-2xl">
+      className="gag-calculator-tooltip flex max-h-[calc(100dvh-32px)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/15 bg-[#082718] shadow-2xl">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <h3 id={titleId} className="text-sm font-black text-white">{title}</h3>
         <button type="button" onClick={onClose} className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/80">Close</button>

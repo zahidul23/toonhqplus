@@ -54,7 +54,7 @@ function ComboRow({ combo, tooltipBelow = false }: { combo: GagCombo; tooltipBel
                   style={{ height: '1.5rem', width: '1.5rem' }}
                 />
               )}
-              <div className={`pointer-events-none absolute left-1/2 z-30 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#020712] px-2 py-1.5 text-center shadow-xl group-hover/combo-gag:block ${tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
+              <div className={`pointer-events-none absolute left-1/2 z-30 hidden w-max max-w-40 -translate-x-1/2 rounded-md border border-white/15 bg-[#02120a] px-2 py-1.5 text-center shadow-xl group-hover/combo-gag:block ${tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'}`}>
                 <div className="text-[10px] font-black leading-tight text-white">
                   {gag.organic ? 'Organic ' : ''}{data.name}
                 </div>
@@ -167,7 +167,7 @@ function CogHealthReference() {
           {defense === 0 ? 'Normal Defense' : `${defense}% Defense`}
           <svg aria-hidden="true" viewBox="0 0 16 16" className={`h-5 w-5 shrink-0 text-white/60 transition ${defenseMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2"><path d="m4 6 4 4 4-4" /></svg>
         </button>
-        {defenseMenuOpen && <div className="absolute left-0 right-0 top-full z-40 mt-1 rounded-lg border border-white/15 bg-[#102238] p-1 shadow-xl">
+        {defenseMenuOpen && <div className="absolute left-0 right-0 top-full z-40 mt-1 rounded-lg border border-white/15 bg-[#103825] p-1 shadow-xl">
           {options.map((option, index) => <button key={option.label} type="button" aria-pressed={defenseIndex === index}
             onClick={() => { setDefenseIndex(index); setDefenseMenuOpen(false); }}
             className={`w-full cursor-pointer rounded-md px-2 py-2 text-left text-sm font-bold transition ${defenseIndex === index ? 'bg-blue-500/25 text-white' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}>{option.label}</button>)}
@@ -243,7 +243,7 @@ export function GagCombosPanel() {
             {REFERENCE_TITLES[referenceView]}
             <svg aria-hidden="true" viewBox="0 0 16 16" className={`h-5 w-5 shrink-0 text-white/60 transition ${referenceMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2"><path d="m4 6 4 4 4-4" /></svg>
           </button>
-          {referenceMenuOpen && <div className="absolute left-0 right-0 top-full z-40 mt-1 rounded-lg border border-white/15 bg-[#102238] p-1 shadow-xl">
+          {referenceMenuOpen && <div className="absolute left-0 right-0 top-full z-40 mt-1 rounded-lg border border-white/15 bg-[#103825] p-1 shadow-xl">
             {REFERENCE_TITLES.map((title, index) => <button key={title} type="button" aria-pressed={referenceView === index}
               onClick={() => { setReferenceView(index); setReferenceMenuOpen(false); }}
               className={`w-full cursor-pointer rounded-md px-2 py-2 text-left text-sm font-bold transition ${referenceView === index ? 'bg-blue-500/25 text-white' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}>{title}</button>)}

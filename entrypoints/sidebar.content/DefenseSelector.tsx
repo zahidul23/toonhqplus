@@ -42,7 +42,7 @@ export function DefenseSelector({ defense, onChange }: {
       <img alt="" draggable="false" src={staticUrl('/images/statuses/Statuseffect_defenseup_Cog.webp')} className="h-5 w-5 object-contain" />
       Defense{defense > 0 && ` (${defense}%)`} <span aria-hidden="true">▾</span>
     </button>
-    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#020712] p-3 text-xs text-white shadow-xl">
+    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#02120a] p-3 text-xs text-white shadow-xl">
       <fieldset>
         <legend className="mb-2 font-bold">Defense</legend>
         {[

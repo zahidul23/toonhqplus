@@ -160,7 +160,7 @@ function AccuracyBreakdownTooltip({ breakdown, position, id, onClose }: {
       </div>
     </>;
   return <AccuracyDetails title="Accuracy breakdown" onClose={onClose} desktop={createPortal(
-    <div ref={tooltipRef} id={id} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max min-w-56 max-w-[calc(100vw-16px)] max-h-[calc(100dvh-16px)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: visiblePosition.left, top: visiblePosition.top }}>{content}</div>, root
+    <div ref={tooltipRef} id={id} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max min-w-56 max-w-[calc(100vw-16px)] max-h-[calc(100dvh-16px)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#02120a] px-3 py-2 text-left shadow-xl" style={{ left: visiblePosition.left, top: visiblePosition.top }}>{content}</div>, root
   )}>{content}</AccuracyDetails>;
 }
 
@@ -243,7 +243,7 @@ function StartingEffectToggle({ active, effect, onToggle }: {
       className={`h-5 w-5 object-contain ${active ? '' : 'opacity-60'}`} />
     {label}
     <span aria-hidden="true" className={`w-3 text-center ${active ? '' : 'opacity-0'}`}>✓</span>
-    <span id={tooltipId} role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-44 -translate-x-1/2 rounded-lg border border-white/15 bg-[#020712] px-3 py-2 text-center text-[11px] font-medium leading-relaxed text-white/80 shadow-xl group-hover:block group-focus-visible:block">
+    <span id={tooltipId} role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-44 -translate-x-1/2 rounded-lg border border-white/15 bg-[#02120a] px-3 py-2 text-center text-[11px] font-medium leading-relaxed text-white/80 shadow-xl group-hover:block group-focus-visible:block">
       {isLure ? 'Cog Starts Lured' : '+75% Gag Accuracy'}
     </span>
   </button>;
@@ -271,7 +271,7 @@ function MoreEffectsMenu({ children, activeCount }: { children: ReactNode; activ
       className={`flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-bold sm:hidden ${activeCount ? 'border-sky-400 bg-sky-800 text-white' : 'border-slate-600 bg-slate-800 text-slate-300'}`}>
       More{activeCount > 0 && ` (${activeCount})`} <span aria-hidden="true">▾</span>
     </button>
-    <div id={id} className={`mobile-more-effects absolute right-0 top-full z-50 mt-2 max-h-[55dvh] w-64 flex-col gap-2 overflow-y-auto rounded-xl border border-white/15 bg-[#020712] p-3 shadow-xl sm:static sm:mt-0 sm:flex sm:max-h-none sm:w-auto sm:flex-row sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none ${open ? 'flex' : 'hidden'}`}>
+    <div id={id} className={`mobile-more-effects absolute right-0 top-full z-50 mt-2 max-h-[55dvh] w-64 flex-col gap-2 overflow-y-auto rounded-xl border border-white/15 bg-[#02120a] p-3 shadow-xl sm:static sm:mt-0 sm:flex sm:max-h-none sm:w-auto sm:flex-row sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none ${open ? 'flex' : 'hidden'}`}>
       {children}
     </div>
   </div>;
@@ -316,7 +316,7 @@ function OilCanSelector({ oil, onChange }: { oil: CeoOilCans; onChange: (oil: Ce
       <img alt="" draggable="false" src={staticUrl('/images/ceo-oil-can.png')} className="h-5 w-5 -rotate-[32deg] object-contain" />
       Oil Can{oil.cans > 0 && ` (${selected.label})`} <span aria-hidden="true">▾</span>
     </button>
-    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#020712] p-3 text-xs text-white shadow-xl">
+    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#02120a] p-3 text-xs text-white shadow-xl">
       <fieldset>
         <legend className="mb-2 font-bold">CEO Banquet Oil Can Damage</legend>
         {CEO_OIL_HEALTH_OPTIONS.map(option => <div key={option.label}>
@@ -374,7 +374,7 @@ function RemoteSelector({ damageStars, selfDamageStars, onDamageChange, onSelfDa
       <img alt="" draggable="false" src={staticUrl('/images/remotes.webp')} className="h-5 w-5 object-contain" />
       Remote{count > 0 && ` (${count})`} <span aria-hidden="true">▾</span>
     </button>
-    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#020712] p-3 text-xs text-white shadow-xl">
+    {open && <div id={panelId} className="absolute right-0 top-full z-50 mt-2 w-60 rounded-xl border border-white/15 bg-[#02120a] p-3 text-xs text-white shadow-xl">
       <fieldset>
         <legend className="mb-2 font-bold">Damage (Other Cogs Remoted)</legend>
         {([1, 2, 3] as const).map(stars => {

@@ -1527,7 +1527,7 @@ function CogCalculatorContent() {
     const usedBonusIds = new Set(result.roundDamageLog.flat().filter(e => e.isBonus).map(e => getDamageBonusKind(e.label).id));
     const legendKinds = DAMAGE_BONUS_KINDS.filter(kind => usedBonusIds.has(kind.id));
     return createPortal(
-      <div role="tooltip" className={`gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/10 bg-[#0c3622] px-3 py-2 text-left shadow-xl ${isAbove ? '-translate-y-full' : ''}`}
+      <div role="tooltip" className={`gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#02120a] px-3 py-2 text-left shadow-xl ${isAbove ? '-translate-y-full' : ''}`}
         style={{ left: roundDamageTooltip.left, top: roundDamageTooltip.top, maxHeight: roundDamageTooltip.maxHeight }}>
         <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <span className="text-sm font-black text-white">Round {roundIndex + 1} Damage</span>
@@ -2141,7 +2141,7 @@ function CogCalculatorContent() {
       {roundDamageTooltipJsx}
       {roundAccuracyTooltip && <AccuracyDetails title={`Round ${roundAccuracyTooltip.round} Accuracy`} onClose={() => setRoundAccuracyTooltip(null)}
         desktop={createPortal(
-          <div ref={roundAccuracyTooltipRef} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] max-h-[calc(100vh-1rem)] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#020712] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltipPosition?.left ?? roundAccuracyTooltip.anchor.left, top: roundAccuracyTooltipPosition?.top ?? roundAccuracyTooltip.anchor.bottom + 12, visibility: roundAccuracyTooltipPosition ? 'visible' : 'hidden' }}>
+          <div ref={roundAccuracyTooltipRef} role="tooltip" className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] max-h-[calc(100vh-1rem)] w-max min-w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-white/15 bg-[#02120a] px-3 py-2 text-left shadow-xl" style={{ left: roundAccuracyTooltipPosition?.left ?? roundAccuracyTooltip.anchor.left, top: roundAccuracyTooltipPosition?.top ?? roundAccuracyTooltip.anchor.bottom + 12, visibility: roundAccuracyTooltipPosition ? 'visible' : 'hidden' }}>
             <div className="mb-1.5 text-xs font-black text-white">Round {roundAccuracyTooltip.round} Accuracy</div>
             {roundAccuracyContent}
           </div>, root)}>

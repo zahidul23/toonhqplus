@@ -17,7 +17,7 @@ export type GagTooltipPosition = { left: number; top: number; below: boolean };
 export function SosStars({ count, badge = false }: { count: number; badge?: boolean }) {
   return <span aria-label={`${count} stars`}
     className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-center text-[7px] leading-[9px] text-yellow-300 ${badge
-      ? '-top-px rounded-b-md bg-[#10192e]/90 px-1 pb-px'
+      ? '-top-px rounded-b-md bg-[#102e20]/90 px-1 pb-px'
       : '-top-px -translate-y-1/2 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]'}`}
   >{'★'.repeat(count)}</span>;
 }
@@ -37,7 +37,7 @@ export function GagTooltip({ id, content, position }: {
   const root = useCalculatorPortal();
   return createPortal(
     <div id={id} role="tooltip"
-      className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-48 max-w-[calc(100vw-1rem)] rounded-lg border border-white/15 bg-[#020712] px-3 py-2.5 text-center shadow-xl"
+      className="gag-calculator-tooltip pointer-events-none fixed z-[2147483647] w-48 max-w-[calc(100vw-1rem)] rounded-lg border border-white/15 bg-[#02120a] px-3 py-2.5 text-center shadow-xl"
       style={{ left: position.left, top: position.top, transform: `translate(-50%, ${position.below ? '0' : '-100%'})` }}>
       <div className="text-xs font-black leading-tight text-white">{content.name}</div>
       {content.damage != null && <div className="mt-1 text-[11px] font-bold text-lime-300">{content.damage} {content.damageLabel ?? 'damage'}</div>}
