@@ -2492,8 +2492,25 @@ export function SidebarApp() {
                       const otherActiveIds: ToonId[] = [];
                       const leftMemberIds: ToonId[] = [];
 
-                      toons.forEach((toon: { toonId: ToonId, left: boolean }) => {
-                        if (toon.left) {
+                      // When a group goes in or disbands, ToonHQ stamps every remaining
+                      // member with the closing time. Those Toons stayed until the end,
+                      // so only earlier leave times count as having left.
+                      const leftAt = (value: unknown) => {
+                        const time = typeof value === 'string' ? Date.parse(value) : NaN;
+                        return Number.isFinite(time) ? time : null;
+                      };
+                      const groupClosed = toons.length > 0 && toons.every((toon: { left: unknown }) => toon.left);
+                      const closeTimes = groupClosed ? toons.map((toon: { left: unknown }) => leftAt(toon.left)).filter((time: number | null): time is number => time !== null) : [];
+                      const closedAt = closeTimes.length ? Math.max(...closeTimes) : null;
+                      const leftBeforeClose = (left: unknown) => {
+                        if (!left) return false;
+                        if (!groupClosed) return true;
+                        const time = leftAt(left);
+                        return closedAt !== null && time !== null && closedAt - time > 5000;
+                      };
+
+                      toons.forEach((toon: { toonId: ToonId, left: unknown }) => {
+                        if (leftBeforeClose(toon.left)) {
                           leftMemberIds.push(toon.toonId);
                         } else if (activeToonIds.includes(toon.toonId)) {
                           activeMemberIds.push(toon.toonId);

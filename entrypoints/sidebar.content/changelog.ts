@@ -9,7 +9,8 @@ export const changelog: ChangelogEntry[] = [
     version: '1.3.4',
     date: 'Nov 6, 2026',
     changes: [
-      'Fix Pink Slip and Lawyer tooltips not showing when District Indicators are off'
+      'Fix Pink Slip and Lawyer tooltips not showing when District Indicators are off',
+      'Fix Recent Groups showing every Toon as left after the group goes in'
     ]
   },
   {
