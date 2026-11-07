@@ -9,14 +9,11 @@ export const changelog: ChangelogEntry[] = [
     version: '1.3.4',
     date: 'Nov 6, 2026',
     changes: [
-      'Fix Pink Slip and Lawyer tooltips not showing when District Indicators are off',
-      'Fix Recent Groups showing every Toon as left after the group goes in',
+      'Fix Pink Slip and Lawyer tooltips being hidden with District Indicators',
+      'Fix Recent Groups showing every Toon as toons that left',
       'Hover a round in the Facilities Calculator to see its damage on each Cog, with bonuses broken down',
-      "Fix the Club President's Defense Down counting Cogs defeated by the same gag that hits it",
-      'Calculator tooltips and menus now use dark green to match the sidebar',
-      'Boiler, Facilities and Gag Calculators match ToonCalc spacing and fit on 1080p screens without scrolling',
-      'Boiler Calculator keeps Fired Up and Defense side by side, with organic badges on the top right',
-      'The About page uses the full height of the Shticker Book'
+      "Fix the Club President's Defense Down logic",
+      'Fix up styling on various pages in the Shticker Book'
     ]
   },
   {
