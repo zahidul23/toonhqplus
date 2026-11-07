@@ -2120,7 +2120,7 @@ export function SidebarApp() {
               setOpen(next);
               setSetting('sidebar-open', next).catch(console.error);
             }}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 cursor-pointer transition-all active:scale-95"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 cursor-pointer transition-all active:scale-95"
           >
             {open ? 'Close' : 'HQ+'}
           </button>
@@ -2282,7 +2282,7 @@ export function SidebarApp() {
                                 {toonyToons.length > 0 && (
                                   <section className={sectionClass}>
                                     <div className="mb-1 ml-2 flex shrink-0 items-center justify-between gap-2 pb-0.5">
-                                      <button onClick={() => { startCollapseAnimation(); const next = !toonyCollapsed; setToonyCollapsed(next); setSetting('toony-collapsed', next).catch(console.error); }} className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white">
+                                      <button onClick={() => { startCollapseAnimation(); const next = !toonyCollapsed; setToonyCollapsed(next); setSetting('toony-collapsed', next).catch(console.error); }} className="flex cursor-pointer items-center gap-1 text-sm font-semibold text-green-50 outline-none transition-colors hover:text-white">
                                         <span>Toony Toons</span>
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${toonyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
                                       </button>
@@ -2305,7 +2305,7 @@ export function SidebarApp() {
                                         setStinkyCollapsed(next);
                                         setSetting('stinky-collapsed', next).catch(console.error);
                                       }}
-                                      className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white"
+                                      className="flex cursor-pointer items-center gap-1 text-sm font-semibold text-green-50 outline-none transition-colors hover:text-white"
                                     >
                                       <span>Stinky Toons</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${stinkyCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
@@ -2329,7 +2329,7 @@ export function SidebarApp() {
                                         setNeutralCollapsed(next);
                                         setSetting('neutral-collapsed', next).catch(console.error);
                                       }}
-                                      className="flex cursor-pointer items-center gap-1 text-sm font-medium text-green-50 outline-none transition-colors hover:text-white"
+                                      className="flex cursor-pointer items-center gap-1 text-sm font-semibold text-green-50 outline-none transition-colors hover:text-white"
                                     >
                                       <span>Notes</span>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${neutralCollapsed ? '-rotate-90' : 'rotate-0'}`}><path d="m6 9 6 6 6-6" /></svg>
@@ -2359,7 +2359,7 @@ export function SidebarApp() {
                   <SavedToonSyncStatus />
                   <QuickTeleport showDistrictIndicators={hasLoadedSettings && districtIndicatorsEnabled} />
                   <div className="mb-2 ml-2 shrink-0 flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-medium text-green-50">Recent Groups</h3>
+                    <h3 className="text-sm font-semibold text-green-50">Recent Groups</h3>
                     <button
                       onClick={() => {
                         if (selectedHistoryGroup === null || historyDetailPhase === 'closing') return;

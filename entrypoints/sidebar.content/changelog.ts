@@ -15,6 +15,7 @@ export const changelog: ChangelogEntry[] = [
       'Quick Create buttons now show the lobby name in department colors',
       'Fix location checks timing out when your Toon is on an estate',
       'Show when your Toon is in a ToonHQ group in the Quick Create status',
+      'Bolder section headers and sidebar button, so they no longer look thin in Firefox',
       'Fix Recent Groups showing every Toon as toons that left',
       'Hover a round in the Facilities Calculator to see its damage on each Cog, with bonuses broken down',
       "Fix the Club President's Defense Down logic",

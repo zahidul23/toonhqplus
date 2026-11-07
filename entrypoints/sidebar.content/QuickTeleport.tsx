@@ -680,7 +680,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     <>
       <div className="relative mb-2 ml-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-sm font-medium text-green-50">Quick Create</h3>
+          <h3 className="text-sm font-semibold text-green-50">Quick Create</h3>
           <div className="flex items-center">
             <button type="button" aria-label="About Quick Create" aria-describedby="quick-teleport-tooltip" onMouseEnter={() => setInfoTooltipOpen(true)} onMouseLeave={() => setInfoTooltipOpen(false)} onFocus={() => setInfoTooltipOpen(true)} onBlur={() => setInfoTooltipOpen(false)} className="flex h-4 w-4 cursor-help items-center justify-center rounded-full text-green-100/55 transition-colors hover:text-green-100 focus:text-green-100 focus:outline-none">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
