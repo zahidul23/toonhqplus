@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.3.5',
+    date: 'Nov 12, 2026',
+    changes: [
+      'Quick Create: Fix Teleport staying disabled after the boarding-group cooldown expires',
+      'Quick Create: Fix List on HQ counting in-game group members twice',
+    ]
+  },
+  {
     version: '1.3.4',
     date: 'Nov 6, 2026',
     changes: [

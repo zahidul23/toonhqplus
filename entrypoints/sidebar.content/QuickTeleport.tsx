@@ -162,9 +162,10 @@ const DESTINATION_ROWS = [
 ];
 
 const LOCATION_REFRESH_COOLDOWN_SECONDS = 10;
-const BOARDING_GROUP_COOLDOWN_SECONDS = 5 * 60;
+const BOARDING_GROUP_COOLDOWN_SECONDS = 3 * 60;
 const AUTO_BOARDING_CHECK_COOLDOWN_MS = 60_000;
 const TELEPORT_VERIFICATION_DELAY_MS = 10_000;
+const NOTICE_DURATION_MS = 10_000;
 const DESTINATION_SETTING = 'quick-teleport-destination';
 const LAST_AUTO_BOARDING_CHECK_KEY = 'toonhqplus-quick-teleport-last-auto-boarding-check';
 const MANUAL_REFRESH_STATUS = 'Use Refresh to check this Toon\'s current location and boarding-group status.';
@@ -239,13 +240,13 @@ function getInGameGroup(status: Exclude<BoardingGroupStatus, null>): { fields: G
   const destination = findDestinationForBoarding(status.type, options);
   const location = status.location ?? destination?.location;
   if (!status.type || !status.district || !location) return null;
-  const maxPlayers = destination?.maxPlayers ?? null;
-  const players = Number.isSafeInteger(status.num_players) && status.num_players! > 0 ? status.num_players! : 1;
+  // num_players is the lister plus held spots. The other in-game members are counted by ToonHQ
+  // as they join the group, so holding spots for them would count each one twice.
   return {
     destination,
     name: destination ? getDestinationFullName(destination) : 'in-game',
-    fields: { type: status.type, district: status.district, location, options, max_players: maxPlayers,
-      num_players: maxPlayers ? Math.min(players, maxPlayers) : players },
+    fields: { type: status.type, district: status.district, location, options,
+      max_players: destination?.maxPlayers ?? null, num_players: 1 },
   };
 }
 
@@ -397,17 +398,56 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
     return bridge.subscribe(() => setInListedGroup(isToonInListedGroup(bridge.groups, toonId)));
   }, [toonId]);
 
+  // Shows a one-time message, then goes back to `after` unless another message replaced it.
+  const noticeTimerRef = useRef<number | undefined>(undefined);
+  const showNotice = (message: string, after: string) => {
+    window.clearTimeout(noticeTimerRef.current);
+    setStatus(message);
+    noticeTimerRef.current = window.setTimeout(() => {
+      setStatus(current => current === message ? after : current);
+    }, NOTICE_DURATION_MS);
+  };
+  useEffect(() => () => window.clearTimeout(noticeTimerRef.current), []);
+
+  // When the boarding-group cooldown should be over, check again so Teleport re-enables on its
+  // own. If the Toon is still in a group, wait another cooldown and check again.
+  const [boardingRecheck, setBoardingRecheck] = useState(0);
   useEffect(() => {
-    if (!hasActiveBoardingGroup) {
+    if (!hasActiveBoardingGroup || !toonId) {
       return;
     }
 
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      setBoardingStatus(undefined);
-      setStatus('The boarding-group cooldown expired. You can try Quick Create again.');
+      const requestContext = getNativeBridge().state.context;
+      const expired = 'The boarding-group cooldown expired. You can try Quick Create again.';
+      setCheckingStatus(true);
+      setStatus('Checking whether the boarding-group cooldown expired…');
+      getBoardingGroupStatus(Number(toonId), true)
+        .then(result => {
+          setPersistedAutoBoardingCheck(toonId, { checkedAt: Date.now(), result });
+          if (!quickTeleportActiveRef.current) return;
+          setCheckingStatus(false);
+          if (cancelled || !isCurrentToonContext(requestContext)) return;
+          setBoardingStatus(result);
+          if (result?.district != null) setDistrictId(String(result.district));
+          const description = describeBoardingStatus(result, districts, coreData.locations);
+          if (result?.type) setStatus(description);
+          else showNotice(`${expired}\n${description}`, description);
+          if (result?.type) setBoardingRecheck(count => count + 1);
+        })
+        .catch(() => {
+          if (!quickTeleportActiveRef.current) return;
+          setCheckingStatus(false);
+          if (cancelled || !isCurrentToonContext(requestContext)) return;
+          // The check failed, but the cooldown is over: keep the known location so Teleport works.
+          const cleared = boardingStatus && { ...boardingStatus, type: null };
+          setBoardingStatus(cleared);
+          showNotice(expired, cleared ? describeBoardingStatus(cleared, districts, coreData.locations) : '');
+        });
     }, BOARDING_GROUP_COOLDOWN_SECONDS * 1000);
-    return () => window.clearTimeout(timer);
-  }, [hasActiveBoardingGroup, toonId]);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [hasActiveBoardingGroup, toonId, boardingRecheck]);
 
   useEffect(() => {
     setToons(nativeState.authenticated ? nativeState.ownedToons.filter(toon => toon.game === 1) as Toon[] : []);
@@ -594,9 +634,9 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
 
       // List on HQ lists the Toon's in-game boarding group when it has one, instead of the
       // picked lobby. Check fresh: the saved status can predate Toons who joined in-game.
+      let current: BoardingGroupStatus = null;
       if (!delist) {
         setStatus('Checking your in-game group…');
-        let current: BoardingGroupStatus;
         try {
           current = await getBoardingGroupStatus(Number(toonId), true);
         } catch (error) {
@@ -648,7 +688,7 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       if (!isCurrentToonContext(requestContext)) return;
       if (!delist) {
         setInListedGroup(true);
-        setStatus(`Your ${destinationFullName} group is now listed on ToonHQ.`);
+        showNotice(`Your ${destinationFullName} group is now listed on ToonHQ.`, describeBoardingStatus(current, districts, coreData.locations));
         getNativeBridge().openGroup(createdGroupId);
         return;
       }
@@ -662,7 +702,8 @@ export function QuickTeleport({ showDistrictIndicators = true }: { showDistrictI
       if (!verifiedStatus?.type) throw new Error('Something went wrong. We were not able to create a boarding group.');
 
       setBoardingStatus(verifiedStatus);
-      setStatus(`Teleport requested to ${destinationFullName}.\nThe in-game boarding group is active${delist ? ' and the ToonHQ listing was removed' : ' and listed on ToonHQ'}.`);
+      showNotice(`Teleport requested to ${destinationFullName}.\nThe in-game boarding group is active${delist ? ' and the ToonHQ listing was removed' : ' and listed on ToonHQ'}.`,
+        describeBoardingStatus(verifiedStatus, districts, coreData.locations));
     } catch (error) {
       if (!isCurrentToonContext(requestContext)) return;
       setStatus(error instanceof Error && error.message.startsWith('Teleport was requested, but')

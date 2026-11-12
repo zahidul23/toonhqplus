@@ -26,7 +26,7 @@ function setup(t, overrides = {}) {
     LOCATION_REFRESH_COOLDOWN_SECONDS: 10, TELEPORT_VERIFICATION_DELAY_MS: 10000,
     districts: [], coreData: { locations: [] }, describeBoardingStatus: result => `district ${result?.district}`,
     getBoardingGroupStatus: (id, force) => service.get(id, force),
-    setStatus: value => { view.status = value; }, setBoardingStatus: value => { view.boarding = value; },
+    setStatus: value => { view.status = value; }, showNotice: value => { view.status = value; }, setBoardingStatus: value => { view.boarding = value; },
     setDistrictId: value => { view.district = value; }, setCheckingStatus: value => { view.checking = value; },
     setRefreshCooldown: value => { view.cooldown = value; }, setBusy: value => { view.busy = value; }, setListing: () => {},
     window: { location: { origin: 'https://toonhq.org' }, setTimeout: callback => { timers.push(callback); } },
@@ -130,12 +130,13 @@ function listSetup(t, status, overrides = {}) {
 }
 
 test('List on HQ lists the in-game boarding group instead of the picked lobby', async t => {
-  // A Scrap Factory group with 2 Toons, where the saved status predates the second Toon.
+  // A Scrap Factory group with 2 Toons. Only the lister is counted: ToonHQ counts the other
+  // member when they join, so holding a spot for them would count them twice.
   const h = listSetup(t, { district: 30, location: 23, type: 2, options: { 3: '10', 4: '12' }, num_players: 2 });
   await h.teleport(false);
   assert.equal(h.requests.length, 1);
   assert.deepEqual(h.bodies[0], { toon: 1, type: 2, district: 30, location: 23, options: { 3: 10, 4: 12 },
-    max_players: 4, num_players: 2, note: null, id: null, game: 1 });
+    max_players: 4, num_players: 1, note: null, id: null, game: 1 });
   assert.match(h.view.status, /Scrap Factory group is now listed/);
   assert.equal(h.view.boarding.num_players, 2);
 });
@@ -151,7 +152,7 @@ test('List on HQ lists an in-game group without needing the picked lobby disguis
   const h = listSetup(t, { district: 30, location: 4, type: 9, options: {}, num_players: 5 }, { getToonSuitLevel: () => 0 });
   await h.teleport(false);
   assert.equal(h.bodies[0].type, 9);
-  assert.equal(h.bodies[0].num_players, 5);
+  assert.equal(h.bodies[0].num_players, 1);
 });
 
 test('List on HQ does not list when the in-game check fails or its details are unreadable', async t => {
